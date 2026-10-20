@@ -49,11 +49,13 @@ class TextureBudget {
    * не забытый случай, а вне компетенции этого класса.
    */
   public measure(path: string, texture: Texture): void {
-    const image: { width?: number; height?: number } | undefined = texture.image
+    const image = texture.image
 
     if (Array.isArray(image)) return
 
-    if (!image || !image.width || !image.height) return
+    if (typeof image !== 'object' || image === null) return
+    if (!('width' in image) || typeof image.width !== 'number' || !image.width) return
+    if (!('height' in image) || typeof image.height !== 'number' || !image.height) return
 
     this.sizes.set(path, textureBytes(image.width, image.height))
   }

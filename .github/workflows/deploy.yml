@@ -1,23 +1,24 @@
 name: Deploy demo to GitHub Pages
 
 on:
+  pull_request:
+    branches: [master]
   push:
     branches: [master]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Один деплой за раз; начатый прогон не обрываем, чтобы не публиковать полусобранный артефакт
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     env:
       VITE_APP_NAME: Titan Engine
       VITE_FS_DRIVER: s3
@@ -32,13 +33,33 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run lint
+      - run: npm test -- --run
       - run: npm run build -- --base=/${{ github.event.repository.name }}/
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - name: Upload browser diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         with:
           path: dist
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     runs-on: ubuntu-latest
     environment:
       name: github-pages

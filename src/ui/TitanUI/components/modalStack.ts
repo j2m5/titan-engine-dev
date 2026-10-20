@@ -10,6 +10,35 @@ import { isEditableTarget } from '@/core/helpers/isEditableTarget'
  */
 export const openModals: symbol[] = []
 
+const modalElements = new Map<symbol, HTMLElement>()
+
+/** Visual layers follow the same order as keyboard handling, even after a background modal closes. */
+function updateModalLayers(): void {
+  openModals.forEach((id, index) => {
+    const element = modalElements.get(id)
+
+    if (element) element.style.zIndex = String(1000000 + index)
+  })
+}
+
+export function registerModal(id: symbol, element: HTMLElement): void {
+  modalElements.set(id, element)
+  openModals.push(id)
+  updateModalLayers()
+}
+
+export function unregisterModal(id: symbol): void {
+  const index = openModals.indexOf(id)
+
+  if (index !== -1) openModals.splice(index, 1)
+  modalElements.delete(id)
+  updateModalLayers()
+}
+
+export function topModalElement(): HTMLElement | undefined {
+  return modalElements.get(openModals[openModals.length - 1])
+}
+
 /** Есть ли открытое окно — панели вне стека уступают ему Escape */
 export function hasOpenModal(): boolean {
   return openModals.length > 0

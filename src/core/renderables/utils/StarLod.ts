@@ -1,9 +1,8 @@
-import { Uniform, Vector3, WebGLRenderer } from 'three'
+import { PerspectiveCamera, Uniform, Vector3, WebGLRenderer } from 'three'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { STAR_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 import { StarFarGlow, starFarGlowGain } from '@/core/renderables/utils/starFarGlow'
 import { config } from '@/core/framework/config'
-import { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * LOD звезды: ApparentSizeLod с зашитым размером импостора.
@@ -34,15 +33,15 @@ class StarLod extends ApparentSizeLod {
     super(radiusKm, renderer, STAR_IMPOSTOR_PIXELS)
   }
 
-  public updateObject(ctx: UpdateContext): void {
-    super.updateObject(ctx)
+  public updateView(camera: PerspectiveCamera): void {
+    super.updateView(camera)
 
     // Мировая позиция: LOD висит в нуле DynamicNode, как и билборд
     const distance: number = this.getWorldPosition(this.worldPosition).distanceTo(
-      ctx.camera.getWorldPosition(this.cameraPosition)
+      camera.getWorldPosition(this.cameraPosition)
     )
     // Видимый размер обратно пропорционален дистанции: на переключении ровно 12 px
-    const pixels: number = (STAR_IMPOSTOR_PIXELS * this.switchDistance(ctx.camera.fov)) / distance
+    const pixels: number = (STAR_IMPOSTOR_PIXELS * this.switchDistance(camera.fov)) / distance
 
     this.glowGain.value = starFarGlowGain(pixels, this.farGlow.gain, this.farGlow.fadePixels)
   }

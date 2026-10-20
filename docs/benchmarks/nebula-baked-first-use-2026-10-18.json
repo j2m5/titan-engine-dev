@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-18",
+  "runner": "Native headless Chrome via Playwright, channel chrome",
+  "probe": "tests/nebula/bakedProgram.gpu.ts",
+  "target": {
+    "width": 64,
+    "height": 64,
+    "format": "RGBA16F"
+  },
+  "method": "Instrument WebGL2RenderingContext createProgram, first drawElements/drawArrays and first readPixels. Intervals are CPU wall time and include compilation, setup, draw submission and synchronization. Single diagnostic run, driver cache uncontrolled; not application startup, not a pure shader compiler or GPU timer, and not a portable frame-time budget. Cached program identity and pixel parity are checked by the probe.",
+  "result": {
+    "programs": 2,
+    "fallbacks": 3,
+    "parityError": 0
+  },
+  "draws": [
+    {
+      "start": 2756.600000023842,
+      "variant": "fallback",
+      "firstDrawMs": 10574.59999999404,
+      "firstReadbackMs": 1.5,
+      "creationToReadbackMs": 10576.899999976158
+    },
+    {
+      "start": 13335,
+      "variant": "baked-only",
+      "firstDrawMs": 149.30000001192093,
+      "firstReadbackMs": 2.5,
+      "creationToReadbackMs": 152.2000000178814
+    }
+  ]
+}

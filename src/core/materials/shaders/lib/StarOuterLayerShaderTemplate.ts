@@ -7,6 +7,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     uWidthFraction: new Uniform(0.00086),
     uAmp: new Uniform(0.5),
     uOpacity: new Uniform(0.2),
+    uVisibleRibbons: new Uniform(0),
     uColorCool: new Uniform(new Color(1.0, 0.45, 0.25)),
     uColorBase: new Uniform(new Color(1.0, 0.8, 0.6)),
     uProtuberanceIntensity: new Uniform(6.0),
@@ -28,6 +29,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     attribute vec3 aFootA;        // направление первого основания петли
     attribute vec3 aFootB;        // направление второго основания
     attribute vec3 aRibbonRandom; // .x/.y — сдвиг и скорость вспышки (общие на группу лент), .z — микс цвета
+    attribute float aRibbonOrder; // порядок включения ленты, совпадает с drawRange
 
     varying float vSide;
     varying float vOpacity;
@@ -39,6 +41,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     uniform float uNoiseFrequency;
     uniform float uNoiseAmplitude;
     uniform float uOpacity;
+    uniform float uVisibleRibbons;
     uniform vec3 uColorCool;
     uniform vec3 uColorBase;
     uniform float uProtuberanceIntensity;
@@ -122,6 +125,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
 
       // Гашение по ходу вспышки: чем выше поднялась лента, тем она прозрачнее
       vOpacity = (1.0 - animPhase) * uOpacity;
+      vOpacity *= clamp(uVisibleRibbons - aRibbonOrder, 0.0, 1.0);
 
       // Палитра ленты — чёрнотельная от температуры звезды (спред задаёт вызывающий
       // код, см. StarOuterLayer); ribbon premultiplied альфой ≤ uOpacity, поэтому
@@ -146,7 +150,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
 
     void main() {
       // Мягкий поперечный край полосы: квадрат делает спад к краям круче
-      float alpha = smoothstep(1.0, 0.0, abs(vSide));
+      float alpha = 1.0 - smoothstep(0.0, 1.0, abs(vSide));
       alpha *= alpha;
       alpha *= vOpacity;
 

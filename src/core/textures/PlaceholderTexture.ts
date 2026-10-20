@@ -19,6 +19,11 @@ class PlaceholderTexture {
   private static readonly SIZE: number = 64
   private static readonly COLOR: string = '#cccccc'
 
+  /** Identity check without allocating the lazy shared texture. */
+  public static isShared(texture: Texture): boolean {
+    return texture === this.texture
+  }
+
   public static get(): Texture {
     if (!this.texture) this.texture = this.generate()
 

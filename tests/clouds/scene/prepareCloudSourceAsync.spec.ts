@@ -36,7 +36,7 @@ describe('resumable cloud preparation', () => {
       expect(async.config).toEqual(sync.config)
       expect(async.textures.weather.image.data).toEqual(sync.textures.weather.image.data)
       expect(async.textures.color!.source).not.toBe(color.source)
-      expect(async.textures.color!.image.data).toBe(color.image.data)
+      expect((async.textures.color as DataTexture).image.data).toBe(color.image.data)
       expect(async.textures.colorStrength).toBe(0.7)
       expect(yields).toBeGreaterThan(1)
       for (const key of ['flipY', 'wrapS', 'wrapT', 'minFilter', 'magFilter', 'colorSpace', 'generateMipmaps'] as const)

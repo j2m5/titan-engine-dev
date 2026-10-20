@@ -72,12 +72,16 @@ export class SkyLayer {
 
   /** sceneDepth — копия глубины сцены того же размера; background — кубмапа (режим cubemap) */
   public render(renderer: SkyLayerRenderer, camera: Camera, sceneDepth: Texture, background: CubeTexture | null): void {
+    this.active = false
     this.material.uniforms.uSceneDepth.value = sceneDepth
     this.material.uniforms.skybox.value = background
     const previous = renderer.getRenderTarget()
-    renderer.setRenderTarget(this.target)
-    renderer.render(this.mesh, camera)
-    renderer.setRenderTarget(previous)
+    try {
+      renderer.setRenderTarget(this.target)
+      renderer.render(this.mesh, camera)
+    } finally {
+      renderer.setRenderTarget(previous)
+    }
     this.active = true
   }
 

@@ -20,7 +20,7 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
   })
 
   it('потолок HDR — тот же инвариант, что у атмосферы', () => {
-    expect(frag).toContain('min(granule * energy * limb * uGlowGain, vec3(64.0))')
+    expect(frag).toContain('min(radiance * limb * uGlowGain, vec3(64.0))')
   })
 
   it('лимбовое потемнение: uLimbCoeff в фрагменте, vCenterW из вершинника', () => {
@@ -29,10 +29,9 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
   })
 
   it('грануляция через общий чанк: include на месте, домен 0.05 в шаблоне', () => {
-    // Октавы/persistence/ремап пинует tests/star/StarSurfaceChunk.spec.ts —
-    // формулы теперь живут в чанке, общем с импостором
+    // Фильтрация проверяется GPU-тестами, формулы общие с импостором.
     expect(frag).toContain('#include <starSurface>')
-    expect(frag).toContain('starGranulationT(')
+    expect(frag).toContain('starGranulationRadiance(')
     expect(frag).toContain('vPosition * 0.05')
   })
 
@@ -45,12 +44,12 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
 describe('StarShaderTemplate: зерно гаснет с расстоянием', () => {
   const frag: string = StarShaderTemplate.fragmentShader
 
-  it('диск меряет экранный масштаб домена и подаёт фейд в грануляцию', () => {
+  it('диск передаёт экранный масштаб домена в фильтр грануляции', () => {
     // Один домен на измерение и на сэмпл: разойдясь, они дали бы фейд не от
     // того масштаба, что рисуется
     expect(frag).toContain('vec3 noiseDomain = vPosition * 0.05;')
-    expect(frag).toContain('starGranulationFade(starDomainPerPixel(noiseDomain)) * uGranulation')
-    expect(frag).toContain('starGranulationT(vec4(noiseDomain, time), fade)')
+    expect(frag).toContain('float domainPerPixel = starDomainPerPixel(noiseDomain);')
+    expect(frag).toContain('starGranulationRadiance(vec4(noiseDomain, time), uGranulation, domainPerPixel,')
   })
 
   it('прежний хак яркости от дистанции не вернулся: от размера зависит только uGlowGain', () => {
@@ -58,6 +57,6 @@ describe('StarShaderTemplate: зерно гаснет с расстоянием'
     // белое. uGlowGain — другое: общий с билбордом объект StarLod, у диска
     // крупнее star.farGlowFadePixels ровно 1 (tests/star/StarFarGlow.spec.ts)
     expect(frag).not.toContain('noiseIntensity')
-    expect(frag).toContain('min(granule * energy * limb * uGlowGain, vec3(64.0))')
+    expect(frag).toContain('min(radiance * limb * uGlowGain, vec3(64.0))')
   })
 })

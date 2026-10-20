@@ -24,6 +24,21 @@ function makeRenderer(camera: PerspectiveCamera) {
 }
 
 describe('OverlayPass: оверлеи поверх лензированного кадра', () => {
+  it.each([true, false])('restores exact state after a draw failure (shadows=%s)', (shadows) => {
+    const camera = new PerspectiveCamera()
+    camera.layers.mask = 0x25
+    const pass = new OverlayPass(new Scene(), camera)
+    const { renderer } = makeRenderer(camera)
+    renderer.shadowMap.autoUpdate = shadows
+    const error = new Error('overlay draw')
+    vi.mocked(renderer.render).mockImplementationOnce(() => { throw error })
+    expect(() => pass.render(renderer, null)).toThrow(error)
+    expect(camera.layers.mask).toBe(0x25)
+    expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+    expect(() => pass.render(renderer, null)).not.toThrow()
+    expect(camera.layers.mask).toBe(0x25)
+    expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+  })
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1000)
   const scene = new Scene()
   const inputBuffer = new WebGLRenderTarget(4, 4)

@@ -28,8 +28,6 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   const { currentTrack, trackIndex, trackCount, onPlay, onNext, onPrev } = props
 
   const tracks: ITrack[] = audioPlayerStore.tracks
-  const cachedVolume: number = Number(sessionStorage.getItem('volume'))
-  const defaultVolume: number = cachedVolume || 0.1
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -37,7 +35,12 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   const [duration, setDuration] = useState(0)
   const [currentProgress, setCurrentProgress] = useState(0)
   const [buffered, setBuffered] = useState(0)
-  const [volume, setVolume] = useState(defaultVolume)
+  const [volume, setVolume] = useState(() => {
+    const cachedVolume: string | null = sessionStorage.getItem('volume')
+    const parsedVolume: number = cachedVolume?.trim() ? Number(cachedVolume) : NaN
+
+    return Number.isFinite(parsedVolume) ? Math.min(1, Math.max(0, parsedVolume)) : 0.1
+  })
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [loop, setLoop] = useState(false)

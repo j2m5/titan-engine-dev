@@ -34,6 +34,18 @@ describe('textureBytes', () => {
 })
 
 describe('TextureBudget', () => {
+  it.each([
+    { width: '2048', height: 1024 },
+    { width: 2048, height: '1024' }
+  ])('ignores image dimensions that are not numbers: %j', (image) => {
+    const budget = new TextureBudget(1024)
+    const texture = new Texture(image)
+
+    budget.measure('invalid.jpg', texture)
+
+    expect(budget.sizeOf('invalid.jpg')).toBeUndefined()
+  })
+
   it('запоминает вес по пути', () => {
     const budget = new TextureBudget(1024)
 

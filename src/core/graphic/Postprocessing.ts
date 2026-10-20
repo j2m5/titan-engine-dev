@@ -12,6 +12,7 @@ import {
 import type { AtmosphereEffect } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import { captureAtmosphereFrame } from './effects/atmosphere/atmosphereFrame'
 import { createSceneEndpointPasses } from './sceneEndpointPasses'
+import type { LensFrontSorter } from './passes/LensFrontSorter'
 import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
 import { CloudBlendPass } from './clouds/CloudBlendPass'
 import { SceneCloudComposition, CloudEndpointCapturePass } from './clouds/SceneCloudComposition'
@@ -37,23 +38,25 @@ import type { Settings } from '@/core/ports/Settings'
 /**
  * Форма гало. levels — докуда оно дотягивается: уровень удваивает охват.
  * radius — вес mix(резкий уровень, размытый нижний), 0..1; выше 1 это
- * экстраполяция, и SCREEN с отрицательным блумом ЗАТЕМНЯЕТ. intensity — сила.
+ * экстраполяция с отрицательным вкладом. intensity — сила.
  * Ручки связаны: вклад самого широкого мипа равен radius^(levels − 1).
- * Значения СТАРТОВЫЕ, не замер — приёмку по картинке делает владелец.
+ * Шесть уровней оставляют мягкую кромку без почти постоянной засветки кадра
+ * от самых грубых мипов. Малая intensity сохраняет детали крупных источников.
+ * Настройки общие для всех звёзд, дисков ЧД и остальных HDR-источников;
+ * порог не участвует в настройке ореола — это часть bloom-guard.
  *
- * Гало намеренно сильное: диск звезды не должен читаться жёсткой границей.
- * Мягкость даёт radius (вес размытых нижних мипов), силу — intensity; порог
- * не участвует, он часть bloom-guard. Ручка ГЛОБАЛЬНАЯ: ярче становятся все
- * честные HDR-источники — диск ЧД, туманности, глинт океана.
+ * ADD корректно добавляет рассеянный свет в HDR. SCREEN при dst > 1 и
+ * слабом bloom мог ЗАТЕМНЯТЬ поверхность: src - min(dst * src, 1) < 0.
+ * GPU-регрессия внешнего свечения и фоновой засветки: stellarBloom.gpu.ts.
  */
 export const BLOOM_OPTIONS = {
-  radius: 0.98,
-  levels: 9,
-  blendFunction: BlendFunction.SCREEN,
+  radius: 0.8,
+  levels: 6,
+  blendFunction: BlendFunction.ADD,
   mipmapBlur: true,
   luminanceThreshold: 1,
   luminanceSmoothing: 0.0025,
-  intensity: 2.2
+  intensity: 0.3
 } as const
 
 // A/B-сравнение кривой: заменить mode на ToneMappingMode.ACES_FILMIC
@@ -185,6 +188,7 @@ class Postprocessing {
       this.setSize(size.x, size.y)
     }
   }
+  private lensFront: LensFrontSorter | null = null
 
   public constructor(
     private readonly renderer: WebGLRenderer,
@@ -239,6 +243,7 @@ class Postprocessing {
       lensRegistry: this.lensRegistry,
       atmosphereDebugView: readAtmosphereDebugView()
     })
+    this.lensFront = endpoint.lensFront
     this.prefix = endpoint.passes
     this.atmosphere = endpoint.atmosphere
     return [...endpoint.passes, ...(this.cloudRuntime ? [this.blend] : []), hdrPass, ldrPass]
@@ -282,7 +287,7 @@ class Postprocessing {
           pass.renderToScreen = false
           composer.addPass(pass)
         }
-        return { composer, atmosphere: endpoint.atmosphere, capture }
+        return { composer, atmosphere: endpoint.atmosphere, capture, lensFront: endpoint.lensFront }
       })
   }
 
@@ -325,6 +330,7 @@ class Postprocessing {
     } finally {
       this.blend.setNear(null, 0)
       this.atmosphere?.setFrame(null)
+      this.lensFront?.restore()
     }
   }
 
@@ -399,12 +405,21 @@ class Postprocessing {
       !this.renderer.getContext?.().isContextLost?.()
     )
       this.renderer.setRenderTarget(null)
-    this.composition?.dispose()
-    this.composition = null
-    this.composer?.dispose()
-    this.composer = null
-    this.prefix = []
-    this.atmosphere = null
+    try {
+      this.composition?.dispose()
+    } finally {
+      try {
+        this.composer?.dispose()
+      } finally {
+        this.composition = null
+        this.composer = null
+        this.prefix = []
+        this.atmosphere = null
+        const lensFront = this.lensFront
+        this.lensFront = null
+        lensFront?.restore()
+      }
+    }
   }
   public dispose(): void {
     this.restoreAfterLoss = false

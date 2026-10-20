@@ -160,7 +160,7 @@ describe('cloud appearance', () => {
     const maps = prepareCloudAppearanceTextures(validCloudConfig().layers[0], () => original)
     expect(maps.color).not.toBe(original)
     expect(maps.color?.source).not.toBe(original.source)
-    expect(maps.color?.image.data).toBe(original.image.data)
+    expect((maps.color as DataTexture).image.data).toBe(original.image.data)
     const weatherDispose = vi.spyOn(maps.weather, 'dispose')
     const colorDispose = vi.spyOn(maps.color!, 'dispose')
     maps.dispose()

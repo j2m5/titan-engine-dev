@@ -109,7 +109,8 @@ type OutstandingNearTile = {
  * поэтому регистрация всегда опережает первый build того же поля.
  *
  * request без acquire регистрирует поле с нулём ссылок — такое поле живёт в
- * воркере до releaseAll/dispose. Map, а не WeakMap: releaseAll итерирует.
+ * воркере до releaseAll/dispose. releaseAll отменяет очередь завершением воркера;
+ * следующий acquire/request лениво создаёт новый, с новыми идентификаторами полей и заданий.
  *
  * Отказ воркера (onerror, onmessageerror, error-ответ) необратим: задания в
  * полёте (кроме плиток ближней тени — те получают onError) пересобираются синхронным строителем, дальше вся постройка идёт через
@@ -131,11 +132,42 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
   private nextRequestId = 1
   private disposed = false
   private fallback: SyncTerrainPatchBuilder | null = null
+  private worker: WorkerLike | null = null
+  private generation = 0
 
-  public constructor(private readonly worker: WorkerLike = createTerrainBuildWorker()) {
-    worker.onmessage = (ev) => this.onMessage(ev.data)
-    worker.onerror = (reason) => this.fail(reason)
-    worker.onmessageerror = (reason) => this.fail(reason)
+  /** Initial creation may throw to the provider; scenario replacements are lazy and fall back on failure. */
+  public constructor(private readonly workerFactory: () => WorkerLike = createTerrainBuildWorker) {
+    this.startWorker()
+  }
+
+  private startWorker(): void {
+    const worker = this.workerFactory()
+    this.worker = worker
+    const generation = ++this.generation
+    worker.onmessage = (ev) => {
+      if (generation === this.generation) this.onMessage(ev.data)
+    }
+    worker.onerror = worker.onmessageerror = (reason) => {
+      if (generation === this.generation) this.fail(reason)
+    }
+  }
+
+  private ensureWorker(): void {
+    if (this.worker || this.fallback || this.disposed) return
+    try {
+      this.startWorker()
+    } catch (error) {
+      this.fail(String(error))
+    }
+  }
+
+  private stopWorker(): void {
+    ++this.generation
+    const worker = this.worker
+    this.worker = null
+    if (!worker) return
+    worker.onmessage = worker.onerror = worker.onmessageerror = null
+    worker.terminate()
   }
 
   public get offThread(): boolean {
@@ -147,12 +179,14 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
   }
 
   public acquire(field: TerrainHeightField): void {
+    this.ensureWorker()
     if (this.fallback) return
 
     this.ensureField(field).refs++
   }
 
   public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void {
+    this.ensureWorker()
     if (this.fallback) {
       this.fallback.request(job, onDone, onError)
       return
@@ -161,7 +195,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     const { id } = this.ensureField(job.field)
     const requestId = this.nextRequestId++
     this.outstanding.set(requestId, { job, onDone, onError })
-    this.worker.postMessage(
+    this.worker!.postMessage(
       {
         type: 'build',
         requestId,
@@ -181,6 +215,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
 
   /** Карта тени строится из копии карты, уже лежащей в воркере: главный поток не платит ни счётом, ни копией. */
   public requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void {
+    this.ensureWorker()
     if (this.fallback) {
       this.fallback.requestShadow(field, onDone)
       return
@@ -189,7 +224,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     const { id } = this.ensureField(field)
     const requestId = this.nextRequestId++
     this.outstandingShadows.set(requestId, { field, onDone })
-    this.worker.postMessage({ type: 'buildShadow', requestId, fieldId: id }, [])
+    this.worker!.postMessage({ type: 'buildShadow', requestId, fieldId: id }, [])
   }
 
   /** Плитка ближней тени бейкается в воркере из копии карты; без воркера — onError (синхронный бейк 512² фризит кадр). */
@@ -199,6 +234,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     onDone: (heights: Float32Array) => void,
     onError: (error: unknown) => void
   ): void {
+    this.ensureWorker()
     if (this.fallback) {
       onError(new Error('воркер отказал: плитка ближней тени без воркера не строится'))
       return
@@ -207,7 +243,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     const { id } = this.ensureField(field)
     const requestId = this.nextRequestId++
     this.outstandingNearTiles.set(requestId, { field, params, onDone, onError })
-    this.worker.postMessage({ type: 'buildNearTile', requestId, fieldId: id, params }, [])
+    this.worker!.postMessage({ type: 'buildNearTile', requestId, fieldId: id, params }, [])
   }
 
   public release(field: TerrainHeightField): void {
@@ -218,17 +254,21 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     entry.refs--
     if (entry.refs <= 0) {
       this.fields.delete(field)
-      this.worker.postMessage({ type: 'releaseField', fieldId: entry.id }, [])
+      this.worker!.postMessage({ type: 'releaseField', fieldId: entry.id }, [])
     }
   }
 
   /**
+   * Отменяет задания без callbacks, завершает воркер; следующий запрос создаёт новый.
    * Звать только после разборки всех групп: запоздалый release после
    * releaseAll отпустил бы новую регистрацию того же поля.
    */
   public releaseAll(): void {
-    for (const { id } of this.fields.values()) this.worker.postMessage({ type: 'releaseField', fieldId: id }, [])
+    this.outstanding.clear()
+    this.outstandingShadows.clear()
+    this.outstandingNearTiles.clear()
     this.fields.clear()
+    this.stopWorker()
   }
 
   public dispose(): void {
@@ -237,7 +277,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     this.outstandingShadows.clear()
     this.outstandingNearTiles.clear()
     this.fields.clear()
-    this.worker.terminate()
+    this.stopWorker()
     this.fallback?.dispose()
   }
 
@@ -247,7 +287,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
       // запись — только после отправки: исключение сборки сообщения (копия карты) не оставляет фантома
       const id = this.nextFieldId++
       const { message, transfer } = registerFieldMessage(field, id)
-      this.worker.postMessage(message, transfer)
+      this.worker!.postMessage(message, transfer)
       entry = { id, refs: 0 }
       this.fields.set(field, entry)
     }
@@ -308,7 +348,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     console.warn(`[terrain worker] отказ, постройка патчей переходит на главный поток: ${reason}`)
     const fallback = new SyncTerrainPatchBuilder()
     this.fallback = fallback
-    this.worker.terminate()
+    this.stopWorker()
     this.fields.clear()
 
     // очистка до реплея: onDone может сразу позвать request — тот уйдёт в fallback

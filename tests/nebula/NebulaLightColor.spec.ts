@@ -56,7 +56,7 @@ describe('цветной свет — нейтральность дефолта'
   })
 
   it('ambient-член цветом не красится', () => {
-    expect(nebulaColorChunk).toContain('base = base * light + tinted;')
+    expect(nebulaColorChunk).toContain('return base * light + tinted;')
     expect(nebulaColorChunk).not.toMatch(/uAmbient\s*\*\s*uLightColor|uLightColor\s*\*\s*uAmbient/)
   })
 })

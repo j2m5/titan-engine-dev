@@ -30,7 +30,7 @@ export function* readCloudImagePixelSteps(
         ? 'linear'
         : undefined
   if (!space) throw new Error(`Unsupported cloud texture colorSpace: ${texture.colorSpace}`)
-  const image = texture.image
+  const image = texture.image as ImageBitmap | HTMLImageElement | DataTexture['image']
   const bitmap = typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap
   const html = typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement
   const width = html ? image.naturalWidth : image?.width,
@@ -38,18 +38,19 @@ export function* readCloudImagePixelSteps(
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0)
     throw new Error('Unsupported, closed or unloaded cloud resource image')
   const data = texture instanceof DataTexture
+  const sourceBytes = data ? (image as DataTexture['image']).data : null
   if (data) {
     if (
       texture.format !== RGBAFormat ||
       texture.type !== UnsignedByteType ||
-      !(image.data instanceof Uint8Array || image.data instanceof Uint8ClampedArray) ||
-      image.data.length !== width * height * 4
+      !(sourceBytes instanceof Uint8Array || sourceBytes instanceof Uint8ClampedArray) ||
+      sourceBytes.length !== width * height * 4
     )
       throw new Error('Unsupported cloud DataTexture image; expected unsigned byte RGBA')
   } else if (!bitmap && !(html && image.complete)) throw new Error('Unsupported or unloaded cloud resource image')
   const allocationStart = performance.now()
   const canonical =
-    data && !(image.data instanceof Uint8ClampedArray)
+    data && !(sourceBytes instanceof Uint8ClampedArray)
       ? new Uint8Array(width * height * 4)
       : new Uint8ClampedArray(width * height * 4)
   measured?.('allocation', performance.now() - allocationStart)
@@ -67,11 +68,11 @@ export function* readCloudImagePixelSteps(
         h = Math.min(16, height - y)
       let bytes: Uint8Array | Uint8ClampedArray
       try {
-        if (data) bytes = image.data
+        if (data) bytes = sourceBytes as Uint8Array | Uint8ClampedArray
         else {
           const nativeStart = performance.now()
           context!.clearRect(0, 0, w, h)
-          context!.drawImage(image, x, y, w, h, 0, 0, w, h)
+          context!.drawImage(image as ImageBitmap | HTMLImageElement, x, y, w, h, 0, 0, w, h)
           bytes = context!.getImageData(0, 0, w, h, { colorSpace: 'srgb' }).data
           measured?.('native', performance.now() - nativeStart)
         }
@@ -100,7 +101,7 @@ export function readCloudImagePixels(texture: Texture): CloudImagePixels {
         ? 'linear'
         : undefined
   if (!space) throw new Error(`Unsupported cloud texture colorSpace: ${texture.colorSpace}`)
-  const image = texture.image
+  const image = texture.image as ImageBitmap | HTMLImageElement | DataTexture['image']
   const bitmap = typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap
   const html = typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement
   const width = html ? image.naturalWidth : image?.width
@@ -109,14 +110,15 @@ export function readCloudImagePixels(texture: Texture): CloudImagePixels {
     throw new Error('Unsupported, closed or unloaded cloud resource image')
   let bytes: Uint8Array | Uint8ClampedArray
   if (texture instanceof DataTexture) {
+    const sourceBytes = (image as DataTexture['image']).data
     if (
       texture.format !== RGBAFormat ||
       texture.type !== UnsignedByteType ||
-      !(image.data instanceof Uint8Array || image.data instanceof Uint8ClampedArray) ||
-      image.data.length !== width * height * 4
+      !(sourceBytes instanceof Uint8Array || sourceBytes instanceof Uint8ClampedArray) ||
+      sourceBytes.length !== width * height * 4
     )
       throw new Error('Unsupported cloud DataTexture image; expected unsigned byte RGBA')
-    bytes = image.data
+    bytes = sourceBytes
   } else {
     if (!bitmap && !(html && image.complete)) throw new Error('Unsupported or unloaded cloud resource image')
     const canvas = document.createElement('canvas')

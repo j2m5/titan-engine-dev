@@ -21,6 +21,7 @@ import { withSceneCloudMaterials } from './sceneCloudMaterialScope'
 import { captureShaderCompilation } from '@/core/graphic/effects/atmosphere/shaderCompilationScope'
 import type { CloudCompilationEvidence } from '@/core/clouds/scene/cloudCompilationFailure'
 import type { SceneCloudReceiver } from '@/core/clouds/receivers/SceneCloudReceiver'
+import type { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
 export function cloudEndpointSchedule(weight: number): { far: boolean; near: boolean } {
   return { far: weight < 1, near: weight > 0 }
 }
@@ -69,6 +70,7 @@ export class SceneCloudComposition {
       composer: EffectComposer
       atmosphere: AtmosphereEffect
       capture: CloudEndpointCapturePass
+      lensFront: Pick<LensFrontSorter, 'restore'>
     }
   ) {}
   public prepare(
@@ -200,6 +202,7 @@ export class SceneCloudComposition {
       try {
         this.runtime.useEndpoint(null, null)
       } finally {
+        this.near?.lensFront.restore()
         this.near?.atmosphere.setCloudOverlay(null)
         this.near?.atmosphere.setFrame(null)
         this.camera.layers.mask = layers
@@ -224,10 +227,14 @@ export class SceneCloudComposition {
   }
   public dispose(): void {
     this.cancelPreparation()
-    this.near?.composer.dispose()
-    this.near = null
-    this.depth?.dispose()
-    this.depth = null
-    this.cssSize = null
+    try {
+      this.near?.composer.dispose()
+    } finally {
+      this.near?.lensFront.restore()
+      this.near = null
+      this.depth?.dispose()
+      this.depth = null
+      this.cssSize = null
+    }
   }
 }

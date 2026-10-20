@@ -13,6 +13,7 @@ import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 import { LensRegistry } from '@/core/services/LensRegistry'
 import { CameraCollision } from '@/core/services/CameraCollision'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
@@ -61,6 +62,7 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(Tokens.SceneCloudRuntime, (c: Container) => new SceneCloudRuntime(c.get(Tokens.CloudRegistry)))
     this.app.singleton(Tokens.AtmosphereRegistry, () => new AtmosphereRegistry())
     this.app.singleton(Tokens.DepthVolumeRegistry, () => new DepthVolumeRegistry())
+    this.app.singleton(Tokens.NebulaBakeQueue, () => new NebulaBakeQueue())
     this.app.singleton(Tokens.LensRegistry, () => new LensRegistry())
     // Небо одно на приложение: грузится при первом сценарии, не перезагружается
     this.app.singleton(Tokens.GaiaSky, (c: Container) => new GaiaSky(c.get(Tokens.Renderer)))
@@ -84,8 +86,8 @@ class AppServiceProvider extends ServiceProvider {
       (c: Container) => new ProceduralSurfaceGenerator(c.get(Tokens.Renderer))
     )
 
-    // Один воркер на сессию: синглтон переживает смену сценария
-    // (Application.teardown снимает только регистрации полей). Без Worker или
+    // Строитель — сессионный синглтон; воркер пересоздаётся после освобождения сценария.
+    // Application.teardown отменяет очередь и освобождает регистрации. Без Worker или
     // при отказе его конструктора (CSP, file://) — синхронный фолбэк.
     this.app.singleton(Tokens.TerrainPatchBuilder, (): TerrainPatchBuilder => {
       if (typeof Worker === 'undefined') return new SyncTerrainPatchBuilder()
@@ -114,7 +116,8 @@ class AppServiceProvider extends ServiceProvider {
           () => c.get(Tokens.SceneObserver).refreshObservableObjects(),
           c.get(Tokens.LensRegistry),
           c.get(Tokens.AsteroidImpostorLibrary),
-          c.get(Tokens.CloudRegistry)
+          c.get(Tokens.CloudRegistry),
+          c.get(Tokens.NebulaBakeQueue)
         )
     )
 
@@ -160,7 +163,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Clock),
           c.get(Tokens.Postprocessing),
           c.get(Tokens.CameraCollision),
-          c.get(Tokens.AsteroidImpostorLibrary)
+          c.get(Tokens.AsteroidImpostorLibrary),
+          c.get(Tokens.NebulaBakeQueue)
         )
     )
 

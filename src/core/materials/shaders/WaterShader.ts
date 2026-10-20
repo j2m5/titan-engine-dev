@@ -11,6 +11,7 @@ import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
 import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
+import { createWaterSkyUniforms, type WaterSkyUniformValues } from './lib/chunks/WaterSky'
 
 // Дефолты ручек воды — честно помеченные заглушки (см. IPlanetRenderingObject),
 // приёмка по виду за владельцем (см. память «Flare Visual Checks Are Owner's»).
@@ -53,7 +54,7 @@ const DEFAULT_WATER_WAVE_SPEED = 1
  */
 export const WATER_WAVE_SMALLEST_PERIOD_METERS = 3000
 
-interface WaterUniforms {
+interface WaterUniforms extends WaterSkyUniformValues {
   lightPosition: Vector3
   uSlopeMap: Texture | null
   uWaterColor: Color
@@ -246,7 +247,8 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uAtmoTopRadius: new Uniform(0),
       uAtmoSunAngularRadius: new Uniform(0),
       uAtmoDatumRadius: new Uniform(0),
-      uSunTintStrength: new Uniform(clampSunTintStrength(waterData.sunTintStrength))
+      uSunTintStrength: new Uniform(clampSunTintStrength(waterData.sunTintStrength)),
+      ...createWaterSkyUniforms()
     }
     this.name = 'WaterShader'
   }

@@ -136,7 +136,7 @@ describe('Earth cloud adapter', () => {
         ['medium', [1344, 756], 50, 512, 2]
       ] as const) {
         setEarthCloudQuality(clouds, quality)
-        const { width, height } = clouds.cloudsPass.outputBuffer.image
+        const { width, height } = clouds.cloudsPass.outputBuffer.image as { width: number; height: number }
         expect([width, height]).toEqual(bufferSize)
         expect(clouds.clouds).toMatchObject({
           minStepSize: minStep,

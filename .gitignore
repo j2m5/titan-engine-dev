@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 tmpscreenshots/
+playwright-report/
+test-results/
+benchmark-results/
 docs/superpowers
 docs/BACKLOG.md
 **/textures/

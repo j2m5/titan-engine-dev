@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { CubeTexture } from 'three'
-import type { CubeTextureLoader, ImageBitmapLoader } from 'three'
+import { SRGBColorSpace } from 'three'
 import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
 import { CubeStrategy } from '@/core/textures/strategies/CubeStrategy'
 import type { TextureRequest } from '@/core/textures/types'
@@ -23,8 +22,8 @@ function cube(): TextureRequest {
 }
 
 /** jsdom не умеет createImageBitmap — загрузчик подменяется целиком. */
-function bitmapLoaderReturning(bitmap: ImageBitmap): ImageBitmapLoader {
-  return { loadAsync: vi.fn(() => Promise.resolve(bitmap)) } as unknown as ImageBitmapLoader
+function bitmapLoaderReturning(bitmap: ImageBitmap) {
+  return { loadAsync: vi.fn(() => Promise.resolve(bitmap)) }
 }
 
 describe('ImageBitmapStrategy', () => {
@@ -53,7 +52,7 @@ describe('ImageBitmapStrategy', () => {
   })
 
   it('пробрасывает сбой загрузчика наружу', async () => {
-    const loader = { loadAsync: vi.fn(() => Promise.reject(new Error('404'))) } as unknown as ImageBitmapLoader
+    const loader = { loadAsync: vi.fn(() => Promise.reject(new Error('404'))) }
     const strategy = new ImageBitmapStrategy(loader)
 
     await expect(strategy.load(single('planets/earth.jpg'))).rejects.toThrow('404')
@@ -62,7 +61,7 @@ describe('ImageBitmapStrategy', () => {
 
 describe('CubeStrategy', () => {
   it('берёт ровно шестёрку граней', () => {
-    const loader = { loadAsync: vi.fn(() => Promise.resolve(new CubeTexture())) } as unknown as CubeTextureLoader
+    const loader = { loadAsync: vi.fn(async () => ({ close: vi.fn() } as unknown as ImageBitmap)) }
     const strategy = new CubeStrategy(loader)
 
     expect(strategy.supports(cube())).toBe(true)
@@ -70,12 +69,12 @@ describe('CubeStrategy', () => {
   })
 
   it('отдаёт загрузчику все шесть путей в исходном порядке', async () => {
-    const loadAsync = vi.fn<(urls: string[]) => Promise<CubeTexture>>(() => Promise.resolve(new CubeTexture()))
-    const strategy = new CubeStrategy({ loadAsync } as unknown as CubeTextureLoader)
+    const loadAsync = vi.fn(async (_url: string) => ({ close: vi.fn() } as unknown as ImageBitmap))
+    const strategy = new CubeStrategy({ loadAsync })
 
-    await strategy.load(cube())
-
-    const passed = loadAsync.mock.calls[0][0] as unknown as string[]
+    const texture = await strategy.load(cube())
+    expect(texture.colorSpace).toBe(SRGBColorSpace)
+    const passed = loadAsync.mock.calls.map((call) => call[0])
     expect(passed).toHaveLength(6)
     expect(passed[0]).toContain('px.jpg')
     expect(passed[5]).toContain('nz.jpg')

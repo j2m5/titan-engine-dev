@@ -1,7 +1,7 @@
 import { Command } from '@/core/framework/commands/Command'
 import { Actor } from '@/core/models/Actor'
-import { PerspectiveCamera, Quaternion, Vector3 } from 'three'
-import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
+import { Object3D, PerspectiveCamera, Quaternion, Vector3 } from 'three'
+import { SceneObserver } from '@/core/services/SceneObserver'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole'
 import { fromKilometers, toThreeJSUnits } from '@/core/helpers/scaling'
 import anime from 'animejs'
@@ -86,126 +86,122 @@ class CameraToObjectTransition extends Command {
   }
 
   public handle(): Promise<void> | void {
-    const data: ObservableRecord | undefined = this.sceneObserver.getData(this.model.attributes.name!)
-
-    if (!data) return
+    const name: string = this.model.attributes.name!
+    // Re-resolve against the current scene: observers can retain detached objects.
+    const targetPosition: Vector3 = new Vector3()
+    const resolveTarget = (): boolean => {
+      const scene = this.sceneObserver.scene
+      const target: Object3D | undefined = this.sceneObserver.objects.find(object => {
+        if (object.model?.getAttribute('name', 'unknown') !== name) return false
+        let root: Object3D = object
+        while (root.parent) root = root.parent
+        return root === scene
+      })
+      if (!target) return false
+      target.getWorldPosition(targetPosition)
+      return true
+    }
+    if (!resolveTarget()) return
 
     const isBlackHole: boolean = this.model.category?.getAttribute('alias') === 'blackHole'
-
-    let offset: number
-
-    if (isBlackHole) {
-      const parameters: BlackHoleParameters = new BlackHoleParameters(this.model)
-      offset = parameters.simulationRadiusUnits * 1.3
-    } else {
-      const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius')!)
-      offset = radius * 3
-    }
-
-    const cameraPosition: Vector3 = this.sceneObserver.cameraPosition
-    const forward: Vector3 = new Vector3(0, 0, -1).applyQuaternion(this.renderCamera.quaternion)
-    const toTarget: Vector3 = data.position.clone().sub(cameraPosition).normalize()
+    const offset: number = isBlackHole
+      ? new BlackHoleParameters(this.model).simulationRadiusUnits * 1.3
+      : toThreeJSUnits(this.model.physicalObject!.getAttribute('radius')!) * 3
+    const cameraPosition: Vector3 = this.renderCamera.getWorldPosition(new Vector3())
+    const forward: Vector3 = this.renderCamera.getWorldDirection(new Vector3())
+    const toTarget: Vector3 = targetPosition.clone().sub(cameraPosition)
     const active: ActiveFlight | null = CameraToObjectTransition.active
     const decision: FlightDecision = decideFlight(
-      active?.target ?? null,
-      data.name,
-      data.distance,
-      offset,
-      forward.dot(toTarget)
+      active?.target ?? null, name, toTarget.length(), offset, forward.dot(toTarget.normalize())
     )
-
     if (decision === 'ignore') return
-
     if (decision === 'arrived') {
-      this.notifications.dispatch({ type: 'success', message: `Target acquired: ${data.name}` })
-
+      this.notifications.dispatch({ type: 'success', message: `Target acquired: ${name}` })
       return
     }
-
-    // Разворот: прежний полёт стоит, а скорость после прилёта — та, что была до
-    // первого клика цепочки, а не разогнанная анимацией в момент разворота
-    if (decision === 'redirect' && active) active.timeline.pause()
-
+    if (active) active.timeline.pause()
     const speedBefore: number = active ? active.speedBefore : this.camera.speed
+    this.camera.stopFollowing()
+    this.astroControls.enabled = false
+    this.menu.close()
 
-    const alpha: number = (data.distance - offset) / data.distance
-    const destination: Vector3 = new Vector3().lerpVectors(cameraPosition, data.position, alpha)
-
-    // Скорость на виджете — пройденный за кадр путь в км/с по СВОЕМУ замеру
-    // времени. Общие часы движка (getDelta) трогать нельзя: каждый вызов крал
-    // дельту у кадра, и симуляция, управление и постпроцессинг шли рывками
+    const timeline: anime.AnimeTimelineInstance = anime.timeline()
+    const restore = (): void => {
+      this.astroControls.enabled = true
+      this.camera.setSpeed(speedBefore)
+    }
+    CameraToObjectTransition.active = { target: name, timeline, speedBefore, restore }
+    const valid = (): boolean => {
+      if (CameraToObjectTransition.active?.timeline !== timeline) return false
+      if (resolveTarget()) return true
+      CameraToObjectTransition.cancelActive()
+      return false
+    }
+    const startRotation: Quaternion = this.renderCamera.quaternion.clone()
+    const endRotation: Quaternion = new Quaternion()
+    const turn = { t: 0 }
+    const travel = { t: 0 }
+    const initialOffset: Vector3 = new Vector3()
+    const arrivalOffset: Vector3 = new Vector3()
+    const worldPosition: Vector3 = new Vector3()
     const lastPosition: Vector3 = new Vector3()
     let lastTime: number | null = null
-
-    const startRotation: Quaternion = this.renderCamera.quaternion.clone()
-    this.renderCamera.lookAt(data.position)
-
-    const endRotation: Quaternion = this.renderCamera.quaternion.clone()
-    this.renderCamera.quaternion.copy(startRotation)
-
-    const transition: { t: number } = { t: 0 }
-
-    const lookAt: anime.AnimeParams = {
-      targets: transition,
+    let travelStarted: boolean = false
+    const startTravel = (): void => {
+      if (travelStarted) return
+      // Turn-only motion must not translate the camera at travel progress zero.
+      initialOffset.copy(this.renderCamera.getWorldPosition(worldPosition)).sub(targetPosition)
+      arrivalOffset.copy(initialOffset)
+      if (arrivalOffset.lengthSq() === 0) arrivalOffset.copy(this.renderCamera.getWorldDirection(new Vector3())).negate()
+      arrivalOffset.setLength(offset)
+      travelStarted = true
+    }
+    timeline.add({
+      targets: turn,
       t: 1,
       duration: 2000,
       easing: 'easeInQuad',
       update: (): void => {
-        this.renderCamera.quaternion.slerp(endRotation, transition.t)
+        if (!valid()) return
+        this.renderCamera.lookAt(targetPosition)
+        endRotation.copy(this.renderCamera.quaternion)
+        this.renderCamera.quaternion.slerpQuaternions(startRotation, endRotation, turn.t)
       }
-    }
-
-    const path: anime.AnimeParams = {
-      targets: [this.renderCamera.position],
-      x: destination.x,
-      y: destination.y,
-      z: destination.z,
-      easing: 'easeOutQuint',
+    })
+    timeline.add({
+      targets: travel,
+      t: 1,
       duration: 5000,
+      easing: 'easeOutQuint',
       direction: 'normal',
       begin: (): void => {
-        this.astroControls.enabled = false
-        this.menu.close()
+        if (!valid()) return
+        startTravel()
       },
       update: (): void => {
+        if (!valid()) return
+        startTravel()
+        worldPosition.lerpVectors(initialOffset, arrivalOffset, travel.t).add(targetPosition)
+        // Store local coordinates even when the render camera has a transformed parent.
+        if (this.renderCamera.parent) this.renderCamera.parent.worldToLocal(worldPosition)
+        this.renderCamera.position.copy(worldPosition)
+        this.renderCamera.lookAt(targetPosition)
+        this.renderCamera.getWorldPosition(worldPosition)
         const now: number = performance.now()
-
-        // Первый кадр — только опорная точка: скорости ещё не из чего считать
         if (lastTime !== null && now > lastTime) {
-          const unitsPerSecond: number = this.renderCamera.position.distanceTo(lastPosition) / ((now - lastTime) / 1000)
-
+          const unitsPerSecond: number = worldPosition.distanceTo(lastPosition) / ((now - lastTime) / 1000)
           this.camera.setSpeed(fromKilometers(unitsPerSecond))
         }
-
-        lastPosition.copy(this.renderCamera.position)
+        lastPosition.copy(worldPosition)
         lastTime = now
       },
       complete: (): void => {
-        // Прерванный разворотом полёт не возвращает управление и скорость:
-        // это делает только последний
-        if (CameraToObjectTransition.active?.timeline !== timeline) return
-
+        if (!valid()) return
         CameraToObjectTransition.active = null
-        this.astroControls.enabled = true
-        this.notifications.dispatch({ type: 'success', message: `Target acquired: ${data.name}` })
-        this.camera.setSpeed(speedBefore)
+        restore()
+        this.notifications.dispatch({ type: 'success', message: `Target acquired: ${name}` })
       }
-    }
-
-    const timeline: anime.AnimeTimelineInstance = anime.timeline()
-
-    CameraToObjectTransition.active = {
-      target: data.name,
-      timeline,
-      speedBefore,
-      restore: (): void => {
-        this.astroControls.enabled = true
-        this.camera.setSpeed(speedBefore)
-      }
-    }
-
-    timeline.add(lookAt)
-    timeline.add(path)
+    })
   }
 }
 

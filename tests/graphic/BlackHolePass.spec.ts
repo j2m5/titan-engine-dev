@@ -40,6 +40,58 @@ function makeRenderer(camera: PerspectiveCamera) {
 }
 
 describe('BlackHolePass', () => {
+  it.each([true, false])('restores state and unbinds only the failed mesh (shadows=%s)', (shadows) => {
+    const camera = new PerspectiveCamera()
+    camera.layers.mask = 0x25
+    const registry = new LensRegistry()
+    const first = new BlackHole(stubActor(), observer, registry)
+    const later = new BlackHole(stubActor(), observer, registry)
+    const pass = new BlackHolePass(camera, registry)
+    const { renderer } = makeRenderer(camera)
+    vi.spyOn(pass.depthCopy, 'render').mockImplementation(() => {})
+    vi.spyOn(pass.colorCopy, 'render').mockImplementation(() => {})
+    const unbind = vi.spyOn(first, 'unbindSceneFrame')
+    const laterBind = vi.spyOn(later, 'bindSceneFrame')
+    const laterUnbind = vi.spyOn(later, 'unbindSceneFrame')
+    renderer.shadowMap.autoUpdate = shadows
+    const error = new Error('mesh draw')
+    renderer.render.mockImplementation((scene) => { if (scene === first) throw error })
+    expect(() => pass.render(renderer, null, null)).toThrow(error)
+    expect(unbind).toHaveBeenCalledOnce()
+    expect(first.material.uniforms.uSceneEnabled.value).toBe(0)
+    expect(laterBind).not.toHaveBeenCalled()
+    expect(laterUnbind).not.toHaveBeenCalled()
+    expect(camera.layers.mask).toBe(0x25)
+    expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+    renderer.render.mockImplementation(() => {})
+    pass.render(renderer, null, null)
+    expect(laterBind).toHaveBeenCalledOnce()
+    expect(camera.layers.mask).toBe(0x25)
+    expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+  })
+
+  it.each(['sky', 'bind'])('restores state after %s failure', (stage) => {
+    const camera = new PerspectiveCamera()
+    camera.layers.mask = 0x25
+    const registry = new LensRegistry()
+    const hole = new BlackHole(stubActor(), observer, registry)
+    const pass = new BlackHolePass(camera, registry)
+    const { renderer } = makeRenderer(camera)
+    vi.spyOn(pass.depthCopy, 'render').mockImplementation(() => {})
+    vi.spyOn(pass.colorCopy, 'render').mockImplementation(() => {})
+    const error = new Error(stage)
+    const unbind = vi.spyOn(hole, 'unbindSceneFrame')
+    if (stage === 'sky') renderer.render.mockImplementationOnce(() => { throw error })
+    else {
+      const bind = hole.bindSceneFrame.bind(hole)
+      vi.spyOn(hole, 'bindSceneFrame').mockImplementation((...args) => { bind(...args); throw error })
+    }
+    expect(() => pass.render(renderer, null, null)).toThrow(error)
+    expect(camera.layers.mask).toBe(0x25)
+    expect(renderer.shadowMap.autoUpdate).toBe(true)
+    expect(unbind).toHaveBeenCalledTimes(stage === 'bind' ? 1 : 0)
+    expect(hole.material.uniforms.uSceneEnabled.value).toBe(0)
+  })
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1000)
   const inputBuffer = new WebGLRenderTarget(4, 4)
   const outputBuffer = new WebGLRenderTarget(4, 4)

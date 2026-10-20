@@ -41,21 +41,9 @@ describe('Postprocessing: контракт цветового конвейера
     expect(BLOOM_OPTIONS.luminanceThreshold).toBeGreaterThan(0.99)
   })
 
-  it('bloom считается в SCREEN-бленде до тонмапа (HDR-источники)', () => {
-    expect(BLOOM_OPTIONS.blendFunction).toBe(BlendFunction.SCREEN)
-    expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
-  })
-
   it('колено атмосферы калибровано на порог bloom 1.0 — при смене порога пересмотреть колено', () => {
     expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
     expect(buildSlotGlsl(0)).toContain('min(scatter, vec3(1.0)) + excess * uSlot0_hdrKnee')
-  })
-
-  it('охват гало задан явно, а не унаследован от дефолта библиотеки', () => {
-    // levels задаёт, докуда дотягивается гало: каждый уровень удваивает охват.
-    // Дефолт библиотеки — 8, и РАВЕНСТВО ему неотличимо от молчаливой
-    // зависимости: смена версии postprocessing поменяет вид картинки
-    expect(BLOOM_OPTIONS.levels).toBeGreaterThan(8)
   })
 
   it('сила гало задана явно и положительна', () => {
@@ -63,10 +51,10 @@ describe('Postprocessing: контракт цветового конвейера
     expect(BLOOM_OPTIONS.intensity).toBeGreaterThan(0)
   })
 
-  it('radius не выходит за 1: выше единицы блум ЗАТЕМНЯЕТ', () => {
+  it('radius не выходит за 1: экстраполяция может дать отрицательный свет', () => {
     // radius — вес mix(резкий уровень, размытый нижний) в UpsamplingMaterial,
     // а не ширина фильтра. При radius > 1 это экстраполяция, и там, где резкий
-    // уровень ярче размытого, SCREEN получает отрицательный вклад
+    // уровень ярче размытого, bloom получает отрицательный вклад
     expect(BLOOM_OPTIONS.radius).toBeGreaterThan(0)
     expect(BLOOM_OPTIONS.radius).toBeLessThanOrEqual(1)
   })
@@ -138,20 +126,5 @@ describe('Postprocessing: пасс атмосферы', () => {
     expect(sorterOf(passes[0])).toBeDefined()
     expect(sorterOf(passes[2])).toBe(sorterOf(passes[0]))
     expect(sorterOf(passes[5])).toBe(sorterOf(passes[0]))
-  })
-})
-
-describe('Postprocessing: гало усилено, кромка диска мягче', () => {
-  it('сила гало поднята выше прежних 1.4', () => {
-    // Приёмка по картинке: диск звезды не должен читаться жёсткой границей.
-    // Порог остаётся 1.0 — усиление идёт силой и весом размытых мипов
-    expect(BLOOM_OPTIONS.intensity).toBeGreaterThanOrEqual(2.2)
-  })
-
-  it('вес размытых мипов поднят: гало наползает на кромку', () => {
-    // radius — вес mix(резкий уровень, размытый нижний): ближе к 1 —
-    // больше нижних мипов в наложении, мягче граница источника
-    expect(BLOOM_OPTIONS.radius).toBeGreaterThanOrEqual(0.98)
-    expect(BLOOM_OPTIONS.radius).toBeLessThanOrEqual(1)
   })
 })

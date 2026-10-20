@@ -26,7 +26,7 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
 
   // @ts-expect-error useEditorDraft type mismatch
   const editor = useEditorDraft(database, scenarioRefs)
-  const { draft, validation, saving, saveStatus, save } = editor
+  const { draft, validation, saving, saveStatus, save, hasFieldErrors } = editor
 
   const [activeTable, setActiveTable] = useState<string>('actors')
 
@@ -44,12 +44,12 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
 
   const actions = (
     <TitanFlex align="center" style={{ gap: '10px' }}>
-      <span style={{ fontSize: '12px', color: validation.ok ? '#bbbbbb' : '#c0392b' }}>
-        {validation.ok
+      <span style={{ fontSize: '12px', color: validation.ok && !hasFieldErrors ? '#bbbbbb' : '#c0392b' }}>
+        {hasFieldErrors ? 'Invalid input — cannot save' : validation.ok
           ? saveStatus || `${validation.warnings.length} warning(s)`
           : `${validation.errors.length} error(s) — cannot save`}
       </span>
-      <TitanButton onClick={save} disabled={saving}>
+      <TitanButton onClick={save} disabled={saving || hasFieldErrors || !validation.ok}>
         {saving ? 'Saving…' : 'Save to generated'}
       </TitanButton>
       <TitanButton onClick={onClose}>Close</TitanButton>

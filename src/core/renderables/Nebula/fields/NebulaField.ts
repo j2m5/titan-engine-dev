@@ -36,6 +36,7 @@ export class NebulaField {
   private readonly toShape: Matrix3
   private readonly rotated: Vector3 = new Vector3()
   private readonly warped: Vector3 = new Vector3()
+  private readonly structured: Vector3 = new Vector3()
 
   public constructor(params: NebulaParams) {
     this.p = params
@@ -130,6 +131,13 @@ export class NebulaField {
     return Math.min(1, Math.max(0, base))
   }
 
+  /** Compress noise coordinates along an axis, elongating the visible field. */
+  private structurePoint(p: Vector3): Vector3 {
+    const { direction, stretch } = this.p.structure
+    if (stretch <= 1) return p
+    return this.structured.copy(p).addScaledVector(direction, -p.dot(direction) * (1 - 1 / stretch))
+  }
+
   private lobeContribution(p: Vector3): number {
     let extra = 0
     for (const lobe of this.p.lobes) {
@@ -158,11 +166,23 @@ export class NebulaField {
 
   public dustMask(p: Vector3): number {
     // low-frequency ridged channel, decorrelated by seed offset. Single octave to
-    // mirror the GPU nebulaDust (dust lanes are broad/low-freq; extra octaves would
+    // mirror the GPU dust field (dust lanes are broad/low-freq; extra octaves would
     // only cost per-step on the GPU).
-    const n = fbm3({ x: p.x * 0.9, y: p.y * 0.9, z: p.z * 0.9 }, this.p.seed + 555, 1, this.p.noise.lacunarity, this.p.noise.gain)
+    const { frequency, seed } = this.p.dust
+    const q = this.structurePoint(p)
+    const n = fbm3({ x: q.x * frequency, y: q.y * frequency, z: q.z * frequency }, (seed ?? this.p.seed) + 555, 1, this.p.noise.lacunarity, this.p.noise.gain)
     const ridged = 1 - Math.abs(n)
     return Math.min(1, Math.max(0, ridged))
+  }
+
+  /** Dust structure shares the gas envelope/cavities, but no gas noise or lobes. */
+  public sampleDustDensity(p: Vector3): number {
+    const { threshold, contrast } = this.p.dust
+    if (threshold >= 1) return 0
+    const boundary = this.boundaryAt(p)
+    if (boundary <= 0) return 0
+    const dust = Math.pow(smoothstep(threshold, 1, this.dustMask(p)), contrast)
+    return Math.min(1, Math.max(0, boundary * this.cavityCarve(p) * dust))
   }
 
   /** Full density pipeline. Extended by later tasks. Returns [0,1]. */
@@ -170,18 +190,20 @@ export class NebulaField {
     // Порядок как в GLSL: при boundaryWarp 0 сначала граница и ранний выход, варп
     // после; при > 0 вектор варпа нужен уже для границы
     const bw = this.p.noise.boundaryWarp
+    const q = this.structurePoint(p)
     let w: { x: number; y: number; z: number }
     let b: number
     if (bw > 0) {
       w = this.warpVector(p)
       b = this.boundary(this.warped.set(p.x + bw * w.x, p.y + bw * w.y, p.z + bw * w.z))
       if (b <= 0) return 0
+      if (this.p.structure.stretch > 1) w = this.warpVector(q)
     } else {
       b = this.boundary(p)
       if (b <= 0) return 0
-      w = this.warpVector(p)
+      w = this.warpVector(q)
     }
-    const noise = this.noiseField(p, w)
+    const noise = this.noiseField(q, w)
     let d = b * (noise + this.lobeContribution(p))
     d *= this.cavityCarve(p)
     d = Math.pow(Math.min(1, Math.max(0, d)), this.p.noise.contrast)

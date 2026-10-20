@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { ShaderChunk } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
@@ -68,7 +69,7 @@ describe('WaterShaderTemplate: getNoiseWeighted — структура Water.js,
     expect(weighted).toBeCloseTo(taps.reduce((a, t) => a + t, 0) * 0.5 - 1, 12)
   })
 
-  it('ряд периодов 3000/9000 м (октавы 0/1, скаляр) — честно поднят дважды (страж ниже читает фактический ассет)', () => {
+  it('ряд периодов 3000/9000 м (октавы 0/1, скаляр) согласован с CPU-стражем точности', () => {
     expect(frag).toContain('uv / 3000.0 +')
     expect(frag).toContain('uv / 9000.0 +')
     expect(WATER_WAVE_SMALLEST_PERIOD_METERS).toBe(3000) // синхронизирован с литералом выше (см. её докблок)
@@ -100,20 +101,22 @@ describe('WaterShaderTemplate: getNoiseWeighted — структура Water.js,
     expect(frag).toContain('float t = uTime * uWaterWaveSpeed;')
   })
 
-  it('крупные октавы без Grad-выборок (мипы решают сами); Grad и производные — только в чанке мелких октав', () => {
+  it('крупные текстурные октавы используют автоматические мипы без Grad-выборок и явных производных', () => {
     expect(frag).toContain('#include <waterOctavesFunctions>')
-    expect(frag).not.toContain('texture2DGradEXT')
-    expect(frag).not.toContain('dFdx')
-    expect(frag).not.toContain('dFdy')
+    const noise = frag.match(/vec4 getNoiseWeighted\([^]*?\n\s*\}/)?.[0]
+    expect(noise).toBeDefined()
+    expect(noise).not.toContain('texture2DGradEXT')
+    expect(noise).not.toContain('dFdx')
+    expect(noise).not.toContain('dFdy')
   })
 })
 
-// Путь к фактическому ассету на диске — тот же файл, что грузит движок
-// (resourceType 'waterNormal', Task 3). Число текселей страж читает ИЗ
-// НЕГО, не литералом (фикс-раунд 1, №1 ревью Task 1): реализация Task 1
-// хардкодила 512 по спеке плана, а реальный скачанный ассет — 1024×1024
-// (проверено sharp) — страж на 512 молчал бы про фактический провал на 1024.
+// Калибровка по измеренному через sharp waternormals.jpg: 1024×1024.
+// CPU-страж должен работать и в чистом клоне без внешних ресурсов.
+// Если локальный файл есть, отдельный замер ниже проверяет обе стороны:
+// ошибочная калибровка на 512 или замена текстуры не останется незамеченной.
 const WATER_NORMAL_ASSET_PATH = 'storage/images/textures/water/waternormals.jpg'
+const WATER_NORMAL_WIDTH = 1024
 
 describe('CPU-страж кванта домена: quant(R) = R_метры · 2^-23, период/N_texels >= 3·quant', () => {
   // Формула — не таблица плана (та честно помечена как потенциально неверная,
@@ -126,57 +129,48 @@ describe('CPU-страж кванта домена: quant(R) = R_метры · 2
     return radiusMeters * Math.pow(2, -23)
   }
 
-  async function assetTexelWidth(): Promise<number> {
-    const sharp = (await import('sharp')).default
-    const metadata = await sharp(WATER_NORMAL_ASSET_PATH).metadata()
-
-    if (!metadata.width) throw new Error('waternormals.jpg: ширина не читается — ассет отсутствует или повреждён')
-
-    return metadata.width
-  }
-
   const EARTH_RADIUS_METERS = 6360 * 1000 // physicalObjects.ts actorId 7 (id 4)
   const YAVIN_IV_RADIUS_METERS = 6100 * 1000 // physicalObjects.ts actorId 83 (id 64)
-
-  it('фактический ассет 1024×1024 (пин текущего состояния — если файл сменится, страж ниже пересчитает сам)', async () => {
-    const width = await assetTexelWidth()
-
-    expect(width).toBe(1024)
-  })
 
   it.each([
     ['Земля', EARTH_RADIUS_METERS],
     ['Явин IV', YAVIN_IV_RADIUS_METERS]
-  ])('%s (R=%d м): мельчайший период / N_texels(факт. ассета) >= 3 · quant(R)', async (_name, radiusMeters) => {
-    const width = await assetTexelWidth()
+  ])('%s (R=%d м): мельчайший период / 1024 текселя >= 3 · quant(R)', (_name, radiusMeters) => {
     const quant = quantMeters(radiusMeters)
-    const smallestPeriodTexelMeters = WATER_WAVE_SMALLEST_PERIOD_METERS / width
+    const smallestPeriodTexelMeters = WATER_WAVE_SMALLEST_PERIOD_METERS / WATER_NORMAL_WIDTH
 
     expect(smallestPeriodTexelMeters).toBeGreaterThanOrEqual(3 * quant)
   })
 
-  it('запас для Земли на фактических 1024 текселях — +28.8% (число ревью)', async () => {
-    const width = await assetTexelWidth()
+  it('запас для Земли при калибровке на 1024 текселя — +28.8%', () => {
     const quant = quantMeters(EARTH_RADIUS_METERS)
-    const margin = WATER_WAVE_SMALLEST_PERIOD_METERS / width / (3 * quant) - 1
+    const margin = WATER_WAVE_SMALLEST_PERIOD_METERS / WATER_NORMAL_WIDTH / (3 * quant) - 1
 
     expect(margin).toBeCloseTo(0.288, 3)
   })
 
-  it('потолок радиуса тела для этого ряда/ассета — 8192 км (страж ровно на границе)', async () => {
-    const width = await assetTexelWidth()
+  it('потолок радиуса тела для этого ряда и 1024 текселей — 8192 км (страж ровно на границе)', () => {
     const ceilingRadiusMeters = 8192 * 1000
     const quant = quantMeters(ceilingRadiusMeters)
 
-    expect(WATER_WAVE_SMALLEST_PERIOD_METERS / width).toBeCloseTo(3 * quant, 6)
+    expect(WATER_WAVE_SMALLEST_PERIOD_METERS / WATER_NORMAL_WIDTH).toBeCloseTo(3 * quant, 6)
   })
 
-  it('страж — для честности: обе прежние версии ряда НЕ прошли бы его на фактических 1024 текселях', async () => {
-    const width = await assetTexelWidth()
+  it('обе прежние версии ряда НЕ проходят страж на 1024 текселях', () => {
     const quant = quantMeters(EARTH_RADIUS_METERS)
 
-    expect(1000 / width).toBeLessThan(3 * quant) // черновик плана (task-1-brief.md)
-    expect(1500 / width).toBeLessThan(3 * quant) // первая реализация Task 1 (страж на 512-литерале молчал про это)
+    expect(1000 / WATER_NORMAL_WIDTH).toBeLessThan(3 * quant) // черновик плана (task-1-brief.md)
+    expect(1500 / WATER_NORMAL_WIDTH).toBeLessThan(3 * quant) // первая реализация Task 1 (страж на 512 молчал про это)
+  })
+})
+
+describe('WaterWaves: замер локального ассета', () => {
+  it.skipIf(!existsSync(WATER_NORMAL_ASSET_PATH))('waternormals.jpg соответствует калибровке CPU-стража 1024×1024', async () => {
+    const sharp = (await import('sharp')).default
+    const metadata = await sharp(WATER_NORMAL_ASSET_PATH).metadata()
+
+    expect(metadata.width).toBe(WATER_NORMAL_WIDTH)
+    expect(metadata.height).toBe(WATER_NORMAL_WIDTH)
   })
 })
 
@@ -274,12 +268,12 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
 
   it('отклонение ряби считается до полюсного гарда — производные чанка в однородном потоке', () => {
     const fn = frag.indexOf('vec3 waterWaveNormal(')
-    const ripple = frag.indexOf('vec3 ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);', fn)
+    const ripple = frag.indexOf('ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);', fn)
     const guard = frag.indexOf('if (eastLen < 1e-4) return dirLocal;', fn)
     expect(ripple).toBeGreaterThan(fn)
     expect(ripple).toBeLessThan(guard)
     expect(frag).toContain(
-      'vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance) {'
+      'vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance, out vec3 ripple) {'
     )
   })
 
@@ -358,7 +352,7 @@ describe('WaterShaderTemplate: затухание по октавам — вес
   it('нормаль волн получает домен, футпринт и веса; дисперсия погасших мелких октав — в rippleVariance', () => {
     expect(frag).toContain('float rippleVariance = 0.0;')
     expect(frag).toContain(
-      'vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance);'
+      'vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance, fineRipple);'
     )
   })
 })
@@ -689,12 +683,8 @@ describe('Вершинник — БЕЗ волн вовсе (T/B/N считаю�
 // (не только совпадающего guard) — ровно семантика реального препроцессора:
 // когда внешний guard не определён, всё вложенное (включая другие guard'ы)
 // тоже недостижимо и обязано пропасть целиком.
-// Контракт ограничен (находка ревью Task 2 фикс-раунда 1 №6, честно, не
-// молчание): считает только `#ifdef`/`#ifndef` как открывающие директивы,
-// `#endif` строгим построчным равенством после trim() — `#if`/`#elif`/
-// `#endif` с хвостовым комментарием на той же строке НЕ распознаются и
-// сломают баланс. В этом файле такие формы не используются — латентная
-// мина для будущего guard'а, не текущий баг.
+// Считает вложенные #if/#ifdef/#ifndef, не вычисляя их условия.
+// #endif должен занимать отдельную строку; целевой guard задаётся через #ifdef.
 function stripGuardedBlock(source: string, guard: string): string {
   const lines = source.split('\n')
   const result: string[] = []
@@ -717,7 +707,7 @@ function stripGuardedBlock(source: string, guard: string): string {
       continue
     }
 
-    if (trimmed.startsWith('#ifdef ') || trimmed.startsWith('#ifndef ')) {
+    if (/^#if(?:def|ndef)?\b/.test(trimmed)) {
       depth++
     } else if (trimmed === '#endif') {
       depth--
@@ -776,6 +766,7 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
     // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
     #include <waterGlintFunctions>

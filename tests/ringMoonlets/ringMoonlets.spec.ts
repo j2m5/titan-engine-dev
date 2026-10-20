@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { RenderingObjects } from '@storage/database'
+import { cloudManifestPaths } from '../../scripts/lib/cloudManifest'
 import {
   applyRingGapsToBins,
   RING_GAP_EDGE_FRACTION,
@@ -78,11 +78,16 @@ describe('ringGapMaskAA — щель с учётом футпринта пикс
   })
 
   it('непрерывна по радиусу при любом fw и по fw в любой точке; в центре не убывает с fw', () => {
+    // Keep every sample, but aggregate the bounds instead of allocating ~180k
+    // matcher objects. This is a continuity check, not a machine-speed budget.
+    let maxRadialStep = 0
+    let maxFootprintStep = 0
+    let minCenterStep = Infinity
     for (const fw of [0, 10, 27, 100, 180, 360, 1000, 5000]) {
       let prev = ringGapMaskAA(106620 - 400, fw, [gap])
       sweep((r) => {
         const m = ringGapMaskAA(r, fw, [gap])
-        expect(Math.abs(m - prev)).toBeLessThan(0.05)
+        maxRadialStep = Math.max(maxRadialStep, Math.abs(m - prev))
         prev = m
       })
     }
@@ -90,11 +95,14 @@ describe('ringGapMaskAA — щель с учётом футпринта пикс
       let prev = ringGapMaskAA(r, 0, [gap])
       for (let fw = 0.1; fw <= 3000; fw += 0.1) {
         const m = ringGapMaskAA(r, fw, [gap])
-        expect(Math.abs(m - prev)).toBeLessThan(0.01)
-        if (r === 106620) expect(m).toBeGreaterThanOrEqual(prev - 1e-12)
+        maxFootprintStep = Math.max(maxFootprintStep, Math.abs(m - prev))
+        if (r === 106620) minCenterStep = Math.min(minCenterStep, m - prev)
         prev = m
       }
     }
+    expect(maxRadialStep).toBeLessThan(0.05)
+    expect(maxFootprintStep).toBeLessThan(0.01)
+    expect(minCenterStep).toBeGreaterThanOrEqual(-1e-12)
   })
 
   it('без щелей — 1; две щели — произведение', () => {
@@ -181,10 +189,12 @@ describe('резолверы и проблемы данных лунок', () =>
     expect(ringMoonletProblems(both)).toHaveLength(2)
   })
 
-  it('каждая модель из списка лежит в репозитории (оба яруса)', () => {
+  it('каждая разрешённая модель включена в манифест облака (оба яруса)', () => {
+    const paths = cloudManifestPaths([])
+
     for (const name of RING_MOONLET_MODELS) {
-      expect(existsSync(`storage/images/textures/asteroids/shapes/${name}_l0.bin`), name).toBe(true)
-      expect(existsSync(`storage/images/textures/asteroids/shapes/${name}_near.bin`), name).toBe(true)
+      expect(paths).toContain(`asteroids/shapes/${name}_l0.bin`)
+      expect(paths).toContain(`asteroids/shapes/${name}_near.bin`)
     }
   })
 })

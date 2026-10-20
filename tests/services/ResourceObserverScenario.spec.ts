@@ -26,7 +26,7 @@ type StreamingInternals = {
   inFlight: Set<string>
   attempted: Map<string, number>
   pathActors: Map<string, Set<number>>
-  pathLoads: Map<string, Promise<LoadResult | null>>
+  pathLoads: Map<string, { controller: AbortController; promise: Promise<LoadResult | null> }>
 }
 
 function streamingState(observer: ResourceObserver): StreamingInternals {
@@ -57,10 +57,12 @@ describe('ResourceObserver — смена сценария сбрасывает 
     state.inFlight.add('planets/b.jpg')
     state.attempted.set('planets/c.jpg', Date.now())
     state.pathActors.set('planets/a.jpg', new Set([1, 2]))
-    state.pathLoads.set('planets/d.jpg', Promise.resolve(null))
+    const cancelled = new AbortController()
+    state.pathLoads.set('planets/d.jpg', { controller: cancelled, promise: Promise.resolve(null) })
 
     observer.scenario = Scenarios[1]
 
+    expect(cancelled.signal.aborted).toBe(true)
     expect(state.loaded.size).toBe(0)
     expect(state.loadedAt.size).toBe(0)
     expect(state.inFlight.size).toBe(0)

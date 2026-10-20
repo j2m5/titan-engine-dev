@@ -652,6 +652,45 @@ function checkRequiredNumbers(db: DatabaseSnapshot, issues: ValidationIssue[]): 
   }
 }
 
+/** Validate the ellipse/hyperbola domain implemented by KeplerianModel. */
+function checkOrbitDomain(db: DatabaseSnapshot, issues: ValidationIssue[]): void {
+  for (const orbit of db.orbits) {
+    const { semiMajorAxis: a, eccentricity: e } = orbit
+    if (!Number.isFinite(a) || !Number.isFinite(e)) continue
+
+    const bad = (field: 'semiMajorAxis' | 'eccentricity', reason: string): void => {
+      issues.push({
+        level: 'error',
+        collection: 'orbits',
+        entity: orbit.id,
+        message: `orbits#${orbit.id}.${field} ${reason}`
+      })
+    }
+
+    if (e < 0) {
+      bad('eccentricity', 'must be non-negative')
+      continue
+    }
+
+    if (e === 1) {
+      bad('eccentricity', 'must be less than 1 or greater than 1; parabolic orbits are unsupported')
+      continue
+    }
+
+    // KeplerianModel intentionally treats the NullOrbit (a=0, e=0) as stationary.
+    if (a === 0) {
+      if (e !== 0) bad('semiMajorAxis', 'zero semiMajorAxis requires zero eccentricity for a stationary orbit')
+      continue
+    }
+
+    if (e < 1 && a < 0) {
+      bad('semiMajorAxis', 'must be positive for an ellipse (eccentricity < 1)')
+    } else if (e > 1 && a > 0) {
+      bad('semiMajorAxis', 'must be negative for a hyperbola (eccentricity > 1)')
+    }
+  }
+}
+
 function buildIdSet<T extends { id: number }>(rows: T[]): Set<number> {
   const set = new Set<number>()
   for (const row of rows) set.add(row.id)
@@ -893,6 +932,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 6a. Обязательные числа: null/NaN/Infinity — ошибка (см. REQUIRED_NUMBERS) ---
   checkRequiredNumbers(db, issues)
+  checkOrbitDomain(db, issues)
 
   // --- 6b. Физически невозможные значения (warning) ---
   for (const phys of db.physicalObjects) {

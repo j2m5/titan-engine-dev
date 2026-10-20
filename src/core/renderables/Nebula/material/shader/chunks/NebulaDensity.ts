@@ -18,6 +18,12 @@ export const nebulaDensityChunk = `
   uniform float uBoundaryWarp;  // 0..1 варп самого контура формы тем же вектором варпа
   uniform float uRidged;
   uniform float uContrast;
+  uniform vec3  uDustNoiseOffset;
+  uniform float uDustFrequency;
+  uniform float uDustThreshold;
+  uniform float uDustContrast;
+  uniform vec3  uStructureDirection;
+  uniform float uStructureStretch;
 
   uniform int   uLobeCount;
   uniform vec4  uLobeData[NEB_MAX_LOBES];   // xyz center (local), w radius
@@ -28,7 +34,8 @@ export const nebulaDensityChunk = `
   uniform float uWorleyStrength;            // 0..1 cell-wall filament carving
 
   #ifdef NEB_BAKED
-    uniform highp sampler3D uDensityTex;    // precomputed static density field
+    uniform highp sampler3D uDensityTex;    // RG: static gas and dust fields
+    uniform float uDensityReady;
   #endif
 
   // Показатель раздувания лепестков песочных часов. Единица дала бы конусы,
@@ -88,9 +95,16 @@ export const nebulaDensityChunk = `
   // Low-frequency dust channel, decorrelated from the main noise by a position
   // offset (snoise has no seed). Single octave: dust lanes are broad and low-freq,
   // so extra octaves would only add per-step cost. Mirror: NebulaField.dustMask.
-  float nebulaDust(vec3 p) {
-    float n = snoise(p * 0.9 + vec3(55.5));
+  float nebulaDustMask(vec3 p) {
+    float n = snoise(p * uDustFrequency + vec3(55.5) + uDustNoiseOffset);
     return clamp(1.0 - abs(n), 0.0, 1.0);
+  }
+
+  // Stretch internal structure without moving the envelope, lobes or cavities.
+  // The axis is normalized on the CPU; its sign does not change the transform.
+  vec3 nebStructurePoint(vec3 p) {
+    if (uStructureStretch <= 1.0) return p;
+    return p - uStructureDirection * dot(p, uStructureDirection) * (1.0 - 1.0 / uStructureStretch);
   }
 
   // Sum of Gaussian lobes (mirror of NebulaField.lobeContribution): field-level
@@ -110,7 +124,7 @@ export const nebulaDensityChunk = `
   // cell walls for filament structure. cellular3d is heavy (3x3x3 search), so it is
   // gated on uWorleyStrength; set noise.worleyStrength to 0 to reclaim that per-step
   // cost (it will become free once the static field is baked to a 3D texture).
-  float nebCavities(vec3 p) {
+  float nebCavities(vec3 p, vec3 noiseP) {
     float carve = 1.0;
     for (int i = 0; i < NEB_MAX_LOBES; i++) {
       if (i >= uCavityCount) break;
@@ -119,45 +133,65 @@ export const nebulaDensityChunk = `
       carve *= 1.0 - uCavityStrength[i] * inside;
     }
     if (uWorleyStrength > 0.001) {
-      vec2 f = cellular3d(p * 1.7);
+      vec2 f = cellular3d(noiseP * 1.7 + uNoiseOffset);
       float walls = mix(1.0, smoothstep(0.0, 0.4, f.y - f.x), uWorleyStrength);
       carve *= walls;
     }
     return max(0.0, carve);
   }
 
-  // Returns density in [0,1]. Mirrors NebulaField.sampleDensity:
+  // Returns gas and dust in [0,1]. Gas mirrors NebulaField.sampleDensity:
   // pow(clamp(boundary * (noise + lobes)) * cavities, contrast), + GPU Worley.
   // When NEB_BAKED, the (static) field is read from a precomputed 3D texture
   // instead of evaluating fbm+Worley per step. The 3D-bake material runs the
-  // compute branch (no define) to fill that texture, so baked == live.
-  float nebulaDensity(vec3 p) {
+  // compute branch (no define) to fill that texture. RG8 quantisation and trilinear
+  // interpolation approximate the live field; unfinished bakes use live noise.
+  vec2 nebulaMedium(vec3 p) {
   #ifdef NEB_BAKED
-    return texture(uDensityTex, p * 0.5 + 0.5).r;
-  #else
+    // The baked field has one level with trilinear spatial filtering. Explicit
+    // LOD avoids implicit derivatives inside divergent view/light marches.
+    // Keep the fallback in an explicit else: ANGLE/D3D11 reports X4000 on the
+    // function return when this texture return precedes the procedural body.
+    if (uDensityReady > 0.5) {
+      return textureLod(uDensityTex, p * 0.5 + 0.5, 0.0).rg;
+    } else {
+  #endif
     // Порядок ветвей — как в NebulaField.sampleDensity: при uBoundaryWarp 0 сначала
     // граница и ранний выход (варп не считается впустую), при > 0 вектор варпа
     // нужен уже для границы: контур перестаёт быть аналитической сферой/эллипсоидом
     vec3 w;
     float b;
+    vec3 structureP = nebStructurePoint(p);
     if (uBoundaryWarp > 0.0) {
       w = nebWarpVector(p, uLacunarity, uGain);
       b = nebBoundary(p + uBoundaryWarp * w);
-      if (b <= 0.0) return 0.0;
+      if (b <= 0.0) return vec2(0.0);
+      // The boundary keeps its original warp; internal warp follows the axis.
+      if (uStructureStretch > 1.0) w = nebWarpVector(structureP, uLacunarity, uGain);
     } else {
       b = nebBoundary(p);
-      if (b <= 0.0) return 0.0;
-      w = nebWarpVector(p, uLacunarity, uGain);
+      if (b <= 0.0) return vec2(0.0);
+      w = nebWarpVector(structureP, uLacunarity, uGain);
     }
-    vec3 q = (p + uWarpStrength * w) * uFrequency;
+    vec3 q = (structureP + uWarpStrength * w) * uFrequency;
     float base = nebFbm(q, uOctaves, uLacunarity, uGain);
     float billow = abs(base);
     float ridged = 1.0 - abs(base);
     base = mix(billow, ridged, uRidged);
     float d = b * (clamp(base, 0.0, 1.0) + nebLobes(p));
-    d *= nebCavities(p);
+    float carve = nebCavities(p, structureP);
+    d *= carve;
     d = pow(clamp(d, 0.0, 1.0), uContrast);
-    return clamp(d, 0.0, 1.0);
+    // Independent interior structure, shared envelope and carved cavities.
+    // threshold=1 is an explicitly empty field (smoothstep(1,1,x) is undefined).
+    float dust = 0.0;
+    if (uDustThreshold < 1.0) {
+      float mask = smoothstep(uDustThreshold, 1.0, nebulaDustMask(structureP));
+      dust = b * carve * pow(mask, uDustContrast);
+    }
+    return clamp(vec2(d, dust), 0.0, 1.0);
+  #ifdef NEB_BAKED
+    }
   #endif
   }
 `

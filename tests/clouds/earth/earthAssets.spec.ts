@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { Texture, SRGBColorSpace, NoColorSpace } from 'three'
 import { loadEarthTextures } from '@/labs/earth-clouds/earthAssets'
 it('loads local assets with their required spaces and owns them once', async () => {
-  const sources = Array.from({ length: 4 }, () => new Texture())
+  const sources = Array.from({ length: 4 }, () => new Texture(document.createElement('img')))
   const disposal = sources.map((t) => vi.spyOn(t, 'dispose'))
   let i = 0
   const urls: string[] = []
@@ -24,7 +24,7 @@ it('loads local assets with their required spaces and owns them once', async () 
   disposal.forEach((spy) => expect(spy).toHaveBeenCalledTimes(1))
 })
 it('waits for every load and disposes successes on any rejection', async () => {
-  const sources = Array.from({ length: 3 }, () => new Texture())
+  const sources = Array.from({ length: 3 }, () => new Texture(document.createElement('img')))
   const disposal = sources.map((t) => vi.spyOn(t, 'dispose'))
   let i = 0
   await expect(

@@ -125,7 +125,7 @@ export interface TitanInputProps extends TitanFieldProps {
   placeholder?: string
   min?: number
   max?: number
-  step?: number
+  step?: number | 'any'
   /** Ссылка на сам input — фокус по горячей клавише */
   inputRef?: React.Ref<HTMLInputElement>
   /** Имя поля для экранного диктора, когда видимой подписи нет */

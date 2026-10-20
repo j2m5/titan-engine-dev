@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Color, Texture, Vector2, Vector4, WebGLRenderTarget } from 'three'
+import { Color, Mesh, MeshBasicMaterial, Object3D, Texture, Vector2, Vector4, WebGLRenderTarget } from 'three'
 import {
   SceneCloudComposition,
   CloudEndpointCapturePass,
@@ -10,10 +10,21 @@ import { Scene, PerspectiveCamera } from 'three'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { LensRegistry } from '@/core/services/LensRegistry'
+import { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
 describe('cloud endpoint composition', () => {
   it('restores camera layers and renderer draw state when a near prefix throws', () => {
     const camera = new PerspectiveCamera(),
       scene = new Scene()
+    camera.position.z = 10
+    const body = new Object3D()
+    body.position.z = 5
+    const foreground = new Mesh(undefined, new MeshBasicMaterial({ transparent: true }))
+    body.add(foreground)
+    const hole = Object.assign(new Object3D(), { bindSceneFrame: () => {}, unbindSceneFrame: () => {} })
+    scene.add(body, hole)
+    const lenses = new LensRegistry()
+    lenses.register({ object: hole, rsUnits: 1, simulationRadiusUnits: 3, background: () => null })
+    const lensFront = new LensFrontSorter(scene, camera, lenses, new DepthVolumeRegistry(), (object) => object === body)
     const renderer = {
       debug: { checkShaderErrors: false, onShaderError: undefined },
       autoClear: true,
@@ -57,6 +68,8 @@ describe('cloud endpoint composition', () => {
         setSize: () => {},
         dispose: () => {},
         render: () => {
+          lensFront.split()
+          expect(foreground.layers.mask).not.toBe(1)
           camera.layers.set(28)
           renderer.shadowMap.autoUpdate = false
           renderer.autoClear = false
@@ -64,6 +77,7 @@ describe('cloud endpoint composition', () => {
         }
       } as never,
       atmosphere: { setFrame: () => {}, setCloudOverlay: () => {} } as never,
+      lensFront,
       capture: new CloudEndpointCapturePass()
     }))
     const result = composition.prepare(
@@ -77,10 +91,13 @@ describe('cloud endpoint composition', () => {
       undefined
     )
     expect(camera.layers.mask).toBe(1)
+    expect(foreground.layers.mask).toBe(1)
     expect(renderer.shadowMap.autoUpdate).toBe(true)
     expect(renderer.autoClear).toBe(true)
     composition.dispose()
     target.dispose()
+    foreground.geometry.dispose()
+    foreground.material.dispose()
   })
   it('creates independent mutable passes and atmosphere effects for each complete endpoint', () => {
     const context = {

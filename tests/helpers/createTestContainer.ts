@@ -56,6 +56,8 @@ export function createTestContainer(): Container {
       return v
     },
     getRenderTarget: () => null,
+    getActiveCubeFace: () => 0,
+    getActiveMipmapLevel: () => 0,
     setRenderTarget: () => {},
     clear: () => {},
     capabilities: { getMaxAnisotropy: () => 8 }
@@ -72,7 +74,7 @@ export function createTestContainer(): Container {
     position: { set: () => {}, clone: () => ({}) },
     lookAt: () => {}
   } as unknown as PerspectiveCamera)
-  container.instance(Tokens.Clock, { getDelta: () => 0, getElapsedTime: () => 0 } as unknown as Clock)
+  container.instance(Tokens.Clock, { getDelta: () => 0, elapsedTime: 0, start() {}, stop() {} } as unknown as Clock)
   container.instance(Tokens.AstroControls, {
     update: () => {},
     enabled: true,

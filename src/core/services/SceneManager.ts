@@ -1,4 +1,4 @@
-import { Object3D, Scene } from 'three'
+import { Object3D, PerspectiveCamera, Scene } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { MarkerManager } from '@/core/services/MarkerManager'
@@ -119,6 +119,11 @@ class SceneManager {
 
   public updateMarkers(): void {
     this.markerManager.update()
+  }
+
+  public updateView(camera: PerspectiveCamera): void {
+    // Включая скрытые уровни LOD: рендерер может выбрать их в этом же кадре.
+    this.scene.traverse((object: Object3D): void => object.updateView?.(camera))
   }
 }
 

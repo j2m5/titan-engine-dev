@@ -1,14 +1,31 @@
 import { IUniform, Matrix3, Vector4 } from 'three'
 import { NEBULA_SHAPE_IDS, NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { shapeRotationMatrix } from '@/core/renderables/Nebula/fields/NebulaField'
+import { hash3 } from '@/core/renderables/Nebula/fields/valueNoise'
 
 /**
  * Set the density-FIELD uniforms (boundary / noise / lobes / cavities / Worley) on a
  * uniforms record. Shared by the live raymarch material and the 3D-bake material so
  * the baked field is byte-for-byte the same function as the live one. Excludes
- * march-only uniforms (steps, palette/dust/light, density absorption, opacity, time).
+ * march-only uniforms (steps, colours/light, optical coefficients, opacity, time).
  */
 export function applyDensityUniforms(u: Record<string, IUniform>, params: NebulaParams): void {
+  // Hash on the CPU to keep arbitrary integer seeds out of float32 GLSL math.
+  // Keep the original pattern for the default seed; other seeds now select
+  // distinct noise domains in both the live marcher and the density bake.
+  const seed = params.seed | 0
+  if (seed === 1337) u.uNoiseOffset.value.set(0, 0, 0)
+  else u.uNoiseOffset.value.set(hash3(1, 0, 0, seed) * 128, hash3(0, 1, 0, seed) * 128, hash3(0, 0, 1, seed) * 128)
+
+  const dustSeed = (params.dust.seed ?? params.seed) | 0
+  if (dustSeed === 1337) u.uDustNoiseOffset.value.set(0, 0, 0)
+  else u.uDustNoiseOffset.value.set(hash3(1, 0, 0, dustSeed) * 128, hash3(0, 1, 0, dustSeed) * 128, hash3(0, 0, 1, dustSeed) * 128)
+  u.uDustFrequency.value = params.dust.frequency
+  u.uDustThreshold.value = params.dust.threshold
+  u.uDustContrast.value = params.dust.contrast
+  u.uStructureDirection.value.copy(params.structure.direction)
+  u.uStructureStretch.value = params.structure.stretch
+
   // Код берётся из единой таблицы, а не из цепочки тернарников: с пятью формами
   // забытая ветка молча означала бы «эллипсоид»
   u.uShape.value = NEBULA_SHAPE_IDS[params.shape] ?? NEBULA_SHAPE_IDS.ellipsoid

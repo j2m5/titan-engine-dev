@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Google Sans";
-  src: url("@titanui/assets/fonts/GoogleSans-Regular.ttf") format("truetype");
+  src: url("@titanui/assets/fonts/GoogleSans-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   // Текст сразу виден системным шрифтом, пока грузится Google Sans
@@ -198,6 +198,20 @@
 
     &:last-child {
       margin-bottom: 0;
+    }
+  }
+
+  button.titan-editor-row {
+    border: 0;
+    border-radius: 0;
+    box-sizing: border-box;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    width: 100%;
+
+    &:focus-visible {
+      @include titan-focus-ring;
     }
   }
 }

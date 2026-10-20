@@ -12,8 +12,8 @@ import {
  * Cheap camera-facing billboard for the far LOD. Displays a baked render-target
  * texture of the raymarched volume. The bake is composited premultiplied (the
  * raymarch outputs premultiplied alpha), so this material composites premultiplied
- * too (One, OneMinusSrcAlpha) to reproduce the volume's on-screen look exactly and
- * keep the raymarch<->impostor crossfade seamless.
+ * too (One, OneMinusSrcAlpha). The two LOD layers still use source-over during
+ * the transition; this is not an exact linear mix of the two images.
  */
 class NebulaImpostorMaterial extends ShaderMaterial {
   public constructor(map: Texture | null) {

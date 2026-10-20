@@ -28,42 +28,45 @@ export const starSurface = `
   }
 
   // Экранный масштаб домена шума: сколько единиц домена приходится на пиксель
-  // по самому крутому экранному направлению.
+  // по более крутому из экранных направлений x/y.
   //
-  // Мера намеренно НЕ расстояние до камеры: она не зависит ни от радиуса
-  // звезды, ни от fov, ни от высоты окна. На дистанции переключения LOD диск
-  // и билборд занимают одинаковые STAR_IMPOSTOR_PIXELS в одном и том же
-  // домене, значит дают одинаковое число, значит гаснут одинаково — шов на
-  // стыке невозможен без подгонки констант с двух сторон.
+  // Мера уже учитывает проекцию и разрешение: отдельные пороги для радиуса,
+  // fov и высоты окна не нужны. Диск и билборд используют одну
+  // шкалу фильтрации; на дистанции LOD у проверенных звёзд весь спектр уже
+  // погашен. Совпадение интегрального RGB проверяет lodPhotometry.gpu.ts.
   float starDomainPerPixel(vec3 domainPos) {
     return max(length(dFdx(domainPos)), length(dFdy(domainPos)));
   }
 
-  // Гашение грануляции по экранному масштабу. Ячейка базовой октавы ≈ 1
+  // Общее гашение, сохранённое для giantStarSurface. Главная последовательность
+  // использует ниже фильтрацию отдельных октав. Ячейка базовой октавы ≈ 1
   // единица домена, поэтому пороги — обратные величины размера ячейки в
   // пикселях: 0.15 это ~6.7 px (ниже зерно начинает распадаться), 0.6 это
-  // ~1.7 px (ниже оно уже не зерно, а алиасинг). Для Солнца это видимый
-  // диск примерно от 230 px (зерно в полную силу) до 60 px (зерна нет);
-  // переключение на импостор происходит на 12 px, то есть заведомо по нулю.
-  //
-  // Пороги стартовые, приёмку по картинке делает владелец.
+  // ~1.7 px. Это художественные пороги общего затухания.
   float starGranulationFade(float domainPerPixel) {
     return 1.0 - smoothstep(0.15, 0.6, domainPerPixel);
   }
 
-  // Грануляция: t в [0..1] — «температура ячейки» (0 холодная, 1 горячая).
-  // fbm знаковый (среднее 0, σ~0.1): центрируем на 0 и усиливаем ×4 —
-  // t покрывает [0..1], грануляция видима; 4.0 — ручка контраста ячеек
-  //
-  // fade — доля зерна от starGranulationFade. Гасим к 0.5, а не к нулю:
-  // t = 0.5 даёт базовый спектральный цвет и середину mix(0.55, 3.0, t), то
-  // есть среднюю энергию распределения, — при гашении пропадает зерно, а не
-  // яркость диска. Полностью погашенная поверхность ещё и не считает шесть
-  // октав 4D-симплекса впустую.
-  float starGranulationT(vec4 noisePos, float fade) {
-    if (fade <= 0.0) return 0.5;
-
-    return mix(0.5, clamp(0.5 + fbm(noisePos, 6, 0.9) * 4.0, 0.0, 1.0), fade);
+  // Каждая октава ограничена собственным экранным масштабом. Нормировка
+  // остаётся полной: удаление мелких деталей не усиливает крупные пятна.
+  // Общий fbm выше нужен также другим поверхностям и остаётся без фильтра.
+  // Результат: x — отфильтрованный шум, y — дисперсия удалённого спектра.
+  vec2 starFilteredFbm(vec4 pos, float domainPerPixel) {
+    float total = 0.0, norm = 0.0, missingVariance = 0.0;
+    float frequency = 1.0, amplitude = 1.0;
+    for (int i = 0; i < 6; i++) {
+      // Полная октава при периоде >= 2 px, плавное гашение к 1 px.
+      // Общий starGranulationFade имеет более ранние художественные пороги
+      // и по-прежнему используется другими типами звёзд.
+      float weight = 1.0 - smoothstep(0.5, 1.0, domainPerPixel * frequency);
+      if (weight > 0.0) total += snoise(pos * frequency) * amplitude * weight;
+      missingVariance += amplitude * amplitude * (1.0 - weight * weight);
+      norm += amplitude;
+      amplitude *= 0.9;
+      frequency *= 2.0;
+    }
+    // Дисперсия snoise(vec4) ≈ 0.0875 (замер по трём временным срезам).
+    return vec2(total / norm, 0.0875 * missingVariance / (norm * norm));
   }
 
   // Чёрнотельная палитра: cool (T-spread) -> base (T) -> hot (T+spread)
@@ -74,6 +77,33 @@ export const starSurface = `
   // Горячие ячейки ярче холодных; coreIntensity — базовая HDR-яркость
   float starEnergy(float t, float coreIntensity) {
     return mix(0.55, 3.0, t) * coreIntensity;
+  }
+
+  vec3 starGranuleRadiance(float noise, float activity, vec3 cool, vec3 base, vec3 hot) {
+    float t = mix(0.5, clamp(0.5 + noise * 4.0, 0.0, 1.0), activity);
+    return starGranuleColor(t, cool, base, hot) * starEnergy(t, 1.0);
+  }
+
+  // Фильтруем излучение, включая нелинейные clamp и палитру. Удалённые
+  // октавы заменены распределением с нулевым средним и потерянной дисперсией.
+  // Пять узлов Гаусса—Эрмита требуют только дешёвых оценок цвета, без шума.
+  // При полностью разрешённом спектре результат совпадает с прежним.
+  vec3 starGranulationRadiance(vec4 noisePos, float activity, float domainPerPixel,
+                              vec3 cool, vec3 base, vec3 hot, float coreIntensity) {
+    if (activity <= 0.0) return base * starEnergy(0.5, coreIntensity);
+    vec2 field = starFilteredFbm(noisePos, domainPerPixel);
+    vec3 center = starGranuleRadiance(field.x, activity, cool, base, hot);
+    if (field.y <= 0.0) return center * coreIntensity;
+    float sigma = sqrt(field.y);
+    float inner = 1.35562618 * sigma, outer = 2.85697001 * sigma;
+    vec3 radiance = center * 0.53333333;
+    radiance += 0.22207592 * (
+      starGranuleRadiance(field.x - inner, activity, cool, base, hot) +
+      starGranuleRadiance(field.x + inner, activity, cool, base, hot));
+    radiance += 0.01125741 * (
+      starGranuleRadiance(field.x - outer, activity, cool, base, hot) +
+      starGranuleRadiance(field.x + outer, activity, cool, base, hot));
+    return radiance * coreIntensity;
   }
 
   // Лимбовое потемнение: mu — косинус (нормаль, луч на камеру);

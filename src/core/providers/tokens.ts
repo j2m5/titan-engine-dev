@@ -14,6 +14,7 @@ import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import type { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 import type { LensRegistry } from '@/core/services/LensRegistry'
 import type { GaiaSky } from '@/core/sky/GaiaSky'
 import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
@@ -48,6 +49,7 @@ export const Tokens = {
   SceneObserver: token<SceneObserver>('SceneObserver'),
   AtmosphereRegistry: token<AtmosphereRegistry>('AtmosphereRegistry'),
   DepthVolumeRegistry: token<DepthVolumeRegistry>('DepthVolumeRegistry'),
+  NebulaBakeQueue: token<NebulaBakeQueue>('NebulaBakeQueue'),
   LensRegistry: token<LensRegistry>('LensRegistry'),
   GaiaSky: token<GaiaSky>('GaiaSky'),
   AsteroidImpostorLibrary: token<AsteroidImpostorLibrary>('AsteroidImpostorLibrary'),

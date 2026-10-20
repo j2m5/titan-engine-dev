@@ -37,6 +37,7 @@ import {
   WHITE_DWARF_IMPOSTOR_PIXELS
 } from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
+import { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
@@ -84,7 +85,8 @@ class RenderableFactory {
     /** Реестр гравитационных линз для экранного прохода дальнего поля; без него дыра лензирует только внутри меша */
     private readonly lensRegistry: LensRegistry | null = null,
     private readonly asteroidImpostors: AsteroidImpostorLibrary | null = null,
-    public readonly cloudRegistry: CloudRegistry = new CloudRegistry()
+    public readonly cloudRegistry: CloudRegistry = new CloudRegistry(),
+    private readonly nebulaBakes = new NebulaBakeQueue()
   ) {
     this.eclipses = new EclipseSystem(this.atmosphereRegistry)
   }
@@ -189,7 +191,7 @@ class RenderableFactory {
     // Один объект усиления на оба уровня: стык LOD по яркости сведён
     const lodl1 = new Star(actor, lod.glowGain)
     const lodl2 = new FakeStar(actor, this.renderer, lod.glowGain)
-    const starOuterLayer = new StarOuterLayer(actor)
+    const starOuterLayer = new StarOuterLayer(actor, this.renderer)
 
     lodl1.add(starOuterLayer)
 
@@ -658,7 +660,7 @@ class RenderableFactory {
     // renderable намеренно остаётся null: Nebula — контейнер без собственных
     // geometry/material, а RenderableObject3D требует оба. Следствие —
     // у туманности нет маркера и прицела, она не навигационное тело.
-    node.add(new Nebula(this.renderer, nebulaParamsFromData(data), this.depthVolumeRegistry))
+    node.add(new Nebula(this.renderer, nebulaParamsFromData(data), this.depthVolumeRegistry, this.nebulaBakes))
 
     return node
   }

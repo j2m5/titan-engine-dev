@@ -18,7 +18,8 @@ export const NEBULA_PRESETS: Record<'emission' | 'reflection' | 'dark', DeepPart
     lighting: { scatterStrength: 1.2, ambient: 0.3 }
   },
   dark: {
-    palette: { emissiveIntensity: 0.8 },
+    density: 0,
+    palette: { emissiveIntensity: 0 },
     dust: { strength: 0.9, threshold: 0.4 },
     noise: { contrast: 2.0 }
   }

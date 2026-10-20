@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   WATER_DEFAULT_PIXEL_ANGLE, WATER_DETAIL_PERIOD_METERS, WATER_DETAIL_WRAP_METERS, WATER_GLINT_CEILING,
@@ -116,10 +117,13 @@ describe('waterOctavesMath: поглощение', () => {
   })
 })
 
-describe('waterOctavesMath: замер ассета', () => {
-  it('WATER_OCTAVE_SLOPE_VARIANCE совпадает с дисперсией наклона waternormals.jpg в пределах 2 %', async () => {
+// Внешняя текстура не входит в git; остальные проверки математики работают без неё.
+const WATER_NORMAL_ASSET_PATH = 'storage/images/textures/water/waternormals.jpg'
+
+describe('waterOctavesMath: замер локального ассета', () => {
+  it.skipIf(!existsSync(WATER_NORMAL_ASSET_PATH))('WATER_OCTAVE_SLOPE_VARIANCE совпадает с дисперсией наклона waternormals.jpg в пределах 2 %', async () => {
     const sharp = (await import('sharp')).default
-    const { data, info } = await sharp('storage/images/textures/water/waternormals.jpg')
+    const { data, info } = await sharp(WATER_NORMAL_ASSET_PATH)
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true })

@@ -47,7 +47,7 @@ export function bindCloudAppearance(
         ? Math.log2(
             (typeof HTMLImageElement !== 'undefined' && textures.color.image instanceof HTMLImageElement
               ? textures.color.image.naturalWidth
-              : textures.color.image.width) / textures.weather.image.width
+              : (textures.color.image as { width: number }).width) / textures.weather.image.width
           )
         : 0
     }

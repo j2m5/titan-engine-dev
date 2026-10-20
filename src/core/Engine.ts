@@ -16,6 +16,7 @@ import { clampPixelRatio } from '@/core/graphic/renderingFactories'
 import { resolveCrosshairAnchor } from '@/core/helpers/resolveCrosshairAnchor'
 import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
 import { bindResourceStorageContext } from '@/core/services/ResourceStorage'
+import type { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 
 class Engine {
   private readonly canvas: HTMLCanvasElement
@@ -60,7 +61,8 @@ class Engine {
     private renderClock: Clock,
     private postprocessing: Postprocessing,
     private cameraCollision: CameraCollision,
-    private readonly asteroidImpostors?: Pick<AsteroidImpostorLibrary, 'pumpFrame'>
+    private readonly asteroidImpostors?: Pick<AsteroidImpostorLibrary, 'pumpFrame'>,
+    private readonly nebulaBakes?: Pick<NebulaBakeQueue, 'pumpFrame'>
   ) {
     this.canvas = this.renderer.domElement
     this.releaseResourceContext = bindResourceStorageContext(this.renderer)
@@ -109,6 +111,9 @@ class Engine {
 
   public start(): void {
     if (!this.running) {
+      const elapsed = this.renderClock.elapsedTime
+      this.renderClock.start()
+      this.renderClock.elapsedTime = elapsed
       this.running = true
       if (!this.initialized) this.initialize()
 
@@ -118,6 +123,14 @@ class Engine {
 
   public stop(): void {
     this.renderer.setAnimationLoop(null)
+
+    if (this.running) {
+      const elapsed = this.renderClock.elapsedTime
+      this.renderClock.stop()
+      // Clock.stop() samples a partial frame. Keep elapsed aligned with deltas
+      // already delivered to the simulation.
+      this.renderClock.elapsedTime = elapsed
+    }
 
     this.running = false
   }
@@ -205,7 +218,9 @@ class Engine {
     const ctx: UpdateContext = {
       delta,
       epoch: this.clock.epoch,
-      elapsed: this.renderClock.getElapsedTime(),
+      // getElapsedTime() снова вызывает getDelta() и отнимает время работы
+      // выше у следующего кадра. Нужен снимок, уже обновлённый в начале кадра.
+      elapsed: this.renderClock.elapsedTime,
       camera: this.renderCamera
     }
 
@@ -228,11 +243,14 @@ class Engine {
     this.cameraCollision.resolve()
     // после коллизии: высота над рельефом — по уже вытолкнутой позиции
     this.astroControls.setSurface(this.cameraCollision.nearestSurface())
+    // Импосторы и свечение должны видеть камеру после follow и коллизий.
+    this.sceneManager.updateView(this.renderCamera)
     this.scene.updateMatrixWorld(true)
     this.renderCamera.updateMatrixWorld(true)
     this.labelRenderer.render(this.scene, this.renderCamera)
     this.sceneManager.updateMarkers()
     this.asteroidImpostors?.pumpFrame()
+    this.nebulaBakes?.pumpFrame()
     this.postprocessing.render(delta)
   }
 

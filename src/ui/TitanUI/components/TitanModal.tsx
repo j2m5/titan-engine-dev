@@ -2,7 +2,7 @@ import { FC, useEffect, useRef } from 'react'
 import { TitanModalProps } from '@titanui/types'
 import TitanContainer from '@titanui/components/TitanContainer'
 import TitanDivider from '@titanui/components/TitanDivider'
-import { isEditable, openModals } from '@titanui/components/modalStack'
+import { isEditable, openModals, registerModal, unregisterModal, topModalElement } from '@titanui/components/modalStack'
 
 const FOCUSABLE: string =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -44,13 +44,15 @@ const TitanModal: FC<TitanModalProps> = ({
    * (кнопка верхней панели).
    */
   useEffect(() => {
-    if (!visible) return
+    const element = rootRef.current
+
+    if (!visible || !element) return
 
     const id: symbol = Symbol('titan-modal')
     const opener: Element | null = document.activeElement
 
-    openModals.push(id)
-    rootRef.current?.focus()
+    registerModal(id, element)
+    element.focus()
 
     const onKeyDown = (event: KeyboardEvent): void => {
       const root: HTMLDivElement | null = rootRef.current
@@ -90,9 +92,19 @@ const TitanModal: FC<TitanModalProps> = ({
 
     return (): void => {
       document.removeEventListener('keydown', onKeyDown)
-      openModals.splice(openModals.indexOf(id), 1)
+      const wasTop: boolean = openModals[openModals.length - 1] === id
 
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus()
+      unregisterModal(id)
+
+      if (!wasTop) return
+
+      const activeModal = topModalElement()
+
+      if (opener instanceof HTMLElement && opener.isConnected && (!activeModal || activeModal.contains(opener))) {
+        opener.focus()
+      } else {
+        activeModal?.focus()
+      }
     }
   }, [visible])
 

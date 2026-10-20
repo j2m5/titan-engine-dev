@@ -1,4 +1,5 @@
 import { FC } from 'react'
+import { observer } from 'mobx-react-lite'
 import TitanSimpleList from '@titanui/components/TitanSimpleList'
 import TitanListItem from '@titanui/components/TitanListItem'
 import TitanFlex from '@titanui/components/TitanFlex'
@@ -9,7 +10,7 @@ import { ITrack } from '@/ui/types'
 import { TrackListProps } from '@/ui/types'
 import { trackLabel } from '@/ui/components/common/audio/trackHelpers'
 
-const TrackList: FC<TrackListProps> = (props: TrackListProps) => {
+const TrackList: FC<TrackListProps> = observer((props: TrackListProps) => {
   const { data, isPlaying, currentTrackIndex, onPlay, onTogglePlaying } = props
 
   const handleClick = (index: number): void => {
@@ -50,6 +51,6 @@ const TrackList: FC<TrackListProps> = (props: TrackListProps) => {
       ))}
     </TitanSimpleList>
   )
-}
+})
 
 export default TrackList

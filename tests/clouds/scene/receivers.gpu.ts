@@ -120,7 +120,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     sea = new Mesh(geometry, water)
   ground.scale.setScalar(0.92)
   scene.add(ground, sea)
-  water.defaultAttributeValues = { ...water.defaultAttributeValues, patchCenter: [0, 0, 0], detailOrigin: [0, 0, 0] }
+  Object.assign(water.defaultAttributeValues, { patchCenter: [0, 0, 0], detailOrigin: [0, 0, 0] })
   for (const m of materials) {
     m.toneMapped = false
     m.uniforms.lightPosition.value.set(0, 0, 1000)
@@ -231,7 +231,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
       check(blob.type === mime, 'catalog image MIME ' + resourceId)
       const url = URL.createObjectURL(blob),
         originalUrl = Storage.url
-      let source: import('three').Texture | undefined
+      let source: import('three').Texture<ImageBitmap> | undefined
       const registry = new CloudRegistry()
       let backendCalls = 0,
         prepareCalls = 0

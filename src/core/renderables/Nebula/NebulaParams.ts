@@ -68,7 +68,14 @@ export interface NebulaParams {
   shapeRotation: Vector3
   axisRatios: Vector3 // anisotropy (x,y,z)
   edgeFalloff: number
-  density: number // optical thickness / absorption per step; lower = more transparent
+  density: number // gas amount per unit of local path length
+  gas: {
+    absorption: number // gas extinction multiplier, independent of emission
+  }
+  structure: {
+    direction: Vector3 // unoriented unit axis in object/proxy-local coordinates
+    stretch: number // 1 = isotropic, up to 16; affects internal gas/dust noise
+  }
 
   lobes: NebulaLobe[]
   cavities: NebulaCavity[]
@@ -80,8 +87,8 @@ export interface NebulaParams {
     warpStrength: number
     /**
      * Варп самого контура формы, 0..1: граница считается в точке p + boundaryWarp·w,
-     * где w — тот же двухоктавный вектор домен-варпа, что и у шума. 0 — контур
-     * аналитический (сфера/эллипсоид), как раньше.
+     * где w — двухоктавный вектор домен-варпа в исходных координатах. При
+     * structure.stretch=1 он переиспользуется шумом. 0 — аналитический контур.
      */
     boundaryWarp: number
     ridged: number // 0..1 billow<->ridged mix
@@ -115,6 +122,9 @@ export interface NebulaParams {
     strength: number
     threshold: number
     color: Color
+    seed: number | null // null inherits the nebula seed
+    frequency: number
+    contrast: number
   }
 
   lighting: {
@@ -125,11 +135,18 @@ export interface NebulaParams {
     color: Color | null
     /** Радиус спада scatter от звезды, локальные единицы [-1,1]; 0 — спада нет */
     falloffRadius: number
+    /** null keeps legacy hemispheric lighting; otherwise HG g in [-0.9,0.9]. */
+    anisotropy: number | null
+    /** Scale light-path optical depth, [0,1]; 0 skips self-shadowing. */
+    shadowStrength: number
   }
 
   quality: {
     maxSteps: number
+    lightSteps: number // midpoint samples toward the star, integer [1,16]
     resolutionScale: number
+    /** Previous-frame weight, [0,0.95]; 0 keeps static sampling without history. */
+    temporalBlend: number
     forceLOD: NebulaLOD
     bake3DTexture: boolean
     bakeResolution: number
@@ -150,6 +167,8 @@ function cloneNebulaParams(src: NebulaParams): NebulaParams {
     axisRatios: src.axisRatios.clone(),
     edgeFalloff: src.edgeFalloff,
     density: src.density,
+    gas: { ...src.gas },
+    structure: { direction: src.structure.direction.clone(), stretch: src.structure.stretch },
     lobes: src.lobes.map((l) => ({ center: l.center.clone(), radius: l.radius, weight: l.weight, seed: l.seed })),
     cavities: src.cavities.map((c) => ({ center: c.center.clone(), radius: c.radius, strength: c.strength })),
     noise: { ...src.noise },
@@ -162,13 +181,15 @@ function cloneNebulaParams(src: NebulaParams): NebulaParams {
       innerColor: src.palette.innerColor.clone(),
       outerColor: src.palette.outerColor.clone()
     },
-    dust: { strength: src.dust.strength, threshold: src.dust.threshold, color: src.dust.color.clone() },
+    dust: { ...src.dust, color: src.dust.color.clone() },
     lighting: {
       starPosition: src.lighting.starPosition ? src.lighting.starPosition.clone() : null,
       scatterStrength: src.lighting.scatterStrength,
       ambient: src.lighting.ambient,
       color: src.lighting.color ? src.lighting.color.clone() : null,
-      falloffRadius: src.lighting.falloffRadius
+      falloffRadius: src.lighting.falloffRadius,
+      anisotropy: src.lighting.anisotropy,
+      shadowStrength: src.lighting.shadowStrength
     },
     quality: { ...src.quality }
   }
@@ -184,6 +205,8 @@ export function makeDefaultNebulaParams(): NebulaParams {
     axisRatios: new Vector3(1, 0.8, 1),
     edgeFalloff: 0.35,
     density: 4.0,
+    gas: { absorption: 1 },
+    structure: { direction: new Vector3(0, 1, 0), stretch: 1 },
     lobes: [],
     cavities: [],
     noise: {
@@ -219,7 +242,10 @@ export function makeDefaultNebulaParams(): NebulaParams {
     dust: {
       strength: 0.6,
       threshold: 0.55,
-      color: new Color(0x05090c)
+      color: new Color(0x05090c),
+      seed: null,
+      frequency: 0.9,
+      contrast: 1
     },
     lighting: {
       starPosition: null,
@@ -230,13 +256,17 @@ export function makeDefaultNebulaParams(): NebulaParams {
       ambient: 1.0,
       // null и 0 — несущие дефолты: чанк цвета общий на все туманности
       color: null,
-      falloffRadius: 0
+      falloffRadius: 0,
+      anisotropy: null,
+      shadowStrength: 0
     },
     quality: {
       // 64 keeps full-screen interior cost ~33% below 96; dithering hides the
       // extra banding. Raise again once per-step cost drops (3D-texture bake).
       maxSteps: 64,
+      lightSteps: 6,
       resolutionScale: 1,
+      temporalBlend: 0,
       forceLOD: 'auto',
       // ON by default: the static form bakes to a 3D texture once -> ~12 snoise +
       // Worley per step collapse to 1 trilinear fetch (stable 144 FPS interior).
@@ -265,6 +295,23 @@ export function mergeNebulaParams(
   if (o.axisRatios) result.axisRatios.copy(o.axisRatios as Vector3)
   if (o.edgeFalloff !== undefined) result.edgeFalloff = o.edgeFalloff
   if (o.density !== undefined) result.density = Math.max(0, o.density)
+  const structure = result.structure
+  const direction = overrides.structure?.direction
+  if (direction) {
+    structure.direction.set(
+      direction.x ?? structure.direction.x,
+      direction.y ?? structure.direction.y,
+      direction.z ?? structure.direction.z
+    )
+  }
+  // Scale before normalizing: Vector3.length() squares components and can
+  // overflow/underflow even when every supplied component is finite/nonzero.
+  const axis = structure.direction
+  const largest = Math.max(Math.abs(axis.x), Math.abs(axis.y), Math.abs(axis.z))
+  if (axis.toArray().every(Number.isFinite) && largest > 0) axis.set(axis.x / largest, axis.y / largest, axis.z / largest).normalize()
+  else axis.set(0, 1, 0)
+  if (overrides.structure?.stretch !== undefined) structure.stretch = overrides.structure.stretch
+  structure.stretch = Number.isFinite(structure.stretch) ? clamp(structure.stretch, 1, 16) : 1
   // Clone + default-fill so callers can't (a) leave the override array aliased to
   // params (mutation hazard) or (b) pass a partial lobe/cavity that writes NaN into
   // a uniform (missing weight/seed/strength).
@@ -304,11 +351,22 @@ export function mergeNebulaParams(
     if (overrides.palette.innerColor) result.palette.innerColor.copy(overrides.palette.innerColor as Color)
     if (overrides.palette.outerColor) result.palette.outerColor.copy(overrides.palette.outerColor as Color)
   }
+  if (overrides.gas?.absorption !== undefined) result.gas.absorption = overrides.gas.absorption
   if (overrides.dust) {
     if (overrides.dust.strength !== undefined) result.dust.strength = overrides.dust.strength
     if (overrides.dust.threshold !== undefined) result.dust.threshold = overrides.dust.threshold
     if (overrides.dust.color) result.dust.color.copy(overrides.dust.color as Color)
+    if (overrides.dust.seed !== undefined) result.dust.seed = overrides.dust.seed
+    if (overrides.dust.frequency !== undefined) result.dust.frequency = overrides.dust.frequency
+    if (overrides.dust.contrast !== undefined) result.dust.contrast = overrides.dust.contrast
   }
+  // Non-finite controls must never reach noise coordinates or optical integration.
+  result.gas.absorption = Number.isFinite(result.gas.absorption) ? Math.max(0, result.gas.absorption) : 1
+  result.dust.strength = Number.isFinite(result.dust.strength) ? Math.max(0, result.dust.strength) : 0.6
+  result.dust.threshold = Number.isFinite(result.dust.threshold) ? clamp(result.dust.threshold, 0, 1) : 0.55
+  result.dust.frequency = Number.isFinite(result.dust.frequency) ? clamp(result.dust.frequency, 0.01, 32) : 0.9
+  result.dust.contrast = Number.isFinite(result.dust.contrast) ? clamp(result.dust.contrast, 0.1, 8) : 1
+  result.dust.seed = result.dust.seed !== null && Number.isFinite(result.dust.seed) ? Math.round(result.dust.seed) : null
   if (overrides.lighting) {
     if (overrides.lighting.starPosition !== undefined)
       result.lighting.starPosition = overrides.lighting.starPosition
@@ -321,11 +379,18 @@ export function mergeNebulaParams(
       result.lighting.color = overrides.lighting.color ? (overrides.lighting.color as Color).clone() : null
     if (overrides.lighting.falloffRadius !== undefined)
       result.lighting.falloffRadius = Math.max(overrides.lighting.falloffRadius, 0)
+    if (overrides.lighting.anisotropy !== undefined) result.lighting.anisotropy = overrides.lighting.anisotropy
+    if (overrides.lighting.shadowStrength !== undefined) result.lighting.shadowStrength = overrides.lighting.shadowStrength
   }
+  const g = result.lighting.anisotropy
+  result.lighting.anisotropy = g !== null && Number.isFinite(g) ? clamp(g, -0.9, 0.9) : null
+  result.lighting.shadowStrength = Number.isFinite(result.lighting.shadowStrength) ? clamp(result.lighting.shadowStrength, 0, 1) : 0
   Object.assign(result.quality, overrides.quality)
 
-  result.quality.resolutionScale = clamp(result.quality.resolutionScale, 0.25, 1)
-  result.quality.bakeResolution = clamp(result.quality.bakeResolution, 64, 256)
+  result.quality.lightSteps = Number.isFinite(result.quality.lightSteps) ? clamp(Math.round(result.quality.lightSteps), 1, 16) : 6
+  result.quality.resolutionScale = Number.isFinite(result.quality.resolutionScale) ? clamp(result.quality.resolutionScale, 0.25, 1) : 1
+  result.quality.temporalBlend = Number.isFinite(result.quality.temporalBlend) ? clamp(result.quality.temporalBlend, 0, 0.95) : 0
+  result.quality.bakeResolution = clamp(Math.round(result.quality.bakeResolution), 64, 256)
   result.quality.maxSteps = clamp(Math.round(result.quality.maxSteps), 8, 256)
 
   return result

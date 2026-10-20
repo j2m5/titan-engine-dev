@@ -1,0 +1,1260 @@
+{
+  "startedAt": "2026-10-18T08:40:44.184Z",
+  "finishedAt": "2026-10-18T08:45:28.704Z",
+  "outcome": "completed",
+  "failure": null,
+  "options": {
+    "rounds": 6,
+    "dwellMs": 10000,
+    "scenarioIds": [
+      1,
+      2,
+      13
+    ],
+    "mode": "Vite development, real local assets, 1280x720 DPR1; actual GPU recorded in each row"
+  },
+  "totalRequests": 1470,
+  "notes": [
+    "Warmup rows are excluded from summary.",
+    "Frame intervals include GPU and main-thread work; no hardware-independent FPS threshold.",
+    "Renderer counts are live objects, not VRAM bytes. JS heap is sampled after explicit GC.",
+    "Gaia and renderer session caches may remain between scenarios. Inspect per-scenario rows before inferring a leak."
+  ],
+  "summary": {
+    "menuCanvases": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "createdWebGLContexts": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuGeometries": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuTextures": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuPrograms": {
+      "first": 0,
+      "last": 0,
+      "min": 0,
+      "max": 0
+    },
+    "heapBytesAfterGC": {
+      "first": 58366472,
+      "last": 55473024,
+      "min": 53869904,
+      "max": 59687816
+    }
+  },
+  "byScenario": [
+    {
+      "id": 1,
+      "name": "Solar system",
+      "samples": 6,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 58366472,
+        "last": 59687816,
+        "min": 58366472,
+        "max": 59687816
+      },
+      "requests": {
+        "first": 20,
+        "last": 20,
+        "min": 20,
+        "max": 20
+      }
+    },
+    {
+      "id": 2,
+      "name": "Sagittarius A* system",
+      "samples": 6,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 53869904,
+        "last": 54944532,
+        "min": 53869904,
+        "max": 54944532
+      },
+      "requests": {
+        "first": 20,
+        "last": 20,
+        "min": 20,
+        "max": 20
+      }
+    },
+    {
+      "id": 13,
+      "name": "Alkaid system",
+      "samples": 6,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 54506616,
+        "last": 55473024,
+        "min": 54506616,
+        "max": 55473024
+      },
+      "requests": {
+        "first": 20,
+        "last": 20,
+        "min": 20,
+        "max": 20
+      }
+    }
+  ],
+  "rows": [
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 11635.5
+      },
+      "frames": {
+        "count": 1364,
+        "p50": 6.900000000001455,
+        "p95": 13.700000000000728,
+        "p99": 14,
+        "max": 28,
+        "elapsedMs": 10006.5
+      },
+      "active": {
+        "geometries": 34,
+        "textures": 79,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 55106,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 55286,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 56727912,
+      "requests": 1002
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 2444.5999999940395
+      },
+      "frames": {
+        "count": 1434,
+        "p50": 6.900000000001455,
+        "p95": 7.099999999998545,
+        "p99": 7.100000000005821,
+        "max": 10.69999999999709,
+        "elapsedMs": 10006.300000011921
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 114302,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 114422,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 52334580,
+      "requests": 32
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 11322.09999999404
+      },
+      "frames": {
+        "count": 1433,
+        "p50": 6.900000000001455,
+        "p95": 7.099999999998545,
+        "p99": 7.100000000005821,
+        "max": 34.700000000004366,
+        "elapsedMs": 10004.09999999404
+      },
+      "active": {
+        "geometries": 29,
+        "textures": 73,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 173848,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 173926,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 53690128,
+      "requests": 24
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 3487.5
+      },
+      "frames": {
+        "count": 1432,
+        "p50": 6.900000000008731,
+        "p95": 7.099999999991269,
+        "p99": 7.100000000005821,
+        "max": 20.80000000000291,
+        "elapsedMs": 10007.09999999404
+      },
+      "active": {
+        "geometries": 34,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 231156,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 231300,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 58366472,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 1159.3999999761581
+      },
+      "frames": {
+        "count": 1437,
+        "p50": 6.900000000008731,
+        "p95": 7.099999999991269,
+        "p99": 7.100000000005821,
+        "max": 10.700000000011642,
+        "elapsedMs": 10006.199999988079
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 290396,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 290476,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 53869904,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 2049
+      },
+      "frames": {
+        "count": 1440,
+        "p50": 6.900000000008731,
+        "p95": 7.099999999991269,
+        "p99": 7.100000000005821,
+        "max": 10.599999999991269,
+        "elapsedMs": 10008.300000011921
+      },
+      "active": {
+        "geometries": 29,
+        "textures": 73,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 350136,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 350214,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54506616,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 3489.4000000059605
+      },
+      "frames": {
+        "count": 1438,
+        "p50": 6.900000000008731,
+        "p95": 7.099999999991269,
+        "p99": 7.100000000005821,
+        "max": 13.900000000008731,
+        "elapsedMs": 10009.300000011921
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 407480,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 407732,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 58883008,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 1164.9000000059605
+      },
+      "frames": {
+        "count": 1437,
+        "p50": 6.900000000008731,
+        "p95": 7,
+        "p99": 7.100000000005821,
+        "max": 10.69999999999709,
+        "elapsedMs": 10005.40000000596
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 466828,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 466908,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54198680,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 2040.699999988079
+      },
+      "frames": {
+        "count": 1440,
+        "p50": 6.900000000008731,
+        "p95": 7.099999999991269,
+        "p99": 7.100000000005821,
+        "max": 10.5,
+        "elapsedMs": 10006.5
+      },
+      "active": {
+        "geometries": 29,
+        "textures": 73,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 526607,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 526685,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55018640,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 3543.0999999940395
+      },
+      "frames": {
+        "count": 1432,
+        "p50": 6.900000000023283,
+        "p95": 7.100000000005821,
+        "p99": 7.100000000005821,
+        "max": 15,
+        "elapsedMs": 10009.799999982119
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 584059,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 584203,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59356696,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 1166.199999988079
+      },
+      "frames": {
+        "count": 1434,
+        "p50": 6.900000000023283,
+        "p95": 7.100000000005821,
+        "p99": 7.199999999982538,
+        "max": 10.60000000000582,
+        "elapsedMs": 10004.59999999404
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 643179,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 643259,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54625180,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 2087.0999999940395
+      },
+      "frames": {
+        "count": 1439,
+        "p50": 6.900000000023283,
+        "p95": 7.100000000005821,
+        "p99": 7.100000000005821,
+        "max": 10.700000000011642,
+        "elapsedMs": 10005.800000011921
+      },
+      "active": {
+        "geometries": 29,
+        "textures": 73,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 702841,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 702958,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55172984,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 4,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 3557
+      },
+      "frames": {
+        "count": 1434,
+        "p50": 6.900000000023283,
+        "p95": 7,
+        "p99": 7.100000000005821,
+        "max": 20.89999999999418,
+        "elapsedMs": 10010.800000011921
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 760152,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 760368,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59488556,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 4,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 1215.4000000059605
+      },
+      "frames": {
+        "count": 1432,
+        "p50": 6.900000000023283,
+        "p95": 7.100000000005821,
+        "p99": 10.400000000023283,
+        "max": 10.700000000011642,
+        "elapsedMs": 10006.800000011921
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 819264,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 819344,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54727768,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 4,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 2210.5999999940395
+      },
+      "frames": {
+        "count": 1439,
+        "p50": 6.900000000023283,
+        "p95": 7.099999999976717,
+        "p99": 7.100000000005821,
+        "max": 10.5,
+        "elapsedMs": 10002.5
+      },
+      "active": {
+        "geometries": 29,
+        "textures": 73,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 879043,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 879121,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55271072,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 5,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 3558.300000011921
+      },
+      "frames": {
+        "count": 1437,
+        "p50": 6.900000000023283,
+        "p95": 7,
+        "p99": 7.100000000005821,
+        "max": 13.900000000023283,
+        "elapsedMs": 10010.59999999404
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 936387,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 936747,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59614552,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 5,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 1190
+      },
+      "frames": {
+        "count": 1432,
+        "p50": 6.900000000023283,
+        "p95": 7,
+        "p99": 10.5,
+        "max": 10.700000000011642,
+        "elapsedMs": 10002.40000000596
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 995643,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 995723,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54878956,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 5,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 2145.100000023842
+      },
+      "frames": {
+        "count": 1441,
+        "p50": 6.900000000023283,
+        "p95": 7.099999999976717,
+        "p99": 7.100000000005821,
+        "max": 11,
+        "elapsedMs": 10007.800000011921
+      },
+      "active": {
+        "geometries": 29,
+        "textures": 73,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1055539,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1055617,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55387856,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 6,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 3579.5999999940395
+      },
+      "frames": {
+        "count": 1434,
+        "p50": 6.900000000023283,
+        "p95": 7,
+        "p99": 7.100000000005821,
+        "max": 14,
+        "elapsedMs": 10010.59999999404
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1112883,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1113099,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59687816,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 6,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 1256.5
+      },
+      "frames": {
+        "count": 1431,
+        "p50": 6.900000000023283,
+        "p95": 7,
+        "p99": 10.5,
+        "max": 10.700000000011642,
+        "elapsedMs": 10001.299999982119
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1171955,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1172035,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54944532,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 6,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 2185
+      },
+      "frames": {
+        "count": 1440,
+        "p50": 6.900000000023283,
+        "p95": 7,
+        "p99": 7.100000000034925,
+        "max": 10.600000000034925,
+        "elapsedMs": 10006.399999976158
+      },
+      "active": {
+        "geometries": 29,
+        "textures": 73,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1231695,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 1231773,
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55473024,
+      "requests": 20
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "THREE.WebGLProgram: Program Info Log: (569,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "AtmosphereEffect: видимых атмосфер больше, чем слотов (3) — не рисуются: EarthAtmosphere",
+    "THREE.WebGLProgram: Program Info Log: (350,1): warning X4000: use of potentially uninitialized variable (f_sampleBackground)",
+    "[LeakDetector] прирост с прошлой разборки: геометрий +0, текстур +1",
+    "THREE.WebGLProgram: Program Info Log: (570,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (579,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (587,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "AtmosphereEffect: видимых атмосфер больше, чем слотов (3) — не рисуются: EarthAtmosphere",
+    "AtmosphereEffect: видимых атмосфер больше, чем слотов (3) — не рисуются: EarthAtmosphere",
+    "AtmosphereEffect: видимых атмосфер больше, чем слотов (3) — не рисуются: EarthAtmosphere",
+    "AtmosphereEffect: видимых атмосфер больше, чем слотов (3) — не рисуются: EarthAtmosphere",
+    "AtmosphereEffect: видимых атмосфер больше, чем слотов (3) — не рисуются: EarthAtmosphere",
+    "AtmosphereEffect: видимых атмосфер больше, чем слотов (3) — не рисуются: EarthAtmosphere"
+  ],
+  "assetFailures": []
+}

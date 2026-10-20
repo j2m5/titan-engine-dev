@@ -270,7 +270,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
   const sources = (body: CloudBodyEntry) =>
     [...body.resourcePaths].map(([id, path]) => {
       const snapshot = resourceStorage.getTextureSnapshot(path),
-        image = snapshot?.texture.image
+        image = snapshot?.texture.image as { width?: number; height?: number } | undefined
       return {
         id,
         path,
@@ -660,11 +660,13 @@ export async function run(): Promise<SceneCloudProbeReport> {
       'production far sphere swaps to visible loaded terrain and water'
     )
     const originalCloud = resourceStorage.getTexture(earth.resourcePaths.get(26)!)!
+    const originalImage = originalCloud.image
+    if (!(originalImage instanceof ImageBitmap)) throw new Error('Expected the streamed Earth cloud bitmap')
     const canvas = document.createElement('canvas')
     canvas.width = 512
     canvas.height = 256
     const context = canvas.getContext('2d', { willReadFrequently: true })!
-    context.drawImage(originalCloud.image, 0, 0, 512, 256)
+    context.drawImage(originalImage, 0, 0, 512, 256)
     const pixels = context.getImageData(0, 0, 512, 256).data
     const sun = earth.object.getWorldPosition(new Vector3()).negate().normalize()
     const rotation = earth.getSurface()!.getWorldQuaternion(new Quaternion())
@@ -693,8 +695,8 @@ export async function run(): Promise<SceneCloudProbeReport> {
     assert(cloudy && cloudy.mean > 150, 'original Earth map supplies a dense daylight white reference')
     const direction = cloudy!.normal
     await checkpoint('earth-authored-cloudy-region', earth, {
-      sourceWidth: originalCloud.image.width,
-      sourceHeight: originalCloud.image.height,
+      sourceWidth: originalImage.width,
+      sourceHeight: originalImage.height,
       meanEncodedRgb: cloudy!.mean,
       uv: cloudy!.uv,
       worldNormal: direction.toArray()

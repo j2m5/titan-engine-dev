@@ -24,6 +24,7 @@ export interface SceneEndpointContext {
 export function createSceneEndpointPasses(context: SceneEndpointContext): {
   passes: readonly Pass[]
   atmosphere: AtmosphereEffect
+  lensFront: LensFrontSorter
 } {
   const atmosphere = new AtmosphereEffect(context.camera, context.atmosphereRegistry, {
     debugView: context.atmosphereDebugView
@@ -47,5 +48,5 @@ export function createSceneEndpointPasses(context: SceneEndpointContext): {
     new OverlayPass(context.scene, context.camera),
     new EffectPass(context.camera, atmosphere)
   ]
-  return { passes, atmosphere }
+  return { passes, atmosphere, lensFront }
 }

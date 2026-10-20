@@ -2,6 +2,7 @@ import {
   BufferGeometry,
   Mesh,
   NormalBlending,
+  PerspectiveCamera,
   PlaneGeometry,
   ShaderMaterial,
   Uniform,
@@ -87,13 +88,15 @@ class FakeStar extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    const cameraPosition: Vector3 = ctx.camera.getWorldPosition(this.cameraPosition)
-
-    this.lookAt(cameraPosition)
-
     // Живая грануляция — общий множитель с диском (Star.updateObject):
     // скорость эволюции поверхности одна на оба LOD
     this.material.uniforms.uTime.value = ctx.elapsed * STAR_GRANULATION_TIME_SCALE
+  }
+
+  public updateView(camera: PerspectiveCamera): void {
+    const cameraPosition: Vector3 = camera.getWorldPosition(this.cameraPosition)
+
+    this.lookAt(cameraPosition)
 
     // Позиция мировая, а не локальная: билборд висит в нуле родительского узла,
     // и по локальной мерилось бы расстояние до начала сцены. Ту же величину
@@ -104,7 +107,7 @@ class FakeStar extends Mesh {
     const worldSize: number = worldSizeForPixels(
       STAR_IMPOSTOR_PIXELS,
       distance,
-      ctx.camera.fov,
+      camera.fov,
       this.renderer.domElement.height
     )
 

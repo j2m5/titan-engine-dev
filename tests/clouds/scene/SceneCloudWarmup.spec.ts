@@ -72,6 +72,7 @@ function fixture() {
   const composition = new SceneCloudComposition(renderer as never, scene, camera, runtime as never, () => ({
     composer: composer as never,
     atmosphere: atmosphere as never,
+    lensFront: { restore: () => {} },
     capture
   }))
   const prepare = (serial: number) =>

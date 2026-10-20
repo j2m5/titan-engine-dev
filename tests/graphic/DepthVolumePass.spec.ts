@@ -49,6 +49,46 @@ const makeRenderer = (camera: PerspectiveCamera) => {
 }
 
 describe('DepthVolumePass', () => {
+  it.each([true, false])('cleans the first failed volume and leaves later volumes untouched (shadows=%s)', (shadows) => {
+    const camera = new PerspectiveCamera()
+    camera.layers.mask = 0x25
+    const registry = new DepthVolumeRegistry()
+    const first = makeVolume(registry)
+    const later = makeVolume(registry)
+    const laterBind = vi.spyOn(later, 'bindSceneDepth')
+    const laterUnbind = vi.spyOn(later, 'unbindSceneDepth')
+    const pass = new DepthVolumePass(camera, registry)
+    const { renderer } = makeRenderer(camera)
+    renderer.shadowMap.autoUpdate = shadows
+    const error = new Error('volume draw')
+    renderer.render.mockImplementation((scene) => { if (scene === first) throw error })
+    expect(() => pass.render(renderer, null, null)).toThrow(error)
+    expect(first.dustMaterial.uniforms.uSceneDepthEnabled.value).toBe(0)
+    expect(laterBind).not.toHaveBeenCalled()
+    expect(laterUnbind).not.toHaveBeenCalled()
+    expect(camera.layers.mask).toBe(0x25)
+    expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+    renderer.render.mockImplementation(() => {})
+    pass.render(renderer, null, null)
+    expect(laterBind).toHaveBeenCalledOnce()
+    expect(later.dustMaterial.uniforms.uSceneDepthEnabled.value).toBe(0)
+    expect(camera.layers.mask).toBe(0x25)
+    expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+  })
+
+  it('unbinds a volume when binding partially succeeds then throws', () => {
+    const camera = new PerspectiveCamera()
+    const registry = new DepthVolumeRegistry()
+    const volume = makeVolume(registry)
+    const bind = volume.bindSceneDepth.bind(volume)
+    const error = new Error('partial bind')
+    vi.spyOn(volume, 'bindSceneDepth').mockImplementation((...args) => { bind(...args); throw error })
+    const { renderer } = makeRenderer(camera)
+    expect(() => new DepthVolumePass(camera, registry).render(renderer, null, null)).toThrow(error)
+    expect(volume.dustMaterial.uniforms.uSceneDepthEnabled.value).toBe(0)
+    expect(camera.layers.mask).toBe(1)
+    expect(renderer.shadowMap.autoUpdate).toBe(true)
+  })
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1000)
   const inputBuffer = new WebGLRenderTarget(4, 4)
   const outputBuffer = new WebGLRenderTarget(4, 4)

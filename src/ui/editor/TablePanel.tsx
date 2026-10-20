@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import TitanSimpleList from '@titanui/components/TitanSimpleList'
-import TitanListItem from '@titanui/components/TitanListItem'
 import TitanButton from '@titanui/components/TitanButton'
 import TitanFlex from '@titanui/components/TitanFlex'
 import GenericForm from '@/ui/editor/forms/GenericForm'
@@ -52,13 +51,16 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
         </TitanFlex>
         <TitanSimpleList style={{ maxHeight: '420px' }}>
           {rows.map((r) => (
-            <TitanListItem
+            <button
               key={r.id as number}
+              type="button"
+              className="titan-list-item titan-editor-row"
+              aria-pressed={r.id === selectedId}
               style={r.id === selectedId ? { background: 'rgba(255,255,255,0.12)' } : {}}
               onClick={() => setSelectedId(r.id as number)}
             >
               {spec.listLabel(r, ctx)}
-            </TitanListItem>
+            </button>
           ))}
         </TitanSimpleList>
       </div>
@@ -68,6 +70,10 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
           spec={spec}
           row={selected}
           draft={draft}
+          getJsonInput={(field) => selectedId === null ? undefined : editor.getJsonInput(spec.table, selectedId, field)}
+          onJsonInputChange={(field, state) => {
+            if (selectedId !== null) editor.setJsonInput(spec.table, selectedId, field, state)
+          }}
           onChange={(updated) => upsert(spec.table, updated as never)}
           onDelete={handleDelete}
         />

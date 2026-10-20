@@ -1,18 +1,22 @@
-import { makeAutoObservable, runInAction } from 'mobx'
-import { Application } from '@/Application'
-import { ScenarioConfig } from '@/config/scenarios'
+import { makeAutoObservable, observable, runInAction } from 'mobx'
+import type { Application } from '@/Application'
+import type { ScenarioConfig } from '@/config/scenarios'
 import { timeStore } from '@/ui/mobx/TimeStore'
-import { bodyInfoStore } from '@/ui/mobx/BodyInfoStore'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
-import { PerspectiveCamera, Vector3 } from 'three'
+import type { PerspectiveCamera } from 'three'
+import { loadSimulationRuntimeModule } from '@/ui/runtime/runtimeLoader'
+import type { SimulationRuntime } from '@/ui/runtime/simulationRuntime'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
-import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
+import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import type { CameraCollision } from '@/core/services/CameraCollision'
 
 class EngineStore implements LoadingProgressReporter {
   private app: Application | null = null
   private renderCamera: PerspectiveCamera | null = null
   private cameraCollision: CameraCollision | null = null
+  private selectionGeneration: number = 0
+  private scenarioCleanup: (() => void) | null = null
+  public runtime: SimulationRuntime | null = null
   public scenario: ScenarioConfig | null = null
   public appLoadingStatus: boolean = true
   public appLoadingProgress: number = 0
@@ -20,7 +24,15 @@ class EngineStore implements LoadingProgressReporter {
   public appLoadingAsset: string = ''
 
   public constructor() {
-    makeAutoObservable(this)
+    makeAutoObservable<EngineStore, 'app' | 'renderCamera' | 'cameraCollision' | 'scenarioCleanup' | 'selectionGeneration'>(this, {
+      app: false,
+      renderCamera: false,
+      cameraCollision: false,
+      scenarioCleanup: false,
+      selectionGeneration: false,
+      runtime: observable.ref,
+      scenario: observable.ref
+    })
 
     scenarioContext.subscribe('change', (scenario: ScenarioConfig | null): void => {
       runInAction((): void => {
@@ -38,45 +50,53 @@ class EngineStore implements LoadingProgressReporter {
     this.cameraCollision = cameraCollision
   }
 
+  /** Registered only once the body-info module has been requested. */
+  public registerScenarioCleanup(cleanup: () => void): void {
+    this.scenarioCleanup = cleanup
+  }
+
   public async setScenario(payload: ScenarioConfig | null): Promise<void> {
-    // Карточка принадлежит сценарию: выход в меню и смена сценария её закрывают
-    bodyInfoStore.close()
+    const generation = ++this.selectionGeneration
+    this.scenarioCleanup?.()
     scenarioContext.set(payload)
 
     if (!payload) {
-      // Выход в меню — та же разборка, что и перед сменой сценария: иначе
-      // предыдущая сцена продолжает жить и рендериться за главным экраном.
       this.app?.dispose()
-
+      this.setAppLoadingStatus(false)
       return
     }
 
-    if (this.app) {
-      this.setAppLoadingStatus(true)
+    this.setAppLoadingStatus(true)
+    this.setAsset('')
+    this.setProgress(0)
+    this.setTotal(0)
+
+    try {
+      if (!this.app) {
+        const module = await loadSimulationRuntimeModule()
+        if (generation !== this.selectionGeneration) return
+        const runtime = await module.initializeSimulationRuntime()
+        if (generation !== this.selectionGeneration) return
+        runInAction(() => {
+          this.runtime = runtime
+          this.app = runtime.app
+        })
+      }
 
       timeStore.setSpeedOfTime(1)
-
-      // Телепорт ДО run(): первый кадр бежит синхронно внутри engine.start()
-      // (Engine.start → update → тик стримера/коллизий), и телепорт после
-      // await опаздывал бы на кадр — SceneObserver успевал пересчитать состав
-      // видеопамяти по устаревшей позиции и через предоплату закрепить
-      // неверный набор на минимальную резидентность. Камера — синглтон
-      // контейнера, run() её не трогает; старая сцена скрыта экраном загрузки.
+      // Teleport before run(): engine.start() renders its first frame synchronously.
       this.renderCamera?.position.set(...payload.defaultCameraPosition)
-      this.renderCamera?.lookAt(new Vector3())
-      // Телепорт: без сброса свип коллизий протянет отрезок от старой позиции
+      this.renderCamera?.lookAt(0, 0, 0)
       this.cameraCollision?.reset()
-
-      try {
-        await this.app.run(payload)
-      } catch (error) {
-        // Без этого экран загрузки висел бы навсегда: назад в меню с сообщением
-        console.error('[EngineStore] Сценарий не загрузился', error)
-        notificationStore.dispatch({ type: 'error', message: `Scenario failed to load: ${payload.name}` })
-        await this.setScenario(null)
-      } finally {
-        this.setAppLoadingStatus(false)
-      }
+      await this.app!.run(payload)
+      if (generation !== this.selectionGeneration) return
+    } catch (error) {
+      if (generation !== this.selectionGeneration) return
+      console.error('[EngineStore] Scenario failed to load', error)
+      notificationStore.dispatch({ type: 'error', message: `Scenario failed to load: ${payload.name}` })
+      await this.setScenario(null)
+    } finally {
+      if (generation === this.selectionGeneration) this.setAppLoadingStatus(false)
     }
   }
 

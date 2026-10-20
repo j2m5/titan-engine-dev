@@ -85,6 +85,8 @@ export const renderingDataTemplates: DataTemplate[] = [
       axisRatios: [1, 0.8, 1],
       edgeFalloff: 0.35,
       density: 0.5,
+      gas: { absorption: 1 },
+      structure: { direction: [0, 1, 0], stretch: 1 },
       noise: { contrast: 1.6, worleyStrength: 0.4, ridged: 0.4 },
       palette: {
         stops: [
@@ -100,7 +102,9 @@ export const renderingDataTemplates: DataTemplate[] = [
         innerColor: '#8fd8ff',
         outerColor: '#b85a3a'
       },
-      dust: { strength: 0.6, threshold: 0.55, color: '#05090c' }
+      dust: { strength: 0.6, threshold: 0.55, color: '#05090c', seed: null, frequency: 0.9, contrast: 1 },
+      lighting: { starPosition: null, anisotropy: null, shadowStrength: 0 },
+      quality: { maxSteps: 64, lightSteps: 6, resolutionScale: 1, temporalBlend: 0, forceLOD: 'auto', bake3DTexture: true, bakeResolution: 128 }
     }
   },
   {

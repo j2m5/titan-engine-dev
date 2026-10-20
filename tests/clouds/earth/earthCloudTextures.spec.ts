@@ -54,7 +54,7 @@ describe('Earth RGB cloud preparation', () => {
       colorStrength: 0.1
     })
     const legacy = prepareRgbCloudTextures(source, { colorStrength: 0.2 })
-    expect(mapped.color!.image.data).toEqual(legacy.color!.image.data)
+    expect((mapped.color as DataTexture).image.data).toEqual((legacy.color as DataTexture).image.data)
     expect(mapped.colorStrength).toBe(0.6)
     expect(legacy.colorStrength).toBe(0.2)
     constant.dispose()

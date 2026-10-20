@@ -3,6 +3,7 @@ import { Tokens } from '@/core/providers/tokens'
 import { SyncTerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { WorkerTerrainPatchBuilder } from '@/core/terrain/worker/WorkerTerrainPatchBuilder'
 import { createTestContainer } from '../helpers/createTestContainer'
+import { makeField } from '../terrain/workerBuildHelpers'
 
 /** Приватные поля потребителей: проводка проверяется идентичностью с синглтоном контейнера. */
 type Wired = { terrainPatchBuilder: unknown; renderableFactory?: unknown }
@@ -45,8 +46,9 @@ describe('AppServiceProvider: строитель патчей рельефа', (
     expect(app.renderableFactory).toBe(factory)
   })
 
-  it('при наличии Worker — воркерный строитель, один воркер на контейнер', () => {
+  it('при наличии Worker — один строитель на контейнер, ленивое пересоздание воркера после releaseAll', () => {
     const constructed: unknown[] = []
+    let terminations = 0
 
     vi.stubGlobal(
       'Worker',
@@ -57,7 +59,7 @@ describe('AppServiceProvider: строитель патчей рельефа', (
 
         public postMessage(): void {}
 
-        public terminate(): void {}
+        public terminate(): void { terminations++ }
       }
     )
 
@@ -67,5 +69,13 @@ describe('AppServiceProvider: строитель патчей рельефа', (
     expect(builder).toBeInstanceOf(WorkerTerrainPatchBuilder)
     expect(container.get(Tokens.TerrainPatchBuilder)).toBe(builder)
     expect(constructed).toHaveLength(1)
+    builder.releaseAll()
+    builder.releaseAll()
+    expect(terminations).toBe(1)
+    expect(constructed).toHaveLength(1)
+    builder.acquire(makeField())
+    expect(constructed).toHaveLength(2)
+    expect(container.get(Tokens.TerrainPatchBuilder)).toBe(builder)
+    builder.dispose()
   })
 })

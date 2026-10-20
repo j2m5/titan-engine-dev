@@ -7,6 +7,8 @@ import { STAR_LIMB_COEFF } from '@/core/materials/shaders/lib/helpers'
 import { Actor } from '@/core/models/Actor'
 import type { Vector3, WebGLRenderer } from 'three'
 
+const renderer = { domElement: { height: 1080 } } as unknown as WebGLRenderer
+
 /** Стаб актора звезды: физика с температурой и радиусом, rendering-строка по желанию */
 const starActor = (temperature: number, data: Record<string, unknown> | null = null): Actor =>
   ({
@@ -78,16 +80,37 @@ describe('FakeStar (импостор): та же активность, что у
 
 describe('StarOuterLayer: протуберанцы только у активных звёзд', () => {
   it('Солнце — слой виден и с геометрией', () => {
-    const layer = new StarOuterLayer(starActor(5778))
+    const layer = new StarOuterLayer(starActor(5778), renderer)
 
     expect(layer.visible).toBe(true)
     expect(layer.geometry.getAttribute('position') ?? layer.geometry.index).toBeTruthy()
   })
 
   it('Алькаид — слой невидим и без лент, покадровое обновление не падает', () => {
-    const layer = new StarOuterLayer(starActor(15540))
+    const layer = new StarOuterLayer(starActor(15540), renderer)
 
     expect(layer.visible).toBe(false)
     expect(() => layer.updateObject({ elapsed: 1, delta: 0.016 } as never)).not.toThrow()
+  })
+
+  it('температурная середина перехода ослабляет протуберанцы вдвое', () => {
+    const full = new StarOuterLayer(starActor(7000), renderer)
+    const half = new StarOuterLayer(starActor(8000), renderer)
+    try {
+      expect(half.material.uniforms.uOpacity.value / full.material.uniforms.uOpacity.value).toBeCloseTo(0.5, 8)
+    } finally {
+      for (const layer of [full, half]) { layer.geometry.dispose(); layer.material.dispose() }
+    }
+  })
+
+  it.each([0.001, 0.1, 0.5, 1])('ручная activity=%s плавно меняет яркость, включая горячую звезду', activity => {
+    const full = new StarOuterLayer(starActor(5778), renderer)
+    const layer = new StarOuterLayer(starActor(15540, { activity }), renderer)
+    try {
+      expect(layer.visible).toBe(true)
+      expect(layer.material.uniforms.uOpacity.value / full.material.uniforms.uOpacity.value).toBeCloseTo(activity, 8)
+    } finally {
+      for (const item of [full, layer]) { item.geometry.dispose(); item.material.dispose() }
+    }
   })
 })

@@ -128,11 +128,11 @@ describe('ResourceObserver: steep-набор зон материала в кан
 
     // Родной набор Луны: диффуз+slope+4 detail (уже rocky_trail-семейство) — 6 путей.
     expect(load).toHaveBeenCalledTimes(6)
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/moon/moon.jpg' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/moon/moon_slope.webp' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/moon/moon.jpg' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/moon/moon_slope.webp' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }), expect.any(AbortSignal))
 
     // Каждый путь запрошен ровно один раз — гейт не задвоил родной steep-набор.
     expect(resourceStorage.textures.where('name', STEEP_DETAIL_PATHS.diffuse).count()).toBe(1)
@@ -156,9 +156,9 @@ describe('ResourceObserver: steep-набор зон материала в кан
 
     // Только диффуз планеты — легаси-тело, ни height, ни steep-набора.
     expect(load).toHaveBeenCalledTimes(1)
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }), expect.any(AbortSignal))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }), expect.any(AbortSignal))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }), expect.any(AbortSignal))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }), expect.any(AbortSignal))
   })
 })

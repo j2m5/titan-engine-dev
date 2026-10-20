@@ -7,8 +7,9 @@ import TitanFlex from '@titanui/components/TitanFlex'
 import { TitanSelectOption } from '@titanui/types'
 import { DatabaseSnapshot } from '@/core/framework/validation/validateDatabase'
 import { FieldSpec, TableSpec } from '@/ui/editor/forms/fieldSpec'
-import JsonField from '@/ui/editor/forms/JsonField'
+import JsonField, { JsonInputState } from '@/ui/editor/forms/JsonField'
 import { shortenResourcePath } from '@/ui/editor/forms/shortenResourcePath'
+import NebulaDataField from '@/ui/editor/forms/nebula/NebulaDataField'
 
 export interface GenericFormProps {
   spec: TableSpec
@@ -18,9 +19,11 @@ export interface GenericFormProps {
   draft: DatabaseSnapshot
   onChange(row: Record<string, unknown>): void
   onDelete(): void
+  getJsonInput?(field: string): JsonInputState | undefined
+  onJsonInputChange?(field: string, state: JsonInputState): void
 }
 
-const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelete }) => {
+const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelete, getJsonInput, onJsonInputChange }) => {
   if (!row) {
     return <div style={{ color: '#888', padding: '20px' }}>Select a record or create a new one.</div>
   }
@@ -124,7 +127,7 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             key={field.key}
             label={field.label}
             value={value === null || value === undefined ? '' : String(value)}
-            placeholder={field.nullable ? '— none —' : undefined}
+            placeholder={field.nullable ? '— none —' : '— select —'}
             options={fkOptions(field.references, field.optionLabel, excludeId)}
             invalid={!field.nullable && (value === null || value === undefined)}
             onChange={(v) => update(field.key, v === '' ? null : Number(v))}
@@ -163,15 +166,30 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             return { value: String(r.id), label: `#${r.id}${suffix}`, data: r[field.key] }
           })
 
+        const actor = draft.actors.find((entry) => entry.id === row.actorId)
+        const isNebula = spec.table === 'renderingObjects' && field.key === 'data' &&
+          draft.categories.find((entry) => entry.id === actor?.categoryId)?.alias === 'nebula'
+        const DataField = isNebula ? NebulaDataField : JsonField
         return (
-          <JsonField
-            key={field.key}
+          <DataField
+            key={`${row.id}:${field.key}`}
             label={field.label}
             value={value}
             rows={field.rows}
+            inputState={getJsonInput?.(field.key)}
+            onInputChange={onJsonInputChange ? (state) => onJsonInputChange(field.key, state) : undefined}
             cloneOptions={field.cloneFrom ? cloneOptions : undefined}
             templates={field.templates}
-            onChange={(v) => update(field.key, v)}
+            onChange={(v) => {
+              if (!isNebula && spec.table === 'renderingObjects' && field.key === 'data') {
+                onJsonInputChange?.(`${field.key}:nebula`, { text: '{}', error: null, category: 'nebula' })
+              }
+              update(field.key, v)
+            }}
+            {...(isNebula ? {
+              controlsInputState: getJsonInput?.(`${field.key}:nebula`),
+              onControlsInputChange: onJsonInputChange ? (state: JsonInputState) => onJsonInputChange(`${field.key}:nebula`, { ...state, category: 'nebula' }) : undefined
+            } : {})}
           />
         )
       }

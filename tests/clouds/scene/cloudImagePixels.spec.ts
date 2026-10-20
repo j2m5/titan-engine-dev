@@ -19,7 +19,7 @@ describe('canonical cloud image pixels', () => {
       resourceId === 26 ? density : resourceId === 37 ? color : undefined
     )
     expect((prepared.textures.weather.image.data as Uint8Array)[0]).toBe(128)
-    expect(prepared.textures.color!.image.data).toBe(selected.image.data)
+    expect((prepared.textures.color as DataTexture).image.data).toBe(selected.image.data)
     expect(prepared.textures.color!.source).not.toBe(selected.source)
     expect(prepared.textures.colorStrength).toBe(0.7)
     expect([selected.version, selected.source.version]).toEqual(before)
@@ -127,7 +127,7 @@ describe('canonical cloud image pixels', () => {
     const layer = createJupiterCloudProfile().layers[0]
     const maps = prepareCloudAppearanceTextures(layer, () => source)
     expect(maps.color!.source).not.toBe(source.source)
-    expect(maps.color!.image.data).toBe(source.image.data)
+    expect((maps.color as DataTexture).image.data).toBe(source.image.data)
     expect([
       source.colorSpace,
       source.wrapS,

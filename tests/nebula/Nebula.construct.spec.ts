@@ -10,6 +10,8 @@ const fakeRenderer = {
     return v
   },
   getRenderTarget: () => null,
+  getActiveCubeFace: () => 0,
+  getActiveMipmapLevel: () => 0,
   setRenderTarget: () => {},
   render: () => {}
 } as unknown as WebGLRenderer
@@ -33,19 +35,18 @@ describe('Nebula construction', () => {
     expect(mesh.scale.y).toBe(mesh.scale.z)
   })
 
-  it('adds a hidden impostor billboard alongside the volume', () => {
+  it('uses one mesh for both LODs, with a separate bake frame transform', () => {
     const nebula = new Nebula(fakeRenderer)
     const meshes = nebula.children.filter((c) => c instanceof Mesh)
-    expect(meshes.length).toBe(2)
-    // impostor starts hidden; the LOD switch reveals it only when far/small
-    const hidden = meshes.filter((m) => m.visible === false)
-    expect(hidden.length).toBe(1)
+    expect(meshes.length).toBe(1)
+    expect(nebula.getObjectByName('NebulaImpostorFrame')).toBeDefined()
+    expect((meshes[0] as NebulaVolume).material.uniforms.uLodBlend.value).toBe(1)
   })
 
-  it('updateObject runs without throwing', () => {
+  it('updateView runs without throwing', () => {
     const nebula = new Nebula(fakeRenderer)
     expect(() =>
-      nebula.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera: new PerspectiveCamera() })
+      nebula.updateView(new PerspectiveCamera())
     ).not.toThrow()
   })
 
@@ -91,6 +92,8 @@ describe('Nebula construction', () => {
         return v
       },
       getRenderTarget: () => null,
+      getActiveCubeFace: () => 0,
+      getActiveMipmapLevel: () => 0,
       setRenderTarget: () => {},
       render
     } as unknown as WebGLRenderer
@@ -98,11 +101,14 @@ describe('Nebula construction', () => {
     const bakeResolution = 64
     const nebula = new Nebula(bakingRenderer, { quality: { bake3DTexture: true, bakeResolution } })
 
-    // Load-bearing: the params flag alone proves nothing (that assertion passed
-    // with the baker forced to null). One render per Z slice is the bake running,
-    expect(render).toHaveBeenCalledTimes(bakeResolution)
-    // and the marcher's uDensityTex stays null until the baked field reaches it.
+    expect(render).not.toHaveBeenCalled()
     const volume = nebula.children[0] as NebulaVolume
+    expect(volume.material.uniforms.uDensityTex.value).toBeNull()
+    for (let frame = 0; frame < bakeResolution && nebula.bakeQueue.pendingCount; frame++) {
+      nebula.bakeQueue.pumpFrame()
+    }
+    // One render per Z slice; the texture is published only after completion.
+    expect(render).toHaveBeenCalledTimes(bakeResolution)
     expect(volume.material.uniforms.uDensityTex.value).not.toBeNull()
 
     expect(() => nebula.dispose()).not.toThrow()

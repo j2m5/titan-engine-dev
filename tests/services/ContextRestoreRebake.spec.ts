@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Vector2, type WebGLRenderer } from 'three'
+import { Color, PerspectiveCamera, Vector2, type WebGLRenderer } from 'three'
 import type { Actor } from '@/core/models/Actor'
 import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { EARTH_SOLAR, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
@@ -40,8 +40,12 @@ function makeRenderer(): { renderer: WebGLRenderer; canvas: EventTarget; render:
     domElement: canvas,
     render,
     getRenderTarget: () => null,
+    getActiveCubeFace: () => 0,
+    getActiveMipmapLevel: () => 0,
     setRenderTarget: vi.fn(),
     getClearAlpha: () => 1,
+    getClearColor: (color: Color) => color.set(0),
+    setClearColor: vi.fn(),
     setClearAlpha: vi.fn(),
     clear: vi.fn(),
     getSize: (v: Vector2) => v.set(1920, 1080)
@@ -151,10 +155,10 @@ describe('Восстановление контекста: одноразовы�
     expect(render).not.toHaveBeenCalled()
   })
 
-  it('туманность перепекает поле плотности сразу, импостор — на ближайшем кадре; после dispose — нет', () => {
-    const { renderer, canvas } = makeRenderer()
-    const densityBake = vi.spyOn(NebulaDensityBaker.prototype, 'bake')
-    const impostorBake = vi.spyOn(ImpostorBaker.prototype, 'bake')
+  it('туманность ставит повторное запекание в очередь; после dispose — нет', () => {
+    const { renderer, canvas, render } = makeRenderer()
+    const densityBake = vi.spyOn(NebulaDensityBaker.prototype, 'start')
+    const impostorBake = vi.spyOn(ImpostorBaker.prototype, 'begin')
     const nebula = new Nebula(renderer, { size: 500, quality: { bake3DTexture: true, bakeResolution: 16 } })
     const camera = new PerspectiveCamera(50, 16 / 9, 1e-6, 1e12)
 
@@ -162,17 +166,18 @@ describe('Восстановление контекста: одноразовы�
     camera.lookAt(0, 0, 0)
     camera.updateMatrixWorld()
 
-    const frame = (): void => nebula.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+    const frame = (): void => { nebula.updateView(camera); nebula.bakeQueue.pumpFrame() }
 
-    frame()
-    frame()
+    for (let i = 0; i < 100; i++) frame()
 
     expect(densityBake).toHaveBeenCalledTimes(1)
     // ракурс не менялся — повторного бейка импостора нет
     expect(impostorBake).toHaveBeenCalledTimes(1)
 
+    render.mockClear()
     restore(canvas)
-    frame()
+    expect(render).not.toHaveBeenCalled()
+    for (let i = 0; i < 100; i++) frame()
 
     expect(densityBake).toHaveBeenCalledTimes(2)
     expect(impostorBake).toHaveBeenCalledTimes(2)
