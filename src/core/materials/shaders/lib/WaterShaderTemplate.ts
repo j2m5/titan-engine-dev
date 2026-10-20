@@ -4,6 +4,8 @@ import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/
 import { WATER_DEFAULT_PIXEL_ANGLE, WATER_FAR_ALPHA2 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { SpaceScale } from '@/core/constants'
 import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
+import { waterOceanFunctions, waterOceanShading } from './chunks/WaterOcean'
+import { createWaterSkyUniforms, waterSkyFunctions } from './chunks/WaterSky'
 
 // Юниты сцены → метры (арка water-shader, Task 2, находка ревью фикс-раунда
 // 1 №1): дисторсия Water.js писана для сцены В МЕТРАХ (0.001 + 1/distance,
@@ -15,6 +17,7 @@ const WATER_METERS_PER_UNIT = 1000 / SpaceScale
 
 const defaultUniforms = {
   ...createEclipseUniforms(),
+  ...createWaterSkyUniforms(),
   // «Звезда в нуле» — общедвижковая конвенция (см. AtmosphereEffect.fillSlot:
   // sunDir = normalize(−centerWorld)): движок не доставляет позицию светила в
   // материалы, ноль здесь корректен и согласован с терминатором планеты.
@@ -291,6 +294,8 @@ export const WaterShaderTemplate: ShaderProps = {
 
       // Мелкие октавы ряби (2560…10 м) и веса октав по футпринту пикселя
       #include <waterOctavesFunctions>
+      ${waterOceanFunctions}
+      ${waterSkyFunctions}
 
       // getNoiseWeighted — структура Water.js (three/examples/jsm/objects/
       // Water.js): 4 выборки по разным периодам/скоростям скролла, декод
@@ -392,8 +397,8 @@ export const WaterShaderTemplate: ShaderProps = {
       // ДО полюсного гарда: внутри экранные производные, им нужен
       // однородный поток; rippleVariance — Σ(1 − wᵢ)·(s·gain)²·V погасших мелких октав. waveWeights —
       // веса крупных октав (3, 9, 27, 90 км), fade — вес октавы 3 км.
-      vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance) {
-        vec3 ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);
+      vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance, out vec3 ripple) {
+        ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);
 
         vec3 eastRaw = cross(vec3(0.0, 1.0, 0.0), dirLocal);
         float eastLen = length(eastRaw);
@@ -558,7 +563,8 @@ export const WaterShaderTemplate: ShaderProps = {
         // Σ(1 − wᵢ)·(s·gain)²·V погасших мелких октав — вход шероховатости блика
         float rippleVariance = 0.0;
         vec3 waveDirLocal = normalize(vLocalDir);
-        vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance);
+        vec3 fineRipple;
+        vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance, fineRipple);
         // СВОЙ вектор waveNormal, не общий normal (приёмочный фикс —
         // владелец: молочный океан по всему диску + яркое пятно в центре +
         // голубое гало за лимбом на скрине из космоса, см. докблок ниже).
@@ -809,6 +815,10 @@ export const WaterShaderTemplate: ShaderProps = {
       glint *= cloudShadow * eclipse;
       // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
       color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
+
+      #ifdef USE_WATER_WAVES
+        ${waterOceanShading}
+      #endif
 
       #ifdef USE_WATER_CLOUD
         // Облака над морем — тот же чанк, что на суше: параллакс, утолщение, свет слоя. Альфа воды не

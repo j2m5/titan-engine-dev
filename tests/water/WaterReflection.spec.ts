@@ -304,12 +304,8 @@ describe('WaterShaderTemplate: гейт USE_WATER_REFLECTION — вложен в
 // приём, ниже приведено обоснование в исходном файле): non-greedy regex
 // останавливался бы на ПЕРВОМ #endif, а USE_WATER_REFLECTION вложен внутрь
 // USE_WATER_WAVES — нужен парсер, считающий глубину любого #ifdef/#endif.
-// Контракт ограничен (находка ревью фикс-раунда 1 №6, честно, не молчание):
-// считает только `#ifdef`/`#ifndef` как открывающие директивы, `#endif`
-// строгим построчным равенством после trim() — `#if`/`#elif`/`#endif` с
-// хвостовым комментарием на той же строке НЕ распознаются и сломают баланс.
-// В этом файле (и в WaterShaderTemplate.ts) такие формы не используются —
-// латентная мина для будущего guard'а, не текущий баг.
+// Считает вложенные #if/#ifdef/#ifndef, не вычисляя их условия.
+// #endif должен занимать отдельную строку; целевой guard задаётся через #ifdef.
 function stripGuardedBlock(source: string, guard: string): string {
   const lines = source.split('\n')
   const result: string[] = []
@@ -332,7 +328,7 @@ function stripGuardedBlock(source: string, guard: string): string {
       continue
     }
 
-    if (trimmed.startsWith('#ifdef ') || trimmed.startsWith('#ifndef ')) {
+    if (/^#if(?:def|ndef)?\b/.test(trimmed)) {
       depth++
     } else if (trimmed === '#endif') {
       depth--

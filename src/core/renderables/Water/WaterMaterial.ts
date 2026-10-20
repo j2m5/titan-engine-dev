@@ -9,6 +9,7 @@ import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveLightTint } from '@/core/helpers/lightSource'
+import { WaterSkyBinding } from './WaterSkyBinding'
 
 /**
  * Отражение фоновой кубмапы в воде — ОТКЛЮЧЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА
@@ -19,8 +20,8 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
  * `skyboxTexture` (см. конструктор) — механика (uniform `uSkyboxMap`,
  * `#ifdef USE_WATER_REFLECTION` в `WaterShaderTemplate.ts`, доставка
  * `skyboxTexture` из `RenderableFactory`) НЕ разобрана, вернуть можно одной
- * строкой здесь. Reflection воды теперь всегда градиентный `skyColor`
- * (приёмочная волна 2, зенит/горизонт), день и ночь, без сэмпла кубмапы.
+ * строкой здесь. Вблизи вода отражает LUT своей атмосферы; вдали и без
+ * атмосферы остаётся градиентный `skyColor`, без сэмпла звёздной кубмапы.
  */
 // Явная аннотация :boolean (не литерал false) — иначе TS сужает
 // useWaterReflection ниже до типа литерала false и spread
@@ -94,6 +95,7 @@ class WaterMaterial extends AbstractShaderMaterial {
    * данных, иначе на берегу у терминатора был бы тональный шов.
    */
   private readonly sunTint: SunTintBinding
+  private readonly waterSky: WaterSkyBinding
 
   /**
    * `skyboxTexture` — кубмапа фона сценария (арка water-shader, Task 2),
@@ -122,8 +124,8 @@ class WaterMaterial extends AbstractShaderMaterial {
    * механика (`uSkyboxMap`, `#ifdef USE_WATER_REFLECTION` в
    * `WaterShaderTemplate.ts`, доставка `skyboxTexture` из
    * `RenderableFactory`) НЕ разобрана, вернуть можно одной строкой здесь.
-   * Reflection воды теперь всегда градиентный `skyColor` (приёмочная волна
-   * 2), день и ночь, без сэмпла кубмапы — см. докблок в шейдере.
+   * Ближнее отражение атмосферы проводит WaterSkyBinding; дальний градиент
+   * и фолбэк без атмосферы не читают кубмапу.
    */
   public constructor(
     model: Actor,
@@ -142,12 +144,15 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(model)
     // Дочерняя атмосфера и радиус датума — разовый резолв ORM, тот же паттерн,
     // что у PlanetSurfaceMaterial (строки БД статичны, а sync зовётся каждый кадр).
+    const atmosphereActorId = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()?.getAttribute('id') as number | undefined
+    const datumRadiusKm = model.physicalObject?.getAttribute('radius') ?? 0
     this.sunTint = new SunTintBinding(
       this,
       atmosphereRegistry,
-      model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()?.getAttribute('id') as number | undefined,
-      model.physicalObject?.getAttribute('radius') ?? 0
+      atmosphereActorId,
+      datumRadiusKm
     )
+    this.waterSky = new WaterSkyBinding(this, atmosphereRegistry, atmosphereActorId, datumRadiusKm)
 
     const { uniforms, defines, vertexShader, fragmentShader } = new WaterShader(this.model)
 
@@ -294,7 +299,8 @@ class WaterMaterial extends AbstractShaderMaterial {
       // здесь же по текущей записи реестра.
       // Пара USE_SUN_TINT / USE_SKY_AMBIENT неразрывна (см. SunTintBinding):
       // обе таблицы приходят одной записью реестра.
-      ...(this.sunTint.active && { USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' })
+      ...(this.sunTint.active && { USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' }),
+      ...(this.waterSky.active && { USE_WATER_SKY: '1' })
     }
     this.needsUpdate = true
   }
@@ -312,6 +318,7 @@ class WaterMaterial extends AbstractShaderMaterial {
    */
   public syncSunTint(): void {
     this.sunTint.sync()
+    this.waterSky.sync()
   }
 
   /** Угол пикселя, рад: 2·tan(fov/2)/высота буфера — вход футпринта весов октав волн; буфер 0 px не даёт ∞. */
@@ -335,6 +342,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
     // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.
     this.sunTint.reset()
+    this.waterSky.reset()
     this.needsUpdate = true
   }
 }

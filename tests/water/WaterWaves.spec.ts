@@ -260,12 +260,12 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
 
   it('отклонение ряби считается до полюсного гарда — производные чанка в однородном потоке', () => {
     const fn = frag.indexOf('vec3 waterWaveNormal(')
-    const ripple = frag.indexOf('vec3 ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);', fn)
+    const ripple = frag.indexOf('ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);', fn)
     const guard = frag.indexOf('if (eastLen < 1e-4) return dirLocal;', fn)
     expect(ripple).toBeGreaterThan(fn)
     expect(ripple).toBeLessThan(guard)
     expect(frag).toContain(
-      'vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance) {'
+      'vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance, out vec3 ripple) {'
     )
   })
 
@@ -344,7 +344,7 @@ describe('WaterShaderTemplate: затухание по октавам — вес
   it('нормаль волн получает домен, футпринт и веса; дисперсия погасших мелких октав — в rippleVariance', () => {
     expect(frag).toContain('float rippleVariance = 0.0;')
     expect(frag).toContain(
-      'vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance);'
+      'vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance, fineRipple);'
     )
   })
 })
@@ -658,12 +658,8 @@ describe('Вершинник — БЕЗ волн вовсе (T/B/N считаю�
 // (не только совпадающего guard) — ровно семантика реального препроцессора:
 // когда внешний guard не определён, всё вложенное (включая другие guard'ы)
 // тоже недостижимо и обязано пропасть целиком.
-// Контракт ограничен (находка ревью Task 2 фикс-раунда 1 №6, честно, не
-// молчание): считает только `#ifdef`/`#ifndef` как открывающие директивы,
-// `#endif` строгим построчным равенством после trim() — `#if`/`#elif`/
-// `#endif` с хвостовым комментарием на той же строке НЕ распознаются и
-// сломают баланс. В этом файле такие формы не используются — латентная
-// мина для будущего guard'а, не текущий баг.
+// Считает вложенные #if/#ifdef/#ifndef, не вычисляя их условия.
+// #endif должен занимать отдельную строку; целевой guard задаётся через #ifdef.
 function stripGuardedBlock(source: string, guard: string): string {
   const lines = source.split('\n')
   const result: string[] = []
@@ -686,7 +682,7 @@ function stripGuardedBlock(source: string, guard: string): string {
       continue
     }
 
-    if (trimmed.startsWith('#ifdef ') || trimmed.startsWith('#ifndef ')) {
+    if (/^#if(?:def|ndef)?\b/.test(trimmed)) {
       depth++
     } else if (trimmed === '#endif') {
       depth--
