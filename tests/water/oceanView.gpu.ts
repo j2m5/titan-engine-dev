@@ -16,6 +16,7 @@ import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/Atmosphere
 import { type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { RenderingObjects } from '@storage/database'
 import { checkOceanRegressions } from './oceanRegressions.gpu'
+import waterNormalMapUrl from './fixtures/waternormals.jpg?url'
 
 const metersPerUnit = 1000 / SpaceScale
 const radius = 6360000
@@ -71,7 +72,8 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
     if (!condition) throw new Error(message)
   }
   const generator = new AtmosphereLUTGenerator(renderer)
-  const texture = await new TextureLoader().loadAsync('/storage/images/textures/water/waternormals.jpg')
+  // CI has no owner-provided storage archive; keep the real test texture in Git.
+  const texture = await new TextureLoader().loadAsync(waterNormalMapUrl)
   texture.wrapS = texture.wrapT = RepeatWrapping
   const depthTexel = new Uint8Array([0, 0, 0, 80])
   const depth = new DataTexture(depthTexel, 1, 1, RGBAFormat)
