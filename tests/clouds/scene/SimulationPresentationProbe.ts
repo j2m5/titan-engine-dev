@@ -110,6 +110,14 @@ export async function verifySimulationPresentations(
     camera,
     { update: () => {}, setSurface: () => {} } as never,
     {
+      start: () => {},
+      stop: () => {},
+      get elapsedTime() {
+        return elapsed
+      },
+      set elapsedTime(value: number) {
+        elapsed = value
+      },
       getDelta: () => {
         elapsed += 0.25
         return 0.25
