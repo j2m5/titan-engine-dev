@@ -29,8 +29,8 @@ export type FlightDecision = 'start' | 'ignore' | 'redirect' | 'arrived'
  * камеры и направлением на объект.
  */
 export function decideFlight(
-  activeTarget: string | null,
-  target: string,
+  activeTarget: number | null,
+  target: number,
   distance: number,
   arrivalDistance: number,
   aimCos: number
@@ -44,7 +44,7 @@ export function decideFlight(
 
 /** Идущий полёт: команды transient, поэтому он живёт в статике класса */
 interface ActiveFlight {
-  target: string
+  target: number
   timeline: anime.AnimeTimelineInstance
   /** Скорость камеры до ПЕРВОГО клика цепочки: анимация её разгоняет */
   speedBefore: number
@@ -86,13 +86,14 @@ class CameraToObjectTransition extends Command {
   }
 
   public handle(): Promise<void> | void {
+    const actorId: number = this.model.getAttribute('id')!
     const name: string = this.model.attributes.name!
     // Re-resolve against the current scene: observers can retain detached objects.
     const targetPosition: Vector3 = new Vector3()
     const resolveTarget = (): boolean => {
       const scene = this.sceneObserver.scene
       const target: Object3D | undefined = this.sceneObserver.objects.find(object => {
-        if (object.model?.getAttribute('name', 'unknown') !== name) return false
+        if (object.model?.getAttribute('id') !== actorId) return false
         let root: Object3D = object
         while (root.parent) root = root.parent
         return root === scene
@@ -112,7 +113,7 @@ class CameraToObjectTransition extends Command {
     const toTarget: Vector3 = targetPosition.clone().sub(cameraPosition)
     const active: ActiveFlight | null = CameraToObjectTransition.active
     const decision: FlightDecision = decideFlight(
-      active?.target ?? null, name, toTarget.length(), offset, forward.dot(toTarget.normalize())
+      active?.target ?? null, actorId, toTarget.length(), offset, forward.dot(toTarget.normalize())
     )
     if (decision === 'ignore') return
     if (decision === 'arrived') {
@@ -130,7 +131,7 @@ class CameraToObjectTransition extends Command {
       this.astroControls.enabled = true
       this.camera.setSpeed(speedBefore)
     }
-    CameraToObjectTransition.active = { target: name, timeline, speedBefore, restore }
+    CameraToObjectTransition.active = { target: actorId, timeline, speedBefore, restore }
     const valid = (): boolean => {
       if (CameraToObjectTransition.active?.timeline !== timeline) return false
       if (resolveTarget()) return true

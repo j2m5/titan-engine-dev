@@ -16,9 +16,10 @@ export async function checkMovingTargetFlight(): Promise<unknown> {
   const target = new Object3D()
   target.userData.type = 'planet'
   target.position.set(0, 0, -10000)
+  const attributes = { id: 1, name: 'Moving probe' }
   const model = {
-    attributes: { name: 'Moving probe' },
-    getAttribute: () => 'Moving probe',
+    attributes,
+    getAttribute: (key: keyof typeof attributes) => attributes[key],
     category: { getAttribute: () => 'planet' },
     physicalObject: { getAttribute: () => 100 }
   } as unknown as Actor
