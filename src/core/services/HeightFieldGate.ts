@@ -66,6 +66,10 @@ export class HeightFieldGate {
   }
 
   public recompute(): void {
+    for (const [actorId, node] of this.nodeCache) {
+      if (!this.sceneObserver.data.has(actorId) || !this.isAttached(node)) this.nodeCache.delete(actorId)
+    }
+
     const candidates: HeightMapCandidate[] = []
     // Путь → ВСЕ узлы, которые его просят: одна карта высот легально шарится
     // несколькими телами (политика схлопывает дубли пути по максимуму

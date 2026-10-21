@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Object3D, Scene, Vector3 } from 'three'
 import '@/core/framework/TitanThree'
 import { Actor } from '@/core/models/Actor'
@@ -74,5 +74,86 @@ describe('SceneObserver actor identity', () => {
     update()
     expect(observer.data.size).toBe(1)
     expect(observer.calculateClosestObject()).toMatchObject({ actorId: 1, name: 'Body' })
+  })
+})
+
+describe('SceneObserver observation lifecycle', () => {
+  it('drops a detached orbit target even when the objects snapshot has not refreshed', () => {
+    const removed = body(1, 'Removed', 10)
+    const { observer, controls, scene, update } = stand(removed, body(2, 'Remaining', 100))
+    update()
+    controls.isOrbiting = true
+    scene.remove(removed)
+    expect(observer.objects).toContain(removed)
+    update()
+    expect([...observer.data.keys()]).toEqual([2])
+    expect(observer.objects).not.toContain(removed)
+    expect(controls.setTarget).toHaveBeenLastCalledWith(new Vector3(100, 0, 0))
+  })
+
+  it('refreshes records immediately without emitting another closest event', () => {
+    const removed = body(1, 'Removed', 10)
+    const { observer, scene, update } = stand(removed, body(2, 'Remaining', 100))
+    update()
+    const listener = vi.fn()
+    observer.subscribe('ClosestChange', listener)
+    scene.remove(removed)
+    observer.refreshObservableObjects()
+    expect([...observer.data.keys()]).toEqual([2])
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('replaces old scene records and resets orbit identity even if the new scene reuses an ID', () => {
+    const { observer, controls, update } = stand(body(1, 'Old', 10), body(3, 'Gone', 30))
+    update()
+    controls.isOrbiting = true
+    const next = new Scene()
+    next.add(body(1, 'Reused', 100), body(2, 'Nearest', 1))
+    observer.scene = next
+    expect([...observer.data.keys()]).toEqual([1, 2])
+    update()
+    expect(controls.setTarget).toHaveBeenLastCalledWith(new Vector3(1, 0, 0))
+  })
+
+  it('announces an empty scene and releases the old orbit lock before bodies return', () => {
+    const removed = body(1, 'Removed', 10)
+    const { observer, controls, scene, update } = stand(removed)
+    update()
+    controls.isOrbiting = true
+    const listener = vi.fn()
+    observer.subscribe('ClosestChange', listener)
+    scene.remove(removed)
+    update()
+    expect(observer.calculateClosestObject()).toBeNull()
+    expect(listener).toHaveBeenLastCalledWith(null)
+    scene.add(body(1, 'Reused', 100), body(2, 'Nearest', 1))
+    observer.refreshObservableObjects()
+    update()
+    expect(controls.setTarget).toHaveBeenLastCalledWith(new Vector3(1, 0, 0))
+  })
+
+  it('replaces a surface under the same ID during a listener without recursive events', () => {
+    const old = body(1, 'Body', 10)
+    const replacement = body(1, 'Body', 20)
+    const { observer, scene, update } = stand(old)
+    const listener = vi.fn(() => {
+      scene.remove(old)
+      scene.add(replacement)
+      observer.refreshObservableObjects()
+    })
+    observer.subscribe('ClosestChange', listener)
+    update()
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(observer.getData(1)?.distance).toBe(20)
+  })
+
+  it('can refresh a scene before controls have been installed', () => {
+    const observer = new SceneObserver()
+    observers.push(observer)
+    const scene = new Scene()
+    scene.add(body(1, 'Body', 10))
+    observer.scene = scene
+    expect(() => observer.refreshObservableObjects()).not.toThrow()
+    expect(observer.data.size).toBe(0)
   })
 })

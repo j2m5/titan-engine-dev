@@ -36,7 +36,7 @@ const MAX_TICK_DELTA_SECONDS: number = 0.1
 
 class SceneObserver extends EventEmitter<{
   change: [Vector3]
-  ClosestChange: [ObservableRecord]
+  ClosestChange: [ObservableRecord | null]
 }> {
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null
@@ -67,7 +67,11 @@ class SceneObserver extends EventEmitter<{
 
     const closest: ObservableRecord | null = this.calculateClosestObject()
 
-    if (!closest) return
+    if (!closest) {
+      this.targetActorId = null
+      this.emit('ClosestChange', null)
+      return
+    }
 
     const held: ObservableRecord | undefined =
       this.observable.isOrbiting && this.targetActorId !== null ? this.data.get(this.targetActorId) : undefined
@@ -102,9 +106,10 @@ class SceneObserver extends EventEmitter<{
   }
 
   public set scene(value: Scene) {
+    if (value !== this._scene) this.targetActorId = null
     this._scene = value
-
-    this.defineObservableObjects()
+    this.data.clear()
+    this.refreshObservableObjects()
   }
 
   public get cameraPosition(): Vector3 {
@@ -146,8 +151,9 @@ class SceneObserver extends EventEmitter<{
   }
 
   /**
-   * Пересобирает снимок наблюдаемых объектов (`objects`) прямо сейчас, не
-   * дожидаясь смены `scene`.
+   * Пересобирает объекты и записи расстояний прямо сейчас, не дожидаясь
+   * смены `scene`. События не отправляет: гейт вызывает метод из своего
+   * обработчика ClosestChange после замены поверхности.
    *
    * Состав наблюдения меняется не только при входе в новый сценарий:
    * `RenderableFactory.upgradePlanetToTerrain`/`downgradeTerrainToPlanet`
@@ -165,6 +171,7 @@ class SceneObserver extends EventEmitter<{
    */
   public refreshObservableObjects(): void {
     this.defineObservableObjects()
+    this.defineDataRecords()
   }
 
   /**
@@ -204,10 +211,23 @@ class SceneObserver extends EventEmitter<{
   }
 
   private defineDataRecords(): void {
+    if (!this._scene || !this._observable) return
+
+    const attached = this.objects.filter((object) => {
+      let root: Object3D = object
+      while (root.parent) root = root.parent
+      return root === this._scene
+    })
+    // A new snapshot also invalidates consumers such as CameraCollision.
+    if (attached.length !== this.objects.length) this.objects = attached
+
+    this.data.clear()
     this.objects.forEach((object: Object3D): void => {
       const record = this.makeRecord(object)
       if (record) this.add(record)
     })
+
+    if (this.targetActorId !== null && !this.data.has(this.targetActorId)) this.targetActorId = null
   }
 
   /**

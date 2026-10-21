@@ -25,6 +25,7 @@ afterEach(() => {
   heightFieldStorage.clear()
   resourceStorage.deleteAllTextures()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function world(names = ['Twin', 'Twin']) {
@@ -138,4 +139,97 @@ it('fades namesake labels using their own distances', () => {
   for (const label of labels) label.updateObject({} as UpdateContext)
   expect(labels[0].element.style.opacity).toBe('0')
   expect(labels[1].element.style.opacity).toBe('1')
+})
+
+it('cancels pending texture demand when the final observed bodies leave the scene', async () => {
+  const w = world()
+  const signals: AbortSignal[] = []
+  const pending: Promise<LoadResult>[] = []
+  resources(w, (_request, signal) => {
+    signals.push(signal!)
+    const promise = new Promise<LoadResult>((_resolve, reject) => {
+      signal!.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')), { once: true })
+    })
+    pending.push(promise)
+    return promise
+  })
+  w.update()
+  expect(signals.length).toBeGreaterThan(0)
+  expect(signals.every((signal) => !signal.aborted)).toBe(true)
+  w.scene.remove(...w.nodes)
+  w.update()
+  expect(signals.every((signal) => signal.aborted)).toBe(true)
+  await Promise.allSettled(pending)
+})
+
+it('evicts textures without remaining observed owners after minimum residency', async () => {
+  const w = world()
+  let now = 10_000
+  vi.spyOn(Date, 'now').mockImplementation(() => now)
+  const r = resources(w, async (request) => {
+    const loaded = texture()
+    loaded.name = request.name
+    return { ok: true, texture: loaded }
+  })
+  await r.run()
+  const paths = w.actors.map((actor) => candidate(actor).path)
+  for (const path of paths) expect(resourceStorage.getTexture(path)).toBeDefined()
+  now += 100_000
+  w.scene.remove(...w.nodes)
+  w.update()
+  for (const path of paths) expect(resourceStorage.getTexture(path)).toBeUndefined()
+})
+
+it('releases pending height maps, auxiliary fetches and cached nodes when observation becomes empty', async () => {
+  const w = world()
+  const signals: AbortSignal[] = []
+  const pending: Promise<Response>[] = []
+  vi.stubGlobal('fetch', vi.fn((_input: unknown, options?: RequestInit) => {
+    const signal = options!.signal!
+    signals.push(signal)
+    const promise = new Promise<Response>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')), { once: true })
+    })
+    pending.push(promise)
+    return promise
+  }))
+  const factory = { upgradePlanetToTerrain: vi.fn(() => false), downgradeTerrainToPlanet: vi.fn(() => false), resyncSurfaceMaterials: vi.fn() }
+  const gate = new HeightFieldGate(w.observer, w.scene, factory as never,
+    { domElement: { height: 1080 } } as WebGLRenderer, new SyncTerrainPatchBuilder())
+  cleanup.push(() => gate.dispose())
+  w.update()
+  expect(heightFieldStorage.heldPaths()).toHaveLength(2)
+  expect(signals).toHaveLength(4)
+  const cache = (gate as unknown as { nodeCache: Map<number, DynamicNode> }).nodeCache
+  expect(cache.size).toBe(2)
+  w.scene.remove(...w.nodes)
+  w.update()
+  expect(heightFieldStorage.heldPaths()).toEqual([])
+  expect(signals.every((signal) => signal.aborted)).toBe(true)
+  expect(cache.size).toBe(0)
+  await Promise.allSettled(pending)
+})
+
+it('uses a replacement node with the same actor ID after a cached node is detached', () => {
+  const w = world()
+  vi.spyOn(heightFieldStorage, 'request').mockImplementation(() => {})
+  heightFieldStorage['maps'].set(heightPathOf(w.actors[0])!, {
+    width: 4, height: 2, minMeters: 0, maxMeters: 1000, data: new Uint16Array(8)
+  })
+  const factory = { upgradePlanetToTerrain: vi.fn(() => true), downgradeTerrainToPlanet: vi.fn(() => false), resyncSurfaceMaterials: vi.fn() }
+  const gate = new HeightFieldGate(w.observer, w.scene, factory as never,
+    { domElement: { height: 1080 } } as WebGLRenderer, new SyncTerrainPatchBuilder())
+  cleanup.push(() => gate.dispose())
+  w.update()
+  expect(factory.upgradePlanetToTerrain).toHaveBeenCalledWith(w.nodes[0])
+  factory.upgradePlanetToTerrain.mockClear()
+  const replacement = new DynamicNode(w.actors[0])
+  replacement.position.x = 1
+  replacement.renderable = w.nodes[0].renderable
+  replacement.add(replacement.renderable!)
+  w.scene.remove(w.nodes[0])
+  w.scene.add(replacement)
+  w.observer.refreshObservableObjects()
+  w.update()
+  expect(factory.upgradePlanetToTerrain).toHaveBeenCalledExactlyOnceWith(replacement)
 })
