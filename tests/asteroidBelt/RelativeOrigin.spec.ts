@@ -210,6 +210,7 @@ const frameAt = (system: AsteroidRingSystem, x: number): void => {
   camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
 
   system.updateObject({ delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext)
+  system.updateView(camera)
 }
 
 /** Все меши пула одним списком (K Geometry + K Near + billboard) */
@@ -318,6 +319,7 @@ describe('кольца: относительные координаты выкл
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
 
     system.updateObject({ delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext)
+    system.updateView(camera)
 
     const pool = poolOf(system)
     // Пин не должен быть пустым: нулевой атрибут у пустого пула ничего не значит

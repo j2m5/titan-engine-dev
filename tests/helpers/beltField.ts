@@ -84,6 +84,7 @@ export function measureBeltField(belt: AsteroidBelt, cameraWorld: Vector3, frame
     belt.traverse((object) =>
       object.updateObject({ delta: 0.05, epoch: 2451545, elapsed: i * 0.05, camera } as UpdateContext)
     )
+    belt.traverse((object) => object.updateView?.(camera))
   }
 
   const streamer = (belt as unknown as { streamer: AsteroidRingSystem | null }).streamer as StreamerInternals | null
@@ -194,6 +195,7 @@ export function measureBeltFieldFlythrough(
     belt.traverse((object) =>
       object.updateObject({ delta: frameDelta, epoch: 2451545, elapsed: i * frameDelta, camera } as UpdateContext)
     )
+    belt.traverse((object) => object.updateView?.(camera))
 
     const streamer = (belt as unknown as { streamer: AsteroidRingSystem | null }).streamer as StreamerInternals | null
 

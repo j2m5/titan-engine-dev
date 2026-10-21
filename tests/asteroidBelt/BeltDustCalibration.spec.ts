@@ -218,6 +218,7 @@ describe('AsteroidBelt: туман на камнях внутри пояса', (
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
     belt.updateMatrixWorld(true)
     belt.traverse((o) => o.updateObject({ delta: 0.016, epoch: 2451545, elapsed: 0, camera } as UpdateContext))
+    belt.traverse((o) => o.updateView?.(camera))
     return (belt as unknown as { streamer: AsteroidRingSystem }).streamer
   }
 

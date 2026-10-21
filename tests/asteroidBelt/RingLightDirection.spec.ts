@@ -56,7 +56,7 @@ const beltNodeActor = (): Actor =>
     getAttribute: (key: string, fallback: unknown = ''): unknown => (key === 'categoryId' ? 11 : fallback)
   }) as unknown as Actor
 
-const frameAt = (target: { updateObject(ctx: UpdateContext): void }, x: number, y: number, z: number): void => {
+const frameAt = (target: { updateObject(ctx: UpdateContext): void; updateView?(camera: PerspectiveCamera): void }, x: number, y: number, z: number): void => {
   const camera = new PerspectiveCamera(50, 1, 0.1, 1e12)
   camera.position.set(x, y, z)
   camera.lookAt(0, 0, 0)
@@ -64,6 +64,7 @@ const frameAt = (target: { updateObject(ctx: UpdateContext): void }, x: number, 
   camera.updateProjectionMatrix()
   camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
   target.updateObject({ delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext)
+  target.updateView?.(camera)
 }
 
 describe('ringLightDirection', () => {
