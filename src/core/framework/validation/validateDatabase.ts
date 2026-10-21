@@ -217,16 +217,14 @@ function isDensityLayer(value: unknown): boolean {
 }
 
 /**
- * Форма данных атмосфер (duck-typing по solarIrradiance): битая структура
+ * Форма данных выбранных атмосфер: битая структура
  * не ловится типами (data — свободный JSON) и роняет LUT-генератор в рантайме.
  */
 function checkAtmosphereShapes(
-  rows: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  rows: IRenderingObject[],
   issues: ValidationIssue[]
 ): void {
   for (const row of rows) {
-    if (!row.data || !('solarIrradiance' in row.data)) continue
-
     const bad = (field: string, reason: string): void => {
       issues.push({
         level: 'error',
@@ -247,6 +245,12 @@ function checkAtmosphereShapes(
       const v = row.data[field]
       if (!Array.isArray(v) || v.length !== 2 || !v.every(isDensityLayer)) {
         bad(field, 'must be a pair of density layers [layer0, layer1]')
+      }
+    }
+
+    for (const field of ['sunAngularRadius', 'miePhaseFunctionG', 'muSMin']) {
+      if (typeof row.data[field] !== 'number' || !Number.isFinite(row.data[field])) {
+        bad(field, 'must be a finite number')
       }
     }
 
@@ -274,7 +278,7 @@ function checkAtmosphereShapes(
  * (H = √(top² − bottom²)).
  */
 function checkAtmosphereAnchoring(
-  renderingObjects: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  renderingObjects: IRenderingObject[],
   actors: IActor[],
   physicalObjects: IPhysicalObject[],
   issues: ValidationIssue[]
@@ -286,8 +290,6 @@ function checkAtmosphereAnchoring(
   for (const p of physicalObjects) physByActor.set(p.actorId, p)
 
   for (const row of renderingObjects) {
-    if (!row.data || !('solarIrradiance' in row.data)) continue
-
     const bottom: unknown = row.data.bottomRadius
     const top: unknown = row.data.topRadius
 
@@ -372,12 +374,10 @@ function isActiveSpecies(coefficients: unknown): boolean {
 }
 
 function checkAtmosphereExtent(
-  rows: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  rows: IRenderingObject[],
   issues: ValidationIssue[]
 ): void {
   for (const row of rows) {
-    if (!row.data || !('solarIrradiance' in row.data)) continue
-
     const bottom: unknown = row.data.bottomRadius
     const top: unknown = row.data.topRadius
 
@@ -452,8 +452,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 /**
  * Форма конфига туманности. Диспетчеризация по алиасу категории, а не по
- * утиной типизации: в снимке есть и акторы, и категории, гадать по полям
- * незачем (в отличие от атмосфер, чья проверка появилась раньше).
+ * утиной типизации: в снимке есть и акторы, и категории, гадать по полям незачем.
  *
  * size обязателен: без него движок подставит дефолт ~0.013 а.е., то есть
  * туманность будет невидима — пропуск поля почти наверняка баг данных.
@@ -1027,13 +1026,17 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   })
 
   // --- 6c. Форма данных атмосфер (битая структура роняет LUT-генератор в рантайме) ---
-  checkAtmosphereShapes(renderingObjects, issues)
+  // Категория задаёт схему даже без обязательных полей. Сохраняем и старую
+  // диагностику atmosphere-подобных данных, записанных в другую категорию.
+  const atmospheres = renderingObjects.filter((row) =>
+    aliasByActor.get(row.actorId) === 'atmosphere' || 'solarIrradiance' in row.data)
+  checkAtmosphereShapes(atmospheres, issues)
 
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
-  checkAtmosphereAnchoring(renderingObjects, db.actors, db.physicalObjects, issues)
+  checkAtmosphereAnchoring(atmospheres, db.actors, db.physicalObjects, issues)
 
   // --- 6g. Протяжённость атмосферы: оболочка против шкалы высот ---
-  checkAtmosphereExtent(renderingObjects, issues)
+  checkAtmosphereExtent(atmospheres, issues)
 
   // --- 6f. Форма конфига туманностей ---
   checkNebulaShapes(renderingObjects, aliasByActor, issues)

@@ -98,15 +98,59 @@ describe('validateDatabase — форма данных атмосфер', () => 
       absorptionExtinction: [0.00065, 0.001881, 0.000085],
       groundAlbedo: [0.1, 0.1, 0.1],
       muSMin: -0.207912
-    }
+    } as Record<string, unknown>
   })
 
-  function snapshotWith(row: ReturnType<typeof atmosphereRow>): DatabaseSnapshot {
+  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number | string = 2): DatabaseSnapshot {
     const db = baseSnapshot()
-    db.actors.push(planet(11, 10))
+    db.categories.push({ id: 5, alias: 'atmosphere', name: 'Atmosphere' })
+    db.actors.push({ ...planet(11, 10), categoryId })
     db.renderingObjects.push(row)
     return db
   }
+
+  it.each([5, 'atmosphere'])('checks missing irradiance using atmosphere category %s', (categoryId) => {
+    const row = atmosphereRow()
+    expect(validateDatabase(snapshotWith(row, categoryId)).errors).toEqual([])
+    delete row.data.solarIrradiance
+    expect(validateDatabase(snapshotWith(row, categoryId)).errors).toContainEqual(expect.objectContaining({
+      collection: 'renderingObjects', entity: 1, message: expect.stringContaining('data.solarIrradiance')
+    }))
+  })
+
+  it.each([5, 'atmosphere'])('rejects empty atmosphere data for category %s', (categoryId) => {
+    const row = { ...atmosphereRow(), data: {} }
+    const result = validateDatabase(snapshotWith(row, categoryId))
+    for (const field of ['solarIrradiance', 'rayleighDensity', 'sunAngularRadius', 'miePhaseFunctionG', 'muSMin']) {
+      expect(result.errors.some((e) => e.message.includes(`data.${field}`)), field).toBe(true)
+    }
+    expect(result.errors.some((e) => e.message.includes('radii invalid'))).toBe(true)
+  })
+
+  it.each(['sunAngularRadius', 'miePhaseFunctionG', 'muSMin'])('requires finite %s', (field) => {
+    for (const value of [undefined, null, '0', false, NaN, Infinity]) {
+      const row = atmosphereRow()
+      row.data[field] = value
+      expect(validateDatabase(snapshotWith(row, 'atmosphere')).errors.some((e) =>
+        e.message.includes(`data.${field}`)), String(value)).toBe(true)
+    }
+    const row = atmosphereRow()
+    row.data[field] = 0
+    expect(validateDatabase(snapshotWith(row, 'atmosphere')).errors).toEqual([])
+  })
+
+  it('keeps radius and extent checks active without irradiance', () => {
+    const row = atmosphereRow()
+    delete row.data.solarIrradiance
+    row.data.topRadius = 1
+    expect(validateDatabase(snapshotWith(row, 5)).errors.some((e) => e.message.includes('radii invalid'))).toBe(true)
+    row.data.topRadius = 6361
+    expect(validateDatabase(snapshotWith(row, 5)).warnings.some((e) => e.message.includes('hard edge'))).toBe(true)
+  })
+
+  it('does not require atmosphere fields for ordinary planet rendering', () => {
+    expect(validateDatabase(snapshotWith({ ...atmosphereRow(), data: { bumpScale: 1 } })).errors).toEqual([])
+  })
 
   it('валидная строка атмосферы проходит без ошибок формы', () => {
     const result = validateDatabase(snapshotWith(atmosphereRow()))

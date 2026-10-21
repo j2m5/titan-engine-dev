@@ -6,6 +6,9 @@ import { TablePanel } from '@/ui/editor/TablePanel'
 import type { TableSpec } from '@/ui/editor/forms/fieldSpec'
 import type { GeneratedFile } from '@/core/framework/generation/generateDatabaseFiles'
 import DataEditorModal from '@/ui/editor/DataEditorModal'
+import { renderingObjectsSpec } from '@/ui/editor/forms/namedSpecs'
+import { renderingDataTemplates } from '@/ui/editor/forms/dataTemplates'
+import { createAtmosphereUniforms, type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean
@@ -219,4 +222,38 @@ it.each(['{ invalid', '1', 'true', '"x"', '0', 'false', '""', '[]', 'null'])(
   expect(container.querySelector('textarea')!.value).toBe(invalid)
   act(() => inputJson(original))
   expect(saveButton().disabled).toBe(false)
+})
+
+it('blocks saving an atmosphere without irradiance, then exports a config usable by the renderer', async () => {
+  const initial = renderingDataTemplates.find((template) => template.value === 'atmosphere')!.data
+  const database = new Map<string, unknown[]>([
+    ['categories', [{ id: 1, alias: 'atmosphere', name: 'Atmosphere' }]],
+    ['actors', [{ id: 1, categoryId: 1, parentId: null, name: 'Sky', color: '#ffffff', description: '' }]],
+    ['renderingObjects', [{ id: 1, actorId: 1, data: initial }]]
+  ])
+  function AtmosphereEditor() {
+    editor = useEditorDraft(database, [])
+    return <TablePanel spec={renderingObjectsSpec} editor={editor} />
+  }
+  act(() => root.render(<AtmosphereEditor />))
+  act(() => container.querySelector<HTMLElement>('.titan-editor-row')!.click())
+  saveSpy.mockResolvedValue({ ok: true, written: [] })
+  const edited = { ...initial }
+  delete edited.solarIrradiance
+  const save = editor.save
+  await act(async () => { inputJson(JSON.stringify(edited)); await save() })
+  expect(saveSpy).not.toHaveBeenCalled()
+  expect(editor.saveStatus).toContain('Cannot save')
+  expect(editor.validation.errors.some((e) => e.message.includes('solarIrradiance'))).toBe(true)
+  expect(JSON.parse(container.querySelector('textarea')!.value)).toEqual(edited)
+
+  await act(async () => { inputJson(JSON.stringify(initial)); await save() })
+  expect(saveSpy).toHaveBeenCalledTimes(1)
+  expect(editor.validation.errors).toEqual([])
+  const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+  expect(files.find((file) => file.path.includes('renderingObjects'))!.content).toContain('solarIrradiance:')
+  const config = editor.draft.renderingObjects[0].data as unknown as AtmosphereConfig
+  const uniforms = createAtmosphereUniforms(config)
+  expect(uniforms.u_solar_irradiance.value.toArray()).toEqual(initial.solarIrradiance)
+  expect(uniforms.u_sun_angular_radius.value).toBe(initial.sunAngularRadius)
 })
