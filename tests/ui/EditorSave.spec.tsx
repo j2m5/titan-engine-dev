@@ -6,6 +6,7 @@ import { TablePanel } from '@/ui/editor/TablePanel'
 import type { TableSpec } from '@/ui/editor/forms/fieldSpec'
 import type { GeneratedFile } from '@/core/framework/generation/generateDatabaseFiles'
 import DataEditorModal from '@/ui/editor/DataEditorModal'
+import { actorsSpec } from '@/ui/editor/forms/namedSpecs'
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean
@@ -21,6 +22,17 @@ let editor: UseEditorDraft
 
 /** Пустая база валидна и генерируется — для проверки транспорта содержимое не нужно */
 const EMPTY_DATABASE = new Map<string, unknown[]>()
+
+/** Старый JSON ещё может содержать alias вместо числового внешнего ключа. */
+const LEGACY_ACTOR_DATABASE = new Map<string, unknown[]>([
+  ['categories', [{ id: 4, alias: 'planet', name: 'Planet' }]],
+  ['actors', [{ id: 10, categoryId: 'planet', parentId: null, name: 'Legacy world', description: '', color: '#fff' }]]
+])
+
+function LegacyActorEditor() {
+  editor = useEditorDraft(LEGACY_ACTOR_DATABASE, [])
+  return <TablePanel spec={actorsSpec} editor={editor} />
+}
 
 function Probe(): null {
   editor = useEditorDraft(EMPTY_DATABASE, [])
@@ -42,6 +54,33 @@ afterEach(() => {
 })
 
 describe('Редактор данных: сохранение', () => {
+  it('отклоняет старый alias и сохраняет числовой categoryId после выбора категории в форме', async () => {
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    act(() => root.render(<LegacyActorEditor />))
+    expect(editor.validation.ok).toBe(false)
+
+    await act(async () => editor.save())
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.saveStatus).toContain('Cannot save:')
+
+    act(() => container.querySelector<HTMLButtonElement>('.titan-editor-row')!.click())
+    const select = Array.from(container.querySelectorAll('label'))
+      .find((label) => label.querySelector('.titan-field-label')?.textContent === 'Category')!
+      .querySelector('select')!
+    act(() => {
+      select.value = '4'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(editor.draft.actors[0].categoryId).toBe(4)
+    expect(editor.validation.ok).toBe(true)
+
+    await act(async () => editor.save())
+    expect(saveSpy).toHaveBeenCalledTimes(1)
+    const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+    expect(files.find((file) => file.path.endsWith('/actors.ts'))!.content).toContain('categoryId: 4')
+    expect(editor.saveStatus).toContain('Saved')
+  })
+
   it('двойной клик до перерисовки — один набор файлов уходит на сервер', async () => {
     let finish: (result: SaveResult) => void = () => {}
 

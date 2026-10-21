@@ -2,11 +2,15 @@ import { Matrix4, Object3D, PerspectiveCamera, Ray, Sphere, Vector3 } from 'thre
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
-import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import {
+  CLEARANCE_MARGIN_METERS,
+  terrainHeightFieldFor,
+  type TerrainHeightField
+} from '@/core/terrain/TerrainHeightField'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { midbandParamsOf } from '@/core/terrain/midbandParams'
+import { roundedFloat32UpperBound } from '@/core/terrain/terrainRange'
 import type { SurfaceProbe } from '@/core/libs/surfaceCamera'
 
 export type Collider = {
@@ -16,10 +20,8 @@ export type Collider = {
   /**
    * Уровень воды тела, метры (Task 5, water-foundation). Ручка актора
    * (`renderingObject.data.waterLevelMeters`), не поля высот — поле делится
-   * по (карта, радиус) в `terrainHeightFieldFor` и уровня не знает (см. её
-   * докблок). Отсутствие ручки — воды нет, все три слоя коллизии (пуш-аут,
-   * поточечный марч, внешний консервативный марч по сетке клиренса) остаются
-   * бит-в-бит прежними (см. `withWaterFloor`).
+   * по ключу `terrainHeightFieldFor` (см. её докблок). Отсутствие ручки —
+   * воды нет; свип и пуш-аут используют только рельеф (см. `withWaterFloor`).
    */
   waterLevelMeters?: number
 }
@@ -89,7 +91,9 @@ export function collectColliders(objects: Object3D[]): Collider[] {
                   ? heightField.maxHeightWithMidbandMeters
                   : Math.max(heightField.maxHeightWithMidbandMeters, waterLevelMeters)) /
                   1000 +
-                heightField.maxClearanceMeters / 1000
+                // Два Float32-округления: pointSag, затем clearanceGrid.
+                // Margin входит и в истинный пол, поэтому не заменяет этот запас.
+                roundedFloat32UpperBound(heightField.maxClearanceMeters, 2) / 1000
             ),
             heightField,
             waterLevelMeters
@@ -121,21 +125,6 @@ const RELATIVE_CONTACT_EPSILON = 1e-6
 const SWEEP_MARCH_BUDGET = 64
 
 /**
- * Бюджет доуточнения контакта по поточечной поверхности (см. докблок
- * `marchPointwise`) — заметно меньше внешнего: искомый зазор ограничен
- * клиренсом сетки В ЭТОЙ ТОЧКЕ (сотни метров, не половина системы —
- * быстрые перелёты уже отработаны внешней консервативной фазой).
- */
-const REFINE_MARCH_BUDGET = 24
-
-/**
- * Кламп cos(широты) снизу в локальном бонде уклона sag-поля (marchPointwise):
- * у самого полюса cosLat→0, без клампа бонд ушёл бы в бесконечность и шаг
- * марча схлопнулся бы в ноль.
- */
-const MIN_MARCH_COS_LAT = 1e-3
-
-/**
  * Единый формат хита свипа: сфера и терраформный марч отдают одно и то же.
  * `exhausted` ставит только терраформный марч (сферы контакт находят точно,
  * бюджета у них нет) — сигнал sweep() применить жёсткий стоп без скольжения.
@@ -155,20 +144,12 @@ type SweepHit = {
  * сервису безразлично, кто сдвинул камеру (полёт, орбитальный телепорт,
  * твин перелёта) или тело (эпоха при варпе) — он видит итог и правит его.
  *
- * Терраформный контакт двухфазный по РАССТОЯНИЮ, не по этапу обработки (см.
- * докблок `TerrainHeightField`): широкая фаза (`collectColliders`) — всегда
- * консервативная сфера (R+maxH+maxClearance). Внутри неё `marchTerrain`
- * дальше выбирает поверхность ПО МЕСТУ вдоль свипа: снаружи консервативной
- * оболочки сетки провиса — марч против неё (гарантия отсутствия туннеля на
- * быстром пролёте, сетка размазывает пиковый провис по ячейке+дилатации и
- * потому дороже честной, но дёшева и безопасна для больших скачков); как
- * только отрезок ВОШЁЛ в эту оболочку (стартовал внутри или пересёк её по
- * пути) — марч продолжает против честной поточечной поверхности
- * (`TerrainHeightField.sagMeters`, `marchPointwise`), потому что оболочка —
- * штатная рабочая высота камеры (медиана на Луне ~236 м после сетки против
- * ~40 м честно поточечно), а не редкий крайний случай: пропускать её маршем
- * целиком открывает туннель на низких быстрых пролётах. `pushOutTerrain` —
- * та же поточечная цель (см. `pointwiseFloorRadiusUnits`).
+ * Широкая фаза (`collectColliders`) — консервативная сфера
+ * R+maxH+maxClearance. Внутри неё `marchTerrain` ограничивает высоту
+ * поточечного пола на всём интервале движения и делит неопределённые
+ * интервалы. Исчерпав бюджет, камера остаётся в конце проверенного
+ * свободного префикса. `pushOutTerrain` использует тот же поточечный пол
+ * (см. `pointwiseFloorRadiusUnits`).
  */
 class CameraCollision {
   private lastPosition: Vector3 | null = null
@@ -196,8 +177,7 @@ class CameraCollision {
   private readonly marchTo = new Vector3()
   private readonly marchStep = new Vector3()
   private readonly marchPoint = new Vector3()
-  // доуточнение контакта по поточечной поверхности (см. marchPointwise) — свой
-  // скретч точки, marchPoint уже занят консервативной точкой на момент вызова
+  // Второй конец проверяемого интервала; marchPoint хранит первый.
   private readonly refinePoint = new Vector3()
 
   // скретчи текущего кандидата хита findNearestHit (перезаписываются на каждой
@@ -267,7 +247,10 @@ class CameraCollision {
         this.localDir.copy(position).applyMatrix4(this.inverseMatrix).normalize()
         surfaceRadius = collider.heightField.surfaceRadiusUnits(this.localDir)
         if (collider.waterLevelMeters !== undefined) {
-          surfaceRadius = Math.max(surfaceRadius, collider.heightField.waterSurfaceRadiusUnits(collider.waterLevelMeters))
+          surfaceRadius = Math.max(
+            surfaceRadius,
+            collider.heightField.waterSurfaceRadiusUnits(collider.waterLevelMeters)
+          )
         }
       }
 
@@ -426,184 +409,67 @@ class CameraCollision {
   }
 
   /**
-   * Консервативный сферический марч в теле-фиксированном фрейме:
-   * f(p) = |p| − (R + h(p̂) + clearance(p̂)); липшицева константа шага —
-   * SLOPE_RANGE (допущение о крутизне DEM: слоуп-карта клампится энкодером,
-   * сама карта высот — нет; у полюсов равнопрямоугольная сетка нарушает его
-   * в ~3-км шапке, страхует пуш-аут) ПЛЮС локальный бонд клиренс-сетки:
-   * её E-W градиент растёт как 1/cos(широты) (ячейка сетки сжимается по
-   * дуге), maxClearance/дуга_ячейки откалиброван по экватору, и без поправки
-   * шаг с ~65° широты перепрыгивал бы клиренс-стенку (на 89° недооценка в
-   * 16 раз — окно туннеля на приполярном пролёте) ПЛЮС `field.midbandSlopeBound`
-   * (Task 5, 0 без полосы): `distance()` читает `collisionRadiusUnits(dir)`, в
-   * которую уже подмешана полная высота полосы (Task 4) — без добавки к бонду
-   * шаг этой (внешней, консервативной) фазы марча мог перепрыгнуть гребень
-   * полосы целиком при подлёте СНАРУЖИ оболочки (SLOPE_RANGE ограничивает
-   * только уклон DEM, не полосы). Прибавляется как per-body КОНСТАНТА, без
-   * деления на cosLat — сумма амплитуда·частота у полосы уже безразмерна
-   * (см. докблок `MidbandField.slopeBound`), широтный член остаётся только у
-   * clearanceBond. Та же схема, что у sag-бонда `marchPointwise` ниже. Шаг
-   * f/(1+L) не перепрыгивает
-   * поверхность. Бюджет исчерпан — контакт в текущей точке помечается
-   * `exhausted`: sweep() ставит камеру туда без скольжения (перестраховка
-   * вместо туннеля через то, что марч не успел домаршировать). Истинный
-   * контакт (не exhausted) доуточняется `marchPointwise` против честной
-   * поточечной поверхности — см. её докблок и класса.
-   *
-   * Старт УЖЕ внутри консервативной оболочки (`distance(from) <= 0`) — эта
-   * оболочка штатная рабочая высота камеры (честный пол по sagMeters ~40 м
-   * медианно при оболочке сетки ~236 м), не редкий крайний случай: пропуск
-   * марча целиком (отдать одному пуш-ауту) ОТКРЫВАЕТ ТУННЕЛЬ на быстром
-   * тангенциальном пролёте низко над рельефом (пуш-аут ловит только
-   * СТАРТОВУЮ точку, не путь между from и to). Поэтому вместо пропуска —
-   * марч сразу в поточечном режиме на полный внешний бюджет, см.
-   * `marchPointwise`.
-   *
-   * Уровень воды (Task 5) клампится ЗДЕСЬ, в потребителе `collisionRadiusUnits`
-   * (сетки клиренса), а не в самом поле: сетка без клампа консервативна для
-   * полётов НАД водой (никогда не занижает клиренс рельефа), но контакт/марч
-   * обязаны видеть, что вода ПОДНИМАЕТ пол там, где рельеф ниже уровня —
-   * `withWaterFloor` берёт max(...), то есть только увеличивает цель, не
-   * нарушая консервативности сетки снизу.
+   * Проверяем весь отрезок через верхнюю границу поточечного пола.
+   * Направления прямого отрезка лежат на малой дуге; поле ограничивает
+   * DEM + midband + sag на всей дуге, включая разрывы legacy-шума.
+   * Если минимальный радиус выше этой границы, интервал целиком свободен.
+   * Иначе делим его пополам, всегда обрабатывая левую часть первой.
+   * Бюджет исчерпан — остаёмся в конце доказанно свободного префикса.
+   * Здесь нет предположений о slope-текстуре или о градиенте в одной точке.
    */
   private marchTerrain(collider: Collider, field: TerrainHeightField, maxDistance: number): SweepHit | null {
     collider.object.updateWorldMatrix(true, false)
     this.inverseMatrix.copy(collider.object.matrixWorld).invert()
-    // отрезок в текущем фрейме тела: свип видит только собственное движение
-    // камеры за кадр; вращение тела за кадр ловит пуш-аут (страховка) —
-    // неподвижная камера над вращающимся телом даёт здесь нулевой отрезок
     const from = this.marchFrom.copy(this.ray.origin).applyMatrix4(this.inverseMatrix)
     const to = this.marchTo
       .copy(this.ray.origin)
       .addScaledVector(this.ray.direction, maxDistance)
       .applyMatrix4(this.inverseMatrix)
-
     const length = from.distanceTo(to)
     if (length === 0) return null
     const step = this.marchStep.copy(to).sub(from).divideScalar(length)
-
     const epsilon = collider.radius * RELATIVE_CONTACT_EPSILON
-    const waterLevelMeters = collider.waterLevelMeters
-    const distance = (p: Vector3): number => {
-      const r = p.length()
-      if (r === 0) {
-        return -withWaterFloor(field.collisionRadiusUnits(this.localDir.set(0, 0, 1)), field, waterLevelMeters)
+    const numericalGap = collider.radius * 1e-12
+    const pending = [length]
+    let certified = 0
+    const p = this.marchPoint
+    const q = this.refinePoint
+    for (let work = 0; pending.length > 0 && work < SWEEP_MARCH_BUDGET; work++) {
+      const end = pending.pop()!
+      p.copy(from).addScaledVector(step, certified)
+      q.copy(from).addScaledVector(step, end)
+      const projection = Math.max(0, Math.min(end - certified, -p.dot(step)))
+      const minRadius = this.localPoint.copy(p).addScaledVector(step, projection).length()
+      if (minRadius > collider.radius + numericalGap) {
+        certified = end
+        continue
       }
-      return r - withWaterFloor(field.collisionRadiusUnits(this.localDir.copy(p).divideScalar(r)), field, waterLevelMeters)
-    }
-
-    if (distance(from) <= 0) {
-      // старт внутри оболочки: марч ОБЯЗАН идти против честной поточечной
-      // поверхности с самого начала (полный бюджет — сегмент может быть
-      // длинным). Бюджет исчерпан здесь помечается exhausted:true — риск тот
-      // же, что и у внешнего марча (потенциально длинный/быстрый отрезок,
-      // не короткий гарантированный довесок, как во второй ветке ниже)
-      return this.marchPointwise(collider, field, from, 0, step, length, epsilon, SWEEP_MARCH_BUDGET, true)
-    }
-
-    // экваториальный коэффициент бонда клиренс-сетки — per-body константа,
-    // локальная поправка на 1/cosLat считается ниже на каждом шаге (см. докблок)
-    const clearanceBond =
-      field.clearanceCellEquatorArcMeters > 0 ? field.maxClearanceMeters / field.clearanceCellEquatorArcMeters : 0
-
-    let s = 0
-    const p = this.marchPoint.copy(from)
-    for (let i = 0; i < SWEEP_MARCH_BUDGET; i++) {
-      const d = distance(p)
-      if (d <= epsilon) {
-        // консервативный контакт найден извне — довесок короткий (зазор ≤
-        // клиренс сетки в этой точке), exhausted:false безопасен
-        return this.marchPointwise(collider, field, p, s, step, length, epsilon, REFINE_MARCH_BUDGET, false)
+      const fromRadius = p.length()
+      const fromDir = fromRadius === 0 ? this.localDir.set(0, 0, 1) : this.localDir.copy(p).divideScalar(fromRadius)
+      const toDir = this.normal.copy(q).normalize()
+      const upper = withWaterFloor(
+        field.collisionRadiusUpperBoundUnits(fromDir, toDir),
+        field,
+        collider.waterLevelMeters
+      )
+      if (minRadius > upper + numericalGap) {
+        certified = end
+        continue
       }
-
-      // localDir уже несёт p̂ после distance(p) (ветка r=0 отдаёт полюс — там
-      // cosLat и так клампится снизу)
-      const cosLat = Math.sqrt(Math.max(0, 1 - this.localDir.y * this.localDir.y))
-      s += d / (1 + SLOPE_RANGE + clearanceBond / Math.max(cosLat, MIN_MARCH_COS_LAT) + field.midbandSlopeBound)
-      if (s >= length) return null
-      p.copy(from).addScaledVector(step, s)
+      const gap = fromRadius - pointwiseFloorRadiusUnits(field, fromDir, collider.waterLevelMeters)
+      if (gap <= epsilon) {
+        return this.buildHit(collider, field, p, certified, length, false)
+      }
+      // Узкий интервал с разрывом не обязан иметь точку с малым зазором.
+      // Это неопределённость, а не разрешение скользить через остаток.
+      if (end - certified <= epsilon * 1e-3) return this.buildHit(collider, field, p, certified, length, true)
+      const middle = certified + (end - certified) / 2
+      if (middle === certified || middle === end) return this.buildHit(collider, field, p, certified, length, true)
+      pending.push(end, middle)
     }
-
-    // бюджет исчерпан — консервативный контакт в текущей точке, без доуточнения:
-    // перестраховка march'а важнее точности пола в этом редком случае
-    return this.buildHit(collider, field, p, s, length, true)
-  }
-
-  /**
-   * Марч против ЧЕСТНОЙ поточечной поверхности R+h+sag+margin — общий для
-   * двух вызовов из `marchTerrain`: (а) короткое доуточнение после
-   * консервативного контакта (сетка провиса систематически завышает клиренс
-   * — MAX-агрегация по ячейке + дилатация, медиана по Луне ~236 м после
-   * сетки против ~40 м честно поточечно, см. докблок TerrainHeightField), (б)
-   * полный марч, когда старт уже внутри консервативной оболочки (см. докблок
-   * `marchTerrain`).
-   *
-   * Липшицева константа шага: SLOPE_RANGE (уклон DEM, как и у внешнего
-   * марча) ПЛЮС ЛОКАЛЬНЫЙ бонд уклона sag-поля, пересчитываемый на каждом
-   * шаге из текущего направления p̂ (НЕ глобальная константа): sag-поле
-   * масштабирует восток-западный градиент как 1/cos(широты) —
-   * `field.maxSagMeters/field.equatorTexelMeters` откалиброван по
-   * ЭКВАТОРИАЛЬНОМУ текселю, и без локальной поправки на 70° широты недооценил
-   * бы уклон втрое (шаг марча мог бы перепрыгнуть честный пол — туннель у
-   * полюса). cosLat берётся из p̂.y тем же способом, что и в TerrainHeightField
-   * (sqrt(1−y²)), и клампится снизу — иначе у самого полюса бонд ушёл бы в
-   * бесконечность. Шаг d/(1+L) соответственно короче, чем у внешнего марча —
-   * при том же бюджете (SWEEP_MARCH_BUDGET=64 в режиме (б)) это означает
-   * МЕНЬШИЙ гарантированный радиус сходимости за проход, но зазор здесь тоже
-   * меньше на тот же множитель (искомая поверхность — честный пол, а не
-   * консервативная оболочка): для типичных скоростей камеры у поверхности
-   * (низкий пилотируемый пролёт, не варп) 64 шагов с запасом хватает —
-   * подтверждено замером на реальной карте (см. хендофф; с полосой Task 5,
-   * фикс-раунд 1: тангенциальный пролёт >1 км/кадр над честным гребнем
-   * полосы сходится за ≤1 шаг внешней фазы и 0 шагов доуточнения — далеко
-   * не у края бюджета даже с полосой). У самого полюса
-   * локальный бонд растёт, шаг сжимается, и бюджет может исчерпаться раньше —
-   * штатный жёсткий стоп (`exhausted`), не туннель. `hardStopOnExhaustion` —
-   * true для режима (б) (потенциально длинный/быстрый отрезок, риск как у
-   * внешнего марча), false для режима (а) (короткий гарантированный довесок,
-   * сходимость должна была хватить).
-   *
-   * + `field.midbandSlopeBound` (Task 5, 0 без полосы): сама честная
-   * поверхность (`pointwiseFloorRadiusUnits` → `heightMeters`) уже везде
-   * несёт полосу (поле построено с ней, см. `collectColliders`), без добавки
-   * к бонду шаг марча мог бы перепрыгнуть крутой гребень полосы. Прибавляется
-   * как per-body константа, БЕЗ деления на cosLat — сумма амплитуда·частота
-   * уже безразмерна (см. докблок `MidbandField.slopeBound`), поточечный
-   * широтный член остаётся только у sag-поля карты (`equatorSagBond`).
-   */
-  private marchPointwise(
-    collider: Collider,
-    field: TerrainHeightField,
-    startP: Vector3,
-    startS: number,
-    step: Vector3,
-    length: number,
-    epsilon: number,
-    budget: number,
-    hardStopOnExhaustion: boolean
-  ): SweepHit | null {
-    // экваториальный коэффициент бонда sag-поля — per-body константа, локальная
-    // поправка на 1/cosLat считается ниже на каждом шаге из текущего p̂
-    const equatorSagBond = field.equatorTexelMeters > 0 ? field.maxSagMeters / field.equatorTexelMeters : 0
-
-    let s = startS
-    const p = this.refinePoint.copy(startP)
-    for (let i = 0; i < budget; i++) {
-      const r = p.length()
-      const dir = r === 0 ? this.localDir.set(0, 0, 1) : this.localDir.copy(p).divideScalar(r)
-      const d = r - pointwiseFloorRadiusUnits(field, dir, collider.waterLevelMeters)
-      if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
-
-      const cosLat = Math.sqrt(Math.max(0, 1 - dir.y * dir.y))
-      const localSlopeBond = SLOPE_RANGE + equatorSagBond / Math.max(cosLat, MIN_MARCH_COS_LAT) + field.midbandSlopeBound
-
-      s += d / (1 + localSlopeBond)
-      if (s >= length) return null // честный пол не встречен в пределах отрезка
-
-      p.copy(startP).addScaledVector(step, s - startS)
-    }
-
-    return this.buildHit(collider, field, p, s, length, hardStopOnExhaustion)
+    if (pending.length === 0) return null
+    p.copy(from).addScaledVector(step, certified)
+    return this.buildHit(collider, field, p, certified, length, true)
   }
 
   /**
@@ -681,7 +547,7 @@ class CameraCollision {
    * по широкой фазе (сфера R+maxH+maxClearance, консервативная, дёшева).
    * Сама цель выноса — честная поточечная поверхность (`pointwiseFloorRadiusUnits`),
    * не сеточная: иначе пуш-аут держит камеру заметно выше настоящего пола
-   * (см. докблок класса и `marchPointwise`) буквально каждый кадр рядом с
+   * (см. докблок класса) буквально каждый кадр рядом с
    * телом, а не только в момент касания.
    */
   private pushOutTerrain(collider: Collider, field: TerrainHeightField, position: Vector3): boolean {
@@ -712,11 +578,16 @@ class CameraCollision {
 /**
  * Честная поточечная поверхность контакта, юниты three.js: R+h(dir̂)+sag(dir̂)+margin,
  * поднятая до уровня воды, если он выше (Task 5, water-foundation). Общая для
- * `marchPointwise` (доуточнение свипа) и `pushOutTerrain` — единственное
+ * `marchTerrain` и `pushOutTerrain` — единственное
  * место, где формула контакта у поверхности собрана, не дублируется.
  */
-function pointwiseFloorRadiusUnits(field: TerrainHeightField, dir: Vector3, waterLevelMeters: number | undefined): number {
-  const terrainFloor = field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
+function pointwiseFloorRadiusUnits(
+  field: TerrainHeightField,
+  dir: Vector3,
+  waterLevelMeters: number | undefined
+): number {
+  const terrainFloor =
+    field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
   return withWaterFloor(terrainFloor, field, waterLevelMeters)
 }
 
@@ -738,16 +609,15 @@ function waterFloorRadiusUnits(field: TerrainHeightField, waterLevelMeters: numb
  * воды бит-в-бит прежнее. Только max(...) — вода ПОДНИМАЕТ пол, никогда не
  * опускает: там, где рельеф уже выше уровня, эта функция — тождество.
  *
- * Безопасность марча (`marchTerrain`/`marchPointwise`) после клампа доказывает
- * ЛИПШИЦЕВОСТЬ, а не просто «консервативность» сама по себе (уточнение ревью
- * Task 5, фикс-раунд 1): max(f, const) липшицева с ТОЙ ЖЕ константой L, что
- * и f — константная функция 0-липшицева, максимум двух L-липшицевых функций
- * снова L-липшицев. Шаг march'а d/(1+L) безопасен для ЛЮБОЙ L-липшицевой
- * цели (это и есть всё допущение алгоритма, см. докблоки `marchTerrain`/
- * `marchPointwise`), поэтому клампнутая max(...)-цель наследует ту же
- * гарантию «шаг не перепрыгивает пол» без пересчёта константы уклона.
+ * Если U ограничивает рельеф на всём интервале, max(U, water) ограничивает
+ * и общий пол max(terrain, water). Та же функция применяется к интервалу
+ * и точке; предположение о непрерывности поверхности здесь не требуется.
  */
-function withWaterFloor(floorRadiusUnits: number, field: TerrainHeightField, waterLevelMeters: number | undefined): number {
+function withWaterFloor(
+  floorRadiusUnits: number,
+  field: TerrainHeightField,
+  waterLevelMeters: number | undefined
+): number {
   if (waterLevelMeters === undefined) return floorRadiusUnits
   return Math.max(floorRadiusUnits, waterFloorRadiusUnits(field, waterLevelMeters))
 }
@@ -768,7 +638,8 @@ function withWaterFloor(floorRadiusUnits: number, field: TerrainHeightField, wat
  */
 function isWaterBoundFloor(field: TerrainHeightField, dir: Vector3, waterLevelMeters: number | undefined): boolean {
   if (waterLevelMeters === undefined) return false
-  const terrainFloor = field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
+  const terrainFloor =
+    field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
   return waterFloorRadiusUnits(field, waterLevelMeters) >= terrainFloor
 }
 

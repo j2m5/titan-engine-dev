@@ -196,6 +196,13 @@ describe('generateDatabaseFiles — round-trip (обратимость)', () => 
 })
 
 describe('generateDatabaseFiles — защита валидатором', () => {
+  it('не генерирует акторов с устаревшим строковым categoryId', () => {
+    const snap = syntheticSnapshot()
+    snap.actors[1] = { ...snap.actors[1], categoryId: 'planet' as unknown as number }
+
+    expect(() => generateDatabaseFiles(snap)).toThrow(/categoryId.*numeric/)
+  })
+
   it('отказывается генерировать при ошибке целостности', () => {
     const snap = syntheticSnapshot()
     snap.orbits.push({

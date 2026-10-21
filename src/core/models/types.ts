@@ -79,7 +79,8 @@ export interface ICategory {
 
 export interface IActor {
   readonly id: number
-  readonly categoryId: number | AllowedCategory
+  /** Внешний ключ categories.id; строковый alias хранится только у категории. */
+  readonly categoryId: number
   readonly parentId: number | null
   name: string
   description: string

@@ -65,8 +65,8 @@ function orbitalHost(actor: IActor): IActor {
  * солнце среди детей. «Ближайшее» = с наименьшей своей большой полуосью:
  * у двойной Tatoo это Tatoo I.
  */
-function isStar(categoryId: number | string): boolean {
-  return typeof categoryId === 'number' && STARS.has(categoryId)
+function isStar(categoryId: number): boolean {
+  return STARS.has(categoryId)
 }
 
 function primaryStar(host: IActor): IActor | undefined {

@@ -23,6 +23,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula dust LOD', path: 'nebula/rendering', name: 'checkNebulaLodComposition', args: [{ density: 0 }] },
   { title: 'nebula lighting LOD', path: 'nebula/lightTransport', name: 'checkNebulaLightingLod' },
   { title: 'nebula diagonal bake', path: 'nebula/rendering', name: 'checkNebulaDiagonalBake' },
+  { title: 'crab far plane', path: 'crab/farPlane', name: 'checkCrabFarPlane' },
   { title: 'nebula incremental baking', path: 'nebula/rendering', name: 'checkNebulaIncrementalBaking' },
   { title: 'atmosphere terminator', path: 'atmosphere/terminator', name: 'checkAtmosphereTerminator' },
   { title: 'black hole depth (0 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [0] },
@@ -33,6 +34,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'star camera finalization', path: 'star/cameraFinalization', name: 'checkStarCameraFinalization' },
   { title: 'star prominences', path: 'star/prominences', name: 'checkStarProminences' },
   { title: 'stellar bloom', path: 'graphic/stellarBloom', name: 'checkStellarBloom' },
+  { title: 'gaia context restoration', path: 'sky/contextRecovery', name: 'checkGaiaContextRecovery' },
   { title: 'bitmap context restoration', path: 'textures/ImageBitmapLifecycle', name: 'checkImageBitmapLifecycle' }
 ]
 

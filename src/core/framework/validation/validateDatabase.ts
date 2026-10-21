@@ -846,7 +846,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // алиас категории по актору — для правил позиционирования и проверок формы
   const aliasByActor = new Map<number, string>()
   for (const actor of db.actors) {
-    const alias = typeof actor.categoryId === 'number' ? categoryAliasById.get(actor.categoryId) : actor.categoryId
+    const alias = categoryAliasById.get(actor.categoryId)
     if (alias !== undefined) aliasByActor.set(actor.id, alias)
   }
 
@@ -863,7 +863,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 2. Внешние ключи акторов ---
   for (const actor of db.actors) {
-    // categoryId может быть числом или строковым алиасом (IActor допускает оба)
+    // Проверяем и runtime-вход: старый JSON может содержать alias вместо FK.
     if (typeof actor.categoryId === 'number') {
       checkForeignKey(
         actor.categoryId,
@@ -871,12 +871,12 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
         { collection: 'actors', entity: actor.id, field: 'categoryId', nullable: false },
         issues
       )
-    } else if (!db.categories.some((c) => c.alias === actor.categoryId)) {
+    } else {
       issues.push({
         level: 'error',
         collection: 'actors',
         entity: actor.id,
-        message: `actors#${actor.id}.categoryId="${actor.categoryId}" is not a known category alias`
+        message: `actors#${actor.id}.categoryId must be a numeric category ID`
       })
     }
 

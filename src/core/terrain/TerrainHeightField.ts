@@ -1,4 +1,5 @@
 import { Vector2, Vector3 } from 'three'
+import { TerrainCollisionBounds } from './terrainCollisionBounds'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { HeightMapData } from './heightMapFormat'
 import type { TerrainAuxPayload } from './terrainAuxFormat'
@@ -183,14 +184,14 @@ function rowMeanRaw(map: HeightMapData, row: number): number {
  * построек в рамках бюджета.
  *
  * Двухслойная модель клиренса: `clearanceMeters`/`maxClearanceMeters`
- * (сетка выше) — СТРАЖ широкой фазы и внешнего марча коллизии: намеренно
+ * (сетка выше) — СТРАЖ широкой фазы коллизии: намеренно
  * консервативен (MAX-агрегация поточечных оценок по ячейке
  * `CLEARANCE_GRID_BASE_SEGMENTS` + дилатация 3×3 размазывают пиковый провис
  * на площадь ~блока — честная медиана по Луне ~28 м, после сетки ~236 м,
- * см. хендофф) — гарантирует отсутствие туннеля на свипе, но НЕ годится для
+ * см. хендофф), но НЕ годится для
  * итоговой позиции камеры «на полу». `sagMeters` ниже — честный поточечный
  * пол в конкретном направлении, без сеточного размазывания: коллизия
- * (`CameraCollision`) доуточняет им контакт, найденный маршем по сетке.
+ * (`CameraCollision`) проверяет диапазон этого пола на каждом интервале свипа.
  */
 class TerrainHeightField {
   private readonly uvScratch = new Vector2()
@@ -201,7 +202,13 @@ class TerrainHeightField {
   // и коллизии, аллокаций там быть не должно
   private readonly midbandEnvScratch: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
   private readonly envGradScratch: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
-  private readonly midbandSampleScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
+  private readonly midbandSampleScratch: MidbandSample = {
+    heightMeters: 0,
+    tiltE: 0,
+    tiltN: 0,
+    octaveWeightSum: 0,
+    envelope: 0
+  }
   private readonly clearanceGrid: Float32Array
   private readonly clearanceGridWidth: number
   private readonly clearanceGridHeight: number
@@ -217,29 +224,20 @@ class TerrainHeightField {
   private readonly poleSouthRaw: number
   private readonly equatorStepTexels: number
   private readonly spanCap: number
+  /** Дорогие полярные строки sag: ленивый кеш, не более восьми строк. */
+  private readonly sagRows = new Map<number, Float64Array>()
   /**
-   * Максимум поточечного sag по всей карте, метры — числитель липшицева
-   * бонда уклона sag-поля в CameraCollision.marchPointwise (знаменатель —
-   * `equatorTexelMeters` ниже, локальный по широте марч сам делит на
-   * cos(широты) текущего направления, см. её докблок).
+   * Максимум поточечного sag по всей карте, метры — запасная верхняя
+   * граница для интервалов, охватывающих много текселей.
    */
   public readonly maxSagMeters: number
   /**
-   * Экваториальный тексель, метры — знаменатель бонда уклона sag-поля выше.
-   * Sag-поле масштабирует восток-западный градиент как 1/cos(широты)
-   * (сходно с texelArc в surfaceNormalLocal), поэтому потребитель делит это
-   * значение на cos(широты) СВОЕГО текущего направления, а не здесь — единая
-   * per-body константа, локальная поправка считается на каждом шаге марча.
+   * Длина экваториального текселя в метрах; масштаб исходной DEM.
    */
   public readonly equatorTexelMeters: number
   /**
-   * Экваториальная дуга ячейки клиренс-сетки, метры — знаменатель липшицева
-   * бонда клиренса во ВНЕШНЕМ марше `CameraCollision.marchTerrain` (числитель
-   * — `maxClearanceMeters`): билинейная интерполяция сетки не меняется быстрее
-   * maxClearance за ячейку, а E-W дуга ячейки сжимается как cos(широты) —
-   * потребитель делит на cos(широты) СВОЕГО текущего направления сам, по тому
-   * же контракту, что `equatorTexelMeters` у sag-бонда `marchPointwise`.
-   * Производная от радиуса и ширины сетки — формат компаньона не меняет.
+   * Экваториальная дуга ячейки клиренс-сетки, метры. Производная от радиуса
+   * и ширины сетки; метаданные разрешения, а не граница уклона поверхности.
    */
   public readonly clearanceCellEquatorArcMeters: number
   /**
@@ -307,17 +305,16 @@ class TerrainHeightField {
    * участвует в ПОСТРОЕНИИ пирамид (`computeAux`/`buildClearanceGrid`/
    * `buildGeometricErrors` считают блоки ТОЛЬКО по карте, компаньон не
    * зависит от ручек полосы), это отдельный аналитический бонд
-   * (`maxHeightWithMidbandMeters`/`midbandSlopeBound`/`midbandErrorMeters`,
+   * (`maxHeightWithMidbandMeters`/`midbandErrorMeters`,
    * Task 5) для консьюмеров вне этого класса и для ε-геометрии
    * (`geometricErrorMeters`/`nodeGeometricErrorMeters` домешивают его поверх
    * готовой по-карте пирамиды при ЧТЕНИИ, см. `midbandErrorTable` ниже).
    */
   public readonly midband: MidbandField | null
   private readonly envelopeGrid: MidbandEnvelopeGrid | null
+  private readonly collisionBounds: TerrainCollisionBounds
   /** maxMeters карты + честная верхняя оценка амплитуды полосы (0 без полосы). */
   public readonly maxHeightWithMidbandMeters: number
-  /** Липшицев бонд |∇mid| полосы (0 без полосы) — для внешнего марча коллизии. */
-  public readonly midbandSlopeBound: number
   /**
    * ε-добавка полосы по уровням: `midbandErrorMeters(level)` — остаток
    * амплитуды полосы по весам вершинного шага уровня
@@ -368,7 +365,10 @@ class TerrainHeightField {
     this.maxSagMeters = aux.maxSagMeters
     this.levelErrorMeters = aux.levelErrorMeters
     this.block = block
-    this.hurst = terrainHurst(aux.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL], aux.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1])
+    this.hurst = terrainHurst(
+      aux.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL],
+      aux.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1]
+    )
     this.nodeMaxHeightMetersPyramid = aux.nodeMaxHeightMetersPyramid
     this.nodeErrorMetersPyramid = aux.nodeErrorMetersPyramid
 
@@ -391,7 +391,17 @@ class TerrainHeightField {
       this.envelopeGrid = null
     }
     this.maxHeightWithMidbandMeters = map.maxMeters + (this.midband?.maxAmplitudeMeters ?? 0)
-    this.midbandSlopeBound = this.midband?.slopeBound ?? 0
+    this.collisionBounds = new TerrainCollisionBounds({
+      map,
+      radiusMeters: radiusKm * 1000,
+      maxSagMeters: this.maxSagMeters,
+      marginMeters: CLEARANCE_MARGIN_METERS,
+      sampleMap: (u, v) => this.sampleMeters(u, v),
+      sampleSag: (u, v) => this.sampleSag(u, v),
+      midband: this.midband,
+      envelope: this.envelopeGrid,
+      params: midbandParams
+    })
 
     // ε-добавка полосы по уровням — см. докблок поля midbandErrorTable.
     // Считается ПОСЛЕ midband: без полосы (null) добавка тождественно 0 на
@@ -611,7 +621,19 @@ class TerrainHeightField {
       }
     }
 
-    return this.midband.sample(dir.x, dir.y, dir.z, env, mapMeters, out, stepMeters, gradE, gradN, parentStepMeters, parentOut)
+    return this.midband.sample(
+      dir.x,
+      dir.y,
+      dir.z,
+      env,
+      mapMeters,
+      out,
+      stepMeters,
+      gradE,
+      gradN,
+      parentStepMeters,
+      parentOut
+    )
   }
 
   private envelopeAt(u: number, v: number): number {
@@ -714,6 +736,11 @@ class TerrainHeightField {
     return this.surfaceRadiusUnits(dir) + toThreeJSUnits(this.clearanceMeters(dir) / 1000)
   }
 
+  /** Верхняя граница поточечного пола на всей малой дуге, без воды. */
+  public collisionRadiusUpperBoundUnits(fromDir: Vector3, toDir: Vector3): number {
+    return toThreeJSUnits(this.radiusKm + this.collisionBounds.heightUpperMeters(fromDir, toDir) / 1000)
+  }
+
   /**
    * Честный ПОТОЧЕЧНЫЙ провис в направлении dir̂, метры — без сеточного
    * MAX-размазывания (см. докблок класса, двухслойная модель). Формула та
@@ -772,6 +799,9 @@ class TerrainHeightField {
    */
   private texelSagRaw(x: number, y: number): number {
     const { width, height, data } = this.map
+    const v = (y + 0.5) / height
+    const stepTexels = Math.min(this.spanCap, this.equatorStepTexels / Math.sin(Math.PI * v))
+    if (stepTexels > 8) return this.sagRow(y, stepTexels)[x]
     const xHi = x === width - 1 ? 0 : x + 1
     const yLo = y === 0 ? 0 : y - 1
     const yHi = y === height - 1 ? height - 1 : y + 1
@@ -785,9 +815,6 @@ class TerrainHeightField {
     const nsComponent = 0.5 * Math.abs(d2y)
     const crossComponent = 0.5 * Math.abs(cross)
 
-    const v = (y + 0.5) / height
-    const cosLat = Math.sin(Math.PI * v)
-    const stepTexels = Math.min(this.spanCap, this.equatorStepTexels / cosLat)
     const window = sagWindow(stepTexels, this.spanCap)
 
     let absD2Sum = absD2At(data, row, width, x)
@@ -818,6 +845,53 @@ class TerrainHeightField {
     }
 
     return Math.max(ewComponent, nsComponent, crossComponent)
+  }
+
+  /** Та же формула texelSagRaw, но вся строка за O(width), как у билдера aux. */
+  private sagRow(y: number, stepTexels: number): Float64Array {
+    const cached = this.sagRows.get(y)
+    if (cached !== undefined) {
+      this.sagRows.delete(y)
+      this.sagRows.set(y, cached)
+      return cached
+    }
+    const { width, height, data } = this.map
+    const row = y * width,
+      rowLo = Math.max(0, y - 1) * width,
+      rowHi = Math.min(height - 1, y + 1) * width
+    const prefix = new Float64Array(width + 1)
+    // Все слагаемые целые Uint16-разности: сумма/вычитание префиксов точны.
+    for (let x = 0; x < width; x++) prefix[x + 1] = prefix[x] + absD2At(data, row, width, x)
+    const span = Math.max(1, Math.min(this.spanCap, Math.ceil(stepTexels)))
+    const bufLen = width + 2 * span
+    const ranges = new Float32Array(width)
+    slidingRangeWrap(
+      data,
+      row,
+      width,
+      span,
+      new Uint16Array(bufLen),
+      new Int32Array(bufLen),
+      new Int32Array(bufLen),
+      ranges
+    )
+    const window = sagWindow(stepTexels, this.spanCap)
+    const values = new Float64Array(width)
+    for (let x = 0; x < width; x++) {
+      let sum = circularSum(prefix, prefix[width], width, x - window.whole, 2 * window.whole + 1)
+      if (window.fraction > 0) {
+        const edge = window.whole + 1
+        sum += window.fraction * (absD2At(data, row, width, x - edge) + absD2At(data, row, width, x + edge))
+      }
+      const xHi = (x + 1) % width,
+        raw = data[row + x]
+      const ns = 0.5 * Math.abs(data[rowLo + x] - 2 * raw + data[rowHi + x])
+      const cross = 0.5 * Math.abs(raw - data[row + xHi] - data[rowHi + x] + data[rowHi + xHi])
+      values[x] = Math.max(Math.min(ewCurvatureRaw(stepTexels, sum), ranges[x]), ns, cross)
+    }
+    if (this.sagRows.size >= 8) this.sagRows.delete(this.sagRows.keys().next().value!)
+    this.sagRows.set(y, values)
+    return values
   }
 
   /**
@@ -1331,7 +1405,12 @@ class TerrainHeightField {
     return pyramid
   }
 
-  private buildNodeMaxHeightPyramid(block: number, blockMax: Uint16Array, blocksX: number, blocksY: number): Float32Array {
+  private buildNodeMaxHeightPyramid(
+    block: number,
+    blockMax: Uint16Array,
+    blocksX: number,
+    blocksY: number
+  ): Float32Array {
     const { minMeters, maxMeters } = this.map
     const pyramid = new Float32Array(CUBE_FACES * FACE_NODE_COUNT)
     const rawToMeters = (raw: number): number => minMeters + (raw / 65535) * (maxMeters - minMeters)
@@ -1354,7 +1433,6 @@ class TerrainHeightField {
 
     return pyramid
   }
-
 
   /**
    * ε КОНКРЕТНОГО узла, метры — числитель SSE (`terrainQuadtreeSelect`).
@@ -1408,7 +1486,9 @@ class TerrainHeightField {
   public geometricErrorMeters(level: number): number {
     const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
     const mapEpsilon =
-      clampedLevel <= TERRAIN_MODEL_LEVEL ? this.levelErrorMeters[clampedLevel] : this.extrapolatedLevelErrorMeters(clampedLevel)
+      clampedLevel <= TERRAIN_MODEL_LEVEL
+        ? this.levelErrorMeters[clampedLevel]
+        : this.extrapolatedLevelErrorMeters(clampedLevel)
 
     return mapEpsilon + this.midbandErrorMeters(clampedLevel)
   }
@@ -1419,7 +1499,10 @@ class TerrainHeightField {
    * глубже: выше текселя — самоподобие шаг^H, ниже — линейная билинейка.
    */
   private extrapolatedLevelErrorMeters(level: number): number {
-    return this.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1] * terrainLevelScale(this.map.width, level, this.block, this.hurst)
+    return (
+      this.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1] *
+      terrainLevelScale(this.map.width, level, this.block, this.hurst)
+    )
   }
 
   /**
@@ -1468,7 +1551,9 @@ class TerrainHeightField {
     if (clampedLevel <= TERRAIN_MODEL_LEVEL) {
       const patches = 2 ** clampedLevel
 
-      return this.nodeMaxHeightMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
+      return this.nodeMaxHeightMetersPyramid[
+        face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j
+      ]
     }
 
     const delta = clampedLevel - TERRAIN_MODEL_LEVEL

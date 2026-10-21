@@ -6,8 +6,9 @@
     "originalFiles": 1285,
     "originalFullTextReviews": 1256,
     "originalStructuralReviews": 29,
-    "addedSourceAndTestFiles": 3,
-    "totalIndexedFiles": 1288,
+    "addedSourceAndTestFiles": 11,
+    "addedAfterAuditSourceAndTestFiles": 8,
+    "totalIndexedFiles": 1296,
     "missing": 0,
     "notes": "Initial inventory includes 1278 tracked files and 7 relevant untracked source/test/doc/instruction files. Earlier audit fixes are preserved. Report/index artifacts are outputs, not input files in this inventory.",
     "excluded": [
@@ -38,15 +39,15 @@
     },
     "graphics": {
       "original": 260,
-      "reviewed": 261,
+      "reviewed": 262,
       "structural": 1,
-      "added": 2
+      "added": 3
     },
     "terrain": {
       "original": 97,
-      "reviewed": 97,
+      "reviewed": 103,
       "structural": 0,
-      "added": 0
+      "added": 6
     },
     "rings": {
       "original": 195,
@@ -62,9 +63,9 @@
     },
     "nebula": {
       "original": 66,
-      "reviewed": 65,
+      "reviewed": 66,
       "structural": 1,
-      "added": 0
+      "added": 1
     },
     "tooling-docs": {
       "original": 162,
@@ -107,7 +108,10 @@
     "31": "Full UTF-8 test read; fixtures/assertions and production contract comparison.",
     "32": "sharp metadata inspection: JPEG 1024x1024, RGB3, sRGB; fixture import and calibration contract traced",
     "33": "Full UTF-8 static review of tests/CPU mirrors/manual GPU harness; no GPU run",
-    "34": "Added during audit; full source and independent final diff review; executed in targeted and final checks recorded in the audit report."
+    "34": "Added during audit; full source and independent final diff review; executed in targeted and final checks recorded in the audit report.",
+    "35": "Added after owner-approved audit follow-up; full source and independent review; WebGL red/green comparisons against a generous far-plane reference, with production and diagnostic near planes.",
+    "36": "Added after owner-approved Gaia recovery follow-up; full source and independent review; real WebGL context loss/restoration with synthetic RGB9_E5 tiles and production sky shader, six faces and fine/coarse stars, two recovery cycles with exact pixel comparisons.",
+    "37": "Added after owner-approved collision follow-up; full source and independent mathematical review, red/green regressions, actual six-map diagnostics, typecheck and complete CPU suite. Includes simplex branch ties, full-floor interval bounds, Float32 metadata padding and bounded polar row caches."
   },
   "findings": [
     {
@@ -156,8 +160,15 @@
       "impact": "Actor.category returns null because belongsTo compares the string alias with Category.id. UI ObjectList dereferences category with non-null assertions; category-specific runtime/body-info behavior loses category identity.",
       "evidence": "Scratch probe new Actor({id:999,categoryId:planet}).category returns null while categories includes alias planet. IActor permits numeric or alias categoryId; validator accepts this. Category.actors similarly only uses numeric IDs; GenericForm nebula routing/hasInvalidInput only resolve numeric category IDs. Cross-module caller trace: RenderableFactory.make:93 switches only numeric IDs 1..12 and throws on an alias; DynamicNode.isOriented:58-62 explicitly excludes string IDs; atmosphere/ring material queries use numeric IDs. Fixing only Actor.category would not make aliases functional.",
       "smallFix": false,
-      "decisionNeeded": "Choose whether category aliases remain supported throughout runtime/editor relations or are normalized to numeric IDs at a single boundary; apply consistently to Actor.category, reverse relations and category-dependent editor logic.",
-      "status": "deferred-owner-decision"
+      "decisionNeeded": false,
+      "status": "resolved-after-audit",
+      "resolution": {
+        "date": "2026-10-21",
+        "ownerDecision": "Remove early-engine legacy string category IDs. Actor.categoryId is a numeric foreign key; Category.alias remains available.",
+        "change": "Narrowed IActor and NullActor field/constructor to number; shared validator rejects nonnumber category IDs and resolves semantics only through the category ID map. Removed legacy union types in DynamicNode and sunAngularRadiusFor. Shipped data already uses numeric IDs, so no data migration was needed.",
+        "red": "Before implementation, five expected failures in validator, generator and editor checks reproduced acceptance of a known legacy alias and the former alias-based diagnostics.",
+        "verification": "240 tests in 16 files passed. Known alias, unknown string and numeric string are rejected; database generator refuses legacy rows; real editor selector recovers an invalid row and emits numeric categoryId. Shipped database, category aliases, models, orientation and factory consumers pass. Scoped ESLint and prepared-copy full TypeScript passed. Independent eight-file review found no issues; no GPU rerun for this data-contract change."
+      }
     },
     {
       "group": "ui-data",
@@ -169,8 +180,15 @@
       "impact": "Ceres mass, density, surface gravity and escape velocity are based on a sub-nanogram mass for a 469.7 km-radius body, so the displayed physical quantities are invalid.",
       "evidence": "Shipped Ceres physical row id6/actorId9 stores mass5.21e-10 (mass contract is kg) and radius469.7 (km). Source-derived density is 1.2002934425010829e-30 g/cm3. Other Solar-system masses use kg values such as 3.3022e23 for Mercury. No replacement scientific value guessed.",
       "smallFix": false,
-      "decisionNeeded": "Owner should confirm intended Ceres mass/source and units; review historical physical table values before regenerating the data.",
-      "status": "deferred-owner-decision"
+      "decisionNeeded": false,
+      "status": "resolved-after-audit",
+      "resolution": {
+        "date": "2026-10-21",
+        "ownerDecision": "Accept the JPL mass for Ceres: 938.416 x 10^18 kg, or 9.38416e20 kg.",
+        "source": "https://ssd.jpl.nasa.gov/planets/phys_par.html",
+        "change": "Updated only the mass in physical row id 6 / actorId 9 using the validated database generator output.",
+        "verification": "Fresh process loaded the saved database through Actor.find(9) and describeBody: density 2.1619473534320464 g/cm3, gravity 0.28388371887364267 m/s2, escape velocity 0.5164110431719097 km/s. All 53 existing tests in 6 files passed (tests/bodyInfo, ShippedDatabase.spec.ts, generateDatabaseFiles.spec.ts); scoped ESLint and full TypeScript check in the prepared verification tree passed. No new permanent test or repeated full CPU/GPU suite for this data-only change."
+      }
     },
     {
       "group": "ui-data",
@@ -182,8 +200,14 @@
       "impact": "Selector returns the string s3, not a Storage object/facade; it also changes a process-wide static driver. No current callers found, so no present application-path failure claimed.",
       "evidence": "Scratch probe logs Storage.disk(s3) === string s3. Implementation returns the assignment this.driver=driver, while the signature promises Storage. Empty instance shape lets TypeScript miss the mismatch.",
       "smallFix": false,
-      "decisionNeeded": "Decide whether to retain a global void selector, provide an actual per-disk facade, or remove this unused API; current return contract is demonstrably false.",
-      "status": "deferred-owner-decision"
+      "decisionNeeded": false,
+      "status": "resolved-after-audit",
+      "resolution": {
+        "date": "2026-10-21",
+        "ownerDecision": "Remove the unused method: use local storage during development and s3 for production, selected by configuration.",
+        "change": "Removed Storage.disk; the configured driver is readonly. Storage.url still uses the same local/s3 drivers.",
+        "verification": "No callers found in src/tests/scripts/vite. Full TypeScript check in the prepared verification tree, scoped ESLint and diff whitespace checks passed. No new tests or repeated full suite for this unused API removal."
+      }
     },
     {
       "group": "graphics",
@@ -229,7 +253,7 @@
     {
       "group": "graphics",
       "id": "GFX-004",
-      "decisionNeeded": "Choose reload versus CPU retention for context recovery and disposal/cancellation ownership",
+      "decisionNeeded": false,
       "trigger": "WebGL context lost and restored",
       "evidence": "GaiaSky owns raw GL handles, start returns null while this.textures exists; no context listeners anywhere for Gaia (rg contextrestored/GaiaSky); Application only starts singleton once; evidence is static source/lifecycle trace only, no actual context loss experiment",
       "severity": "high",
@@ -237,7 +261,15 @@
       "smallFix": false,
       "impact": "Gaia GL textures are invalid and renderer properties cache is rebuilt; version-0 wrappers cannot recreate manually uploaded cube content, leaving sky absent",
       "file": "src/core/sky/GaiaSky.ts",
-      "status": "deferred-owner-decision"
+      "status": "resolved-after-audit",
+      "resolution": {
+        "date": "2026-10-21",
+        "ownerDecision": "Recreate raw GL textures and reload Gaia tiles after WebGL context restoration; do not retain a full CPU copy.",
+        "change": "GaiaSky owns loss/restore listeners and a per-load AbortController. Loss cancels fetches, retries and queued tiles, invalidates the generation, clears bindings and resets LOD without deleting invalid GL handles. Restoration after Three reinitialization attaches new handles to the same wrappers and reloads tiles. Dispose detaches listeners and prevents automatic restart; explicit restart and first start while lost are supported. Cancelled loads are distinct from missing files and do not warn.",
+        "red": "Seven focused lifecycle/fetch/cancellation regressions failed before implementation. Actual WebGL loss left all 12 sky captures black, no additional tile requests, maximum pixel error 0.75 and three invalid-handle deletion warnings.",
+        "verification": "85 tests in 10 files passed (sky and background). Browser Gaia and stellar-bloom probes both passed. Gaia: two real context loss/restore cycles, six faces and fine/coarse stars using production SkyboxBackground shader, 24 exact HDR pixel comparisons, requests 6 -> 12 -> 18, no invalid GL warnings. Scoped ESLint and prepared-copy full TypeScript passed; independent seven-file review found no actionable issues.",
+        "limitations": "Browser execution used Chrome 156 ANGLE/SwiftShader and synthetic tail tiles (levels 4-11), not the full external Gaia archive or physical-device matrix. Probe draw resources are disposed before loss to scope persistence to Gaia raw textures. Signal-ignoring custom fetchers settle on their own, but their late results are discarded. Pre-existing allocation-failure cleanup is outside this fix."
+      }
     },
     {
       "group": "graphics",
@@ -300,16 +332,49 @@
     },
     {
       "group": "terrain",
-      "impact": "midbandSlopeBound is not a global Lipschitz bound for actual height. CameraCollision uses it to choose march steps (lines522 and598), so its no-tunneling reasoning does not hold for supported settings. A visible tunnel has not been reproduced.",
-      "status": "deferred-owner-decision",
+      "impact": "midbandSlopeBound is not a global Lipschitz bound for actual height. Follow-up reproduced a missed sweep through production CameraCollision.resolve(): an approximately 1m request crosses into terrain without a hit and final push-out masks the miss with approximately 10m total movement. A browser-visible fly-through has not been tested. Default polar domain-warp switching also makes canonical height discontinuous, including on all six rebuilt DEMs.",
+      "status": "fixed",
       "severity": "medium",
       "evidence": "Production TerrainHeightField, zonal slope0.3, radius1000km, map2048x1024 [-40000,40000], waterLevelMeters0, midbandWaterFadeMeters1 (all accepted settings): published bound2.8035, midbandTilt21.1868324, actual height-band central derivative19.3494819 at latitude arc1.1011011m. Scratch terrain-probe.ts. sample includes strength*height*envGrad at lines266-267 but constructor bound covers only noise/warp with frozen direction. Existing bound tests use fixed/wide envelope.",
       "trigger": "A valid narrow midbandWaterFadeMeters creates rapidly varying coast envelope. Same issue can arise from terrain-dependent envelope/flow derivatives absent from the bound.",
       "file": "src/core/terrain/midbandField.ts",
       "line": 128,
-      "decisionNeeded": "Choose a conservative bound including envelope and flow-direction variation, restrict supported fade/parameter ranges with an explicit contract, or adopt collision marching that remains safe without a global derivative bound. Account for runtime cost before changing marching.",
+      "decisionNeeded": false,
       "id": "TERRAIN-MIDBAND-SLOPE-BOUND",
-      "smallFix": false
+      "followupInvestigation": {
+        "date": "2026-10-21",
+        "productCodeChanged": false,
+        "assetsChanged": false,
+        "syntheticProbe": ".superpowers/full-audit-2026-10-21/terrain-collision-probe.ts",
+        "syntheticResults": ".superpowers/full-audit-2026-10-21/terrain-collision-probe.json",
+        "realMapProbe": ".superpowers/full-audit-2026-10-21/terrain-collision-real-probe.ts",
+        "realMapResults": ".superpowers/full-audit-2026-10-21/terrain-collision-real-probe.json",
+        "syntheticAssertionsPassed": true,
+        "missedSweepMarginMeters": [
+          6,
+          8,
+          10,
+          12
+        ],
+        "polarJumpMetersOnFlatMap": 1.1716907887847925,
+        "polarJumpsOnRebuiltMaps": "Measured both poles of Earth, Moon, Mercury, Mars, Ceres and Enceladus over 360 longitudes; largest sampled jump 35.545476m on Mercury, default geometry parameters.",
+        "demSlopeCounterexample": "Ceres sampled DEM slope 2.478369 at latitude 61.413571 degrees exceeds SLOPE_RANGE 2; texture encoding saturation does not constrain height geometry.",
+        "globalBoundMovementComparison": "Same 1000.104m request and at least 98.574m sampled clearance: bound 2.8035 completes, bound 22 hard-stops at 257.851m, bound 100 at 62.146m. Diagnostic-only overrides; not CPU timing or a proof of either trial bound.",
+        "limits": "Finite sampling establishes counterexamples, not maximum bounds; no browser visual acceptance or new implementation. Full test suite was not repeated for diagnostic-only work."
+      },
+      "smallFix": false,
+      "resolutionDate": "2026-10-22",
+      "resolution": "Owner approved smooth polar envelope/warp and complete interval floor certification; legacy global slope API removed. Bounded polar row indexes/sag caches retain safe movement; outward Float32 metadata padding covers narrow and broad phases.",
+      "validation": {
+        "checks": "npm test -- --run в изолированной копии: TypeScript без ошибок, 550 файлов прошли / 2 пропущены; 5459 тестов прошли / 9 пропущены. ESLint всех 12 изменённых TS-файлов и git diff --check — без ошибок.",
+        "actualMaps": "terrain-certificates-after.json: 6 maps, 12864 intervals,167232 floor samples,3000 exactly unchanged outside-cap heights,18 safe flights complete; terrain-sag-compatibility.json:6000 identical sag samples.",
+        "review": "Independent mathematical/code review; branch/noise/UV/warp/sweep/index/LRU checks and non-power-of-two dimensions. Final floating metadata finding fixed with actual cosine-map regression.",
+        "limits": "Agent did not run browser; owner completed visual acceptance on2026-10-22. First polar row-index construction5–28ms; warm polar resolve0.04–0.78ms. Existing approximate tilt and transient coarse visual LOD are outside the collision guarantee."
+      },
+      "ownerAcceptance": {
+        "date": "2026-10-22",
+        "instruction": "все проверил можно пушить в мастер"
+      }
     },
     {
       "group": "rings",
@@ -402,9 +467,17 @@
       "impact": "The passing test proves a bound for the former [-1,1] proxy; current NebulaVolume uses BoxGeometry(4,4,4), so this claimed geometric guarantee is false. No runtime rendering failure is claimed.",
       "evidence": "Crab shell size 900 AU; camera distance hypot(1280,1280)=1810.193 AU. Test: distance*1.3 + size*sqrt(3)=3912.097 AU < 5000. Actual proxy bound: distance*1.3 + 2*size*sqrt(3)=5470.943 AU > 5000. NebulaVolume.ts:41 constructs BoxGeometry(4,4,4). docs/crab-remnant-handoff.md section 3 repeats former bound. Current extreme near/far projection rounds the float32 z coefficient to -1; therefore this is a stale test/document guarantee, not evidence that current Crab pixels clip.",
       "smallFix": false,
-      "decisionNeeded": true,
-      "disposition": "Deferred: review geometric guard/documentation independently; do not change camera, far plane or assertion tolerance during this audit.",
-      "status": "deferred-owner-decision"
+      "decisionNeeded": false,
+      "disposition": "Resolved after owner approved preserving Crab size/start camera with a 30% retreat guarantee at all viewing orientations.",
+      "status": "resolved-after-audit",
+      "resolution": {
+        "date": "2026-10-21",
+        "ownerDecision": "Keep the current Crab size and starting camera; guarantee 30% retreat at every orientation and check actual pixels before adjusting far.",
+        "change": "CPU guard derives the raster proxy radius from actual NebulaVolume.geometry. Global far increased from 5000 to 6000 AU to cover the 5470.943 AU bound; comments and Crab handoff updated. Log-depth step increases by about 0.9235%.",
+        "red": "Corrected CPU guard failed at old far. Real procedural Crab shell GPU probe: production near had no clipping in 27 views; diagnostic near 1 AU lost 115-116 pixels in all 8 diagonal views, with maximum relative error 0.098574.",
+        "green": "At far 6000 AU all 54 WebGL comparisons (27 views for each near setting) exactly match HDR pixels at reference far 20000 AU. Chromium 156 / ANGLE SwiftShader; not a physical-GPU run or full-scene artistic review.",
+        "verification": "296 unit tests in 35 files passed. 23/23 browser probes passed, no skips/retries. Scoped ESLint and full TypeScript in the prepared verification tree passed. Independent scoped review found no issues. No repeated unrelated full suite."
+      }
     },
     {
       "group": "tooling-docs",
@@ -437,8 +510,258 @@
       "impact": "Equal-weight overlapping source windows do not preserve area mean and change relief amplitude",
       "evidence": "Actual function probe: [0,0,100,0,0] 5x1 to 3x1 produces [0,33.333332,0]; source mean20, output mean11.11111; area weights would yield [0,60,0]",
       "smallFix": false,
-      "status": "deferred",
-      "decisionNeeded": "Select resampling filter and decide which baked height/slope/aux assets to regenerate; no shipped archive comparison performed"
+      "status": "fixed",
+      "decisionNeeded": false,
+      "resolution": {
+        "date": "2026-10-21",
+        "scope": "Owner authorized all six affected DEM rebuilds and preserving every original under storage/local. All six height/slope/aux sets installed and verified with backups; Mars atmosphere floor updated through the validated generator. A subsequent explicit owner request authorized cloud synchronization of the 18 runtime assets; fresh authenticated and anonymous HEAD checks passed.",
+        "change": "Exact overlap-area weights replace equal weights for touched cells. Raster mean preserved within Float32 rounding; positive weights, same signature/output/identity-copy contract. Existing pixel-is-area registration retained.",
+        "red": "13 expected failures (five hand-derived impulse/edge/2D examples plus eight mean-preservation cases); eight existing/control checks passed before implementation.",
+        "verification": "62 tests/5 files passed, scoped ESLint and prepared-copy full TypeScript passed; independent two-file review had no actionable findings. Actual build-heightmap CLI maps the 5-to-3 impulse to height range 0..60 and Uint16 [0,65535,0]. No unrelated CPU/GPU suite rerun.",
+        "realData": "Full ETOPO 21601x10801 ->8192x4096. Old conversion byte-identical to live height map. New-minus-old height RMS14.11674m, MAE6.32451m, max753.39868m; raster mean source-1892.35284683m, old-1892.35101698m, new-1892.35284686m. Source registration held fixed.",
+        "candidate": "All six production-CLI candidates installed. Original base maps and full historical postprocessing chains reproduced byte-for-byte (12 checks). Decoded lossless slope matches every expected byte; all aux fingerprints and shared Enceladus/Nacre settings match. Earth height/aux reproduce the previous area-filter rebuild; slope now uses the current DB radius 6360000m instead of the earlier command’s 6371000m.",
+        "installation": {
+          "manifest": "storage/local/textures/dem-rebuild-2026-10-21/installed.json",
+          "validation": "storage/local/textures/dem-rebuild-2026-10-21/verification.json",
+          "backup": "storage/local/textures/dem-rebuild-2026-10-21/before",
+          "installedAt": "2026-10-21T20:05:26.151Z",
+          "files": 19
+        },
+        "sourceDiscovery": {
+          "correction": "Earlier search incorrectly generalized storage-only results to the whole project. User pointed out tmpscreenshots; full search of 1793 files in tmpscreenshots and storage/local found original Ceres and Enceladus TIFFs, both fully decoded with expected dimensions and NODATA counts. 768 large-file signatures checked; all 129 raw files in these roots are converted TEHM; no archives found there.",
+          "sources": [
+            {
+              "body": "Ceres",
+              "path": "tmpscreenshots/tif/Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016.tif",
+              "bytes": 466647217,
+              "sha256": "81da73151b4353c03d7ca18fa85972d1cb9c8530b3c5496df9ade7cb75af1915",
+              "width": 21600,
+              "height": 10800,
+              "bitsPerSample": 16,
+              "sampleFormat": 2,
+              "scale": 1,
+              "offset": 470000,
+              "nodata": -32768,
+              "nodataCount": 21600,
+              "validSampleMin": -27951,
+              "validSampleMax": 17057,
+              "validSampleMean": -6375.480023591862,
+              "fullDecodeVerified": true
+            },
+            {
+              "body": "Enceladus",
+              "path": "tmpscreenshots/tif/Enceladus_Cassini_DEM_global_200m_schenk2024.tif",
+              "bytes": 129613723,
+              "sha256": "7c08c46238cde6528c9143f0c667d42cd3bc6ac60c572595a7e6cad2d6775f91",
+              "width": 8049,
+              "height": 4025,
+              "bitsPerSample": 32,
+              "sampleFormat": 3,
+              "scale": 1,
+              "offset": 0,
+              "nodata": -3.4028226550889045e+38,
+              "nodataCount": 12073,
+              "validSampleMin": -2.733046531677246,
+              "validSampleMax": 2.3391175270080566,
+              "validSampleMean": 0.009084969562672268,
+              "fullDecodeVerified": true
+            }
+          ]
+        },
+        "sourceAcquisition": {
+          "manifest": "storage/local/textures/dem-sources-2026-10-21.json",
+          "downloadedBytes": 1194486581,
+          "sources": [
+            {
+              "body": "earth",
+              "path": "storage/local/textures/planets/earth/ETOPO1_Ice_g_geotiff.tif",
+              "bytes": 466712272,
+              "sha256": "e4c4d8a98aba483012ebafd304942d09e4b880e1e596016573493c1b9536ddb3",
+              "width": 21601,
+              "height": 10801
+            },
+            {
+              "body": "moon",
+              "path": "storage/local/textures/planets/moon/LDEM_64.IMG",
+              "bytes": 530841600,
+              "sha256": "1c4958699d4cffd7e777d51421b6044bba300aa0bef286a544309efb082cdbd6",
+              "width": 23040,
+              "height": 11520,
+              "sourceUrl": "https://imbrium.mit.edu/DATA/LOLA_GDR/CYLINDRICAL/IMG/LDEM_64.IMG"
+            },
+            {
+              "body": "mercury",
+              "path": "storage/local/textures/planets/mercury/Mercury_Messenger_USGS_DEM_Global_665m_v2.tif",
+              "bytes": 530934581,
+              "sha256": "defce776241dcaf44cb0f081ee508c17dbea28aa5a22880bf7a5e8c25f96cbea",
+              "width": 23040,
+              "height": 11520,
+              "sourceUrl": "https://planetarymaps.usgs.gov/mosaic/Mercury_Messenger_USGS_DEM_Global_665m_v2.tif"
+            },
+            {
+              "body": "mars",
+              "path": "storage/local/textures/planets/mars/megt90n000fb.img",
+              "bytes": 132710400,
+              "sha256": "09ae1c0956afcdc869bd82c55993849f67c16ef0efe73f38cb1ea204c186ad8b",
+              "width": 11520,
+              "height": 5760,
+              "sourceUrl": "https://pds-geosciences.wustl.edu/mgs/urn-nasa-pds-mgs_mola_topography_derived/meg032/megt90n000fb.img"
+            },
+            {
+              "body": "ceres",
+              "path": "storage/local/textures/planets/ceres/Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016.tif",
+              "bytes": 466647217,
+              "sha256": "81da73151b4353c03d7ca18fa85972d1cb9c8530b3c5496df9ade7cb75af1915",
+              "width": 21600,
+              "height": 10800
+            },
+            {
+              "body": "enceladus",
+              "path": "storage/local/textures/planets/enceladus/Enceladus_Cassini_DEM_global_200m_schenk2024.tif",
+              "bytes": 129613723,
+              "sha256": "7c08c46238cde6528c9143f0c667d42cd3bc6ac60c572595a7e6cad2d6775f91",
+              "width": 8049,
+              "height": 4025
+            }
+          ],
+          "verification": "Moon, Mercury and Mars downloaded from official sources and fully decoded with matching expected file sizes and SHA-256 receipts. Moon IMG, LBL and PDS4 XML also match official PDS MD5 checksums; published label extrema differ from actual data, recorded in manifest. Mars exact filename and big-endian order confirmed from PDS3/PDS4 labels."
+        },
+        "rollout": "All six installed and verified locally, then all 18 runtime assets synchronized to the configured cloud bucket. Ceres/Enceladus original TIFFs copied into storage/local with matching SHA-256; original tmpscreenshots files retained. Every source and Mercury displacement input preserved. Existing slope ranges retained: Ceres range2 is the accepted ceiling despite recommended4; clipping0.099051% remains below0.1%. Mars floor -8507.4521484375 -> -8516.4423828125. ETOPO registration and midband collision bounds remain separate open issues.",
+        "earlierEarthInstallation": {
+          "manifest": "storage/local/textures/dem-resample-2026-10-21/installed.json",
+          "validation": "storage/local/textures/dem-resample-2026-10-21/verification.json",
+          "backup": "storage/local/textures/dem-resample-2026-10-21/before/planets/earth",
+          "installedAt": "2026-10-21T18:55:38.722Z"
+        },
+        "rolloutVerification": {
+          "pipelineTests": "172 passed in13files",
+          "databaseTests": "29 passed in3files",
+          "typecheck": "Full TypeScript passed in prepared verification copy without pre-existing sky WIP",
+          "reviewer": "Independent rollout review accepted; 57 live/staged/backup SHA-256 values independently recalculated; no Critical/Important findings",
+          "reports": [
+            {
+              "body": "earth",
+              "min": -10630.43359375,
+              "max": 7113.90478515625,
+              "slopeRange": 0.25,
+              "recommendedRange": 0.25,
+              "clippedPercent": 0.029170513153076172,
+              "delta": {
+                "meanAbsoluteMeters": 0,
+                "rmsMeters": 0,
+                "maxAbsoluteMeters": 0,
+                "p999Percent": 0
+              }
+            },
+            {
+              "body": "moon",
+              "min": -9903.4365234375,
+              "max": 14143.9287109375,
+              "slopeRange": 1,
+              "recommendedRange": 1,
+              "clippedPercent": 0.03435313701629639,
+              "delta": {
+                "meanAbsoluteMeters": 10.208232832101146,
+                "rmsMeters": 17.253967516974765,
+                "maxAbsoluteMeters": 408.0241178676006,
+                "p999Percent": 0.2884108883003611
+              }
+            },
+            {
+              "body": "mercury",
+              "min": -17957.498046875,
+              "max": 10424.8408203125,
+              "slopeRange": 2,
+              "recommendedRange": 2,
+              "clippedPercent": 0.005221366882324219,
+              "delta": {
+                "meanAbsoluteMeters": 4.664877747512337,
+                "rmsMeters": 9.036958073879445,
+                "maxAbsoluteMeters": 326.6550398284344,
+                "p999Percent": 0.022521781519002637
+              }
+            },
+            {
+              "body": "mars",
+              "min": -8516.4423828125,
+              "max": 22237.54296875,
+              "slopeRange": 1,
+              "recommendedRange": 1,
+              "clippedPercent": 0.0012606382369995117,
+              "delta": {
+                "meanAbsoluteMeters": 9.521981554018405,
+                "rmsMeters": 23.693256953531474,
+                "maxAbsoluteMeters": 982.3169951528762,
+                "p999Percent": 2.5673645509024734
+              }
+            },
+            {
+              "body": "ceres",
+              "min": -28397.21875,
+              "max": 20475.833984375,
+              "slopeRange": 2,
+              "recommendedRange": 4,
+              "clippedPercent": 0.09905099868774414,
+              "delta": {
+                "meanAbsoluteMeters": 4.430306430538498,
+                "rmsMeters": 15.422427034672284,
+                "maxAbsoluteMeters": 591.6268035448593,
+                "p999Percent": 0.8286154154885983
+              }
+            },
+            {
+              "body": "enceladus",
+              "min": -3496.900390625,
+              "max": 3792.9619140625,
+              "slopeRange": 1,
+              "recommendedRange": 1,
+              "clippedPercent": 0.04712343215942383,
+              "delta": {
+                "meanAbsoluteMeters": 8.171592797534224,
+                "rmsMeters": 12.108435632047518,
+                "maxAbsoluteMeters": 263.13332638183556,
+                "p999Percent": 1.0789608915083182
+              }
+            }
+          ],
+          "visualAcceptance": "Owner review in application remains; no automated scene acceptance claimed."
+        },
+        "cloudPublication": {
+          "status": "cloud-synchronized",
+          "checkedAt": "2026-10-21T20:22:41.677Z",
+          "publicCheckedAt": "2026-10-21T20:22:40.242Z",
+          "endpoint": "https://storage.yandexcloud.net",
+          "bucket": "textures",
+          "files": 18,
+          "bytes": 433963546,
+          "plan": "storage/local/textures/dem-rebuild-2026-10-21/cloud/plan.json",
+          "verification": "storage/local/textures/dem-rebuild-2026-10-21/cloud/verification.json",
+          "publicVerification": "storage/local/textures/dem-rebuild-2026-10-21/cloud/public-verification.json",
+          "rollback": "Every prior cloud object has a verified local rollback file and previous headers in cloud/plan.json.",
+          "scope": "Only the 18 rebuilt runtime assets were synchronized. Original DEMs, displacement, metadata, code and database were not uploaded; no objects deleted.",
+          "applicationBuild": "The local Mars atmosphere floor change must be included in the next application build; this operation publishes texture assets only.",
+          "transport": {
+            "initiallyVerified": 16,
+            "initialTimeouts": [
+              {
+                "key": "planets/enceladus/enceladus_height.aux",
+                "status": "failed",
+                "name": "AbortError",
+                "message": "Request aborted"
+              },
+              {
+                "key": "planets/mars/mars_height.raw",
+                "status": "failed",
+                "name": "AbortError",
+                "message": "Request aborted"
+              }
+            ],
+            "resume": "Fresh preflight found all18objects already identical; no retransmission necessary.",
+            "finalVerification": "cloud-synchronized",
+            "publicVerification": "public-assets-verified"
+          }
+        }
+      }
     }
   ],
   "files": [
@@ -458,7 +781,7 @@
     {"path":"docs/benchmarks/nebula-gpu-before-2026-10-18.json","group":"tooling-docs","status":"structural","method":4,"kind":"json","trackedAtStart":true,"bytes":281748,"sha256":"778f9444d348a81afb5c4298826344b27063c2ed79d7ceafb3709734a479e53b"},
     {"path":"docs/benchmarks/scenario-soak-2026-10-18.json","group":"tooling-docs","status":"structural","method":4,"kind":"json","trackedAtStart":true,"bytes":39378,"sha256":"f2e6fbb6ae09a782f28e48fa7fb2e5644785aa68dc64d02d4712e812311af922"},
     {"path":"docs/blackhole-lens-handoff.md","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":23110,"sha256":"86d88aa74cfc57bf15d41fc8f7761e5df455b9bec2d3675ed3c63593b5324bb2"},
-    {"path":"docs/crab-remnant-handoff.md","group":"tooling-docs","status":"reviewed","method":5,"kind":"text","trackedAtStart":true,"bytes":12560,"sha256":"a3c95d5b929fd998e938a6cc14eb2199203952524bde3afa7b7a2eeebc6e66c3"},
+    {"path":"docs/crab-remnant-handoff.md","group":"tooling-docs","status":"reviewed","method":5,"kind":"text","trackedAtStart":true,"bytes":13724,"sha256":"d32f414ee5172de729c8eb4404fe24d49ec9a3cad380db0a978d738e50e7f68c","initialSha256":"a3c95d5b929fd998e938a6cc14eb2199203952524bde3afa7b7a2eeebc6e66c3","note":"Follow-up NEBULA-01 resolved after owner approval. Corrected proxy half-diagonal, camera far, log-depth precision cost and recorded measured production/diagnostic-near WebGL results."},
     {"path":"docs/darkness-moons.md","group":"tooling-docs","status":"reviewed","method":2,"kind":"text","trackedAtStart":true,"bytes":6353,"sha256":"773e821647e30cfab4601dc2003585c4c1dfac632f62cfd24b726d623e4b6a77","note":"Shared height/slope maps intentionally reuse matching source-body radii; inherited geometry is by design."},
     {"path":"docs/giant-star-handoff.md","group":"tooling-docs","status":"reviewed","method":6,"kind":"text","trackedAtStart":true,"bytes":28145,"sha256":"0e5fc068656cc0ed6a492df2bfe848aa5a2d2f909ffd2903afdd6e46e6f9d7d8","note":"Shell discontinuity, mean-energy fade and fixed world-origin lighting are documented limits; halo settings are historical."},
     {"path":"docs/main-sequence-star-handoff.md","group":"tooling-docs","status":"reviewed","method":7,"kind":"text","trackedAtStart":true,"bytes":41005,"sha256":"9f74995859669e058462508713d300835c74899cd214138c132b6000e296f64d","note":"MS-03 explicitly defines final-camera updateView contract and had deferred analogous non-main-sequence impostor migration; MS-01 documents inward AA energy loss."},
@@ -468,7 +791,7 @@
     {"path":"docs/project-audit-2026-10-21.md","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":false,"bytes":11530,"sha256":"22046908645c30677972f31eedbf05a9e2f551905299208c9f56695c10e93b89"},
     {"path":"docs/project-hardening-2026-10-18.md","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":17882,"sha256":"db8697f7c396910dfbe8de253a42e51afa649e12660f2d796525c3c2948fc6be"},
     {"path":"docs/terrain-audit-2026-09-08.md","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":37217,"sha256":"a60ed0536a29898f459b9d32cadf13cd8fd339bc06eb5d4dcf088c37d8a10df6"},
-    {"path":"docs/terrain-handoff.md","group":"tooling-docs","status":"reviewed","method":8,"kind":"text","trackedAtStart":true,"bytes":613047,"sha256":"273963a0242c2d37a74aff076c32455f4f690e25d1aed63557c97d8b612e07a7"},
+    {"path":"docs/terrain-handoff.md","group":"tooling-docs","status":"reviewed","method":8,"kind":"text","trackedAtStart":true,"bytes":619354,"sha256":"ddc9853bb9c35d06cd791d9c0b7d339fe7efe13a4e5724caa8d2a5d008402266","initialSha256":"273963a0242c2d37a74aff076c32455f4f690e25d1aed63557c97d8b612e07a7"},
     {"path":"docs/w26-planets-handoff.md","group":"tooling-docs","status":"reviewed","method":7,"kind":"text","trackedAtStart":true,"bytes":34924,"sha256":"122e2b335567109e20e0deecb56ce43be9bc05d088796c17d1ea047af59a1396","note":"Historical shader-class names, cloud/tint differences and absent-eclipse statements are superseded by current code/tests; art and lighting choices preserved."},
     {"path":"eslint.config.js","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":1645,"sha256":"9a6b570a38039e279af1fa66b59d2475ae843a5a0a5bcb0ed3cfcdda462c4844"},
     {"path":"index.html","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":383,"sha256":"00b0e849dfdddd5c037d5ebdc324878beaac8da8721fb3a82e6a9c4fc009404b"},
@@ -516,7 +839,7 @@
     {"path":"scripts/lib/geoTiffInt16.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":2482,"sha256":"4414e6cabf5fc9a71a616867e17a208e98fab0f51a575e561d62d0d6589e99b1"},
     {"path":"scripts/lib/heightMapEncode.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":3314,"sha256":"c91d3ae006f3c17bd2013c992553ae117946f9eb409dc39e92dab8795cc1ac19"},
     {"path":"scripts/lib/proceduralHeightInput.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":5110,"sha256":"e18949295e799d6e55c97d3ccd426063d0e38e7a2351e69c5616ed5a1a1d3421"},
-    {"path":"scripts/lib/rawDem.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":3790,"sha256":"c0ecc6a8e92bd90bfd6440af90e22f022b13bf0a3436e249ff80ec1279075ebe"},
+    {"path":"scripts/lib/rawDem.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":4269,"sha256":"b7344170b0e71f35c30036486d86696ececc2148eba857bafd4177adaa046aa8","initialSha256":"c0ecc6a8e92bd90bfd6440af90e22f022b13bf0a3436e249ff80ec1279075ebe","note":"Follow-up TOOLS-003: overlap-area filter fixed and all six DEM height/slope/aux sets rebuilt and installed with verified backups. All original sources preserved under storage/local. 12 historical byte-identical replays, 172 pipeline tests, 29 database tests, full prepared-copy TypeScript and independent rollout review passed."},
     {"path":"scripts/lib/resampleDem.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":1172,"sha256":"624b5d87985fa470392c1b4918671a11e6a44fb651c93beefff710f90c2dd7f7"},
     {"path":"scripts/lib/sculptHeightMap.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":4759,"sha256":"fc32b6432d6a96aea5deeb08c4068bb0d32f9b259d765cc40f8634ee7b2e8764"},
     {"path":"scripts/lib/shapeModel.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":15661,"sha256":"2b12be5ed7e5ddc592f99ee3c9c2d1ce900b26b429bad7e9d7981ae34c5f9565"},
@@ -526,7 +849,7 @@
     {"path":"scripts/lib/slopeStats.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":862,"sha256":"132e03a16eac512f293dbbe0e7ec8598786796c774106d05d7e96990cacefd43"},
     {"path":"scripts/lib/sphericalBandFilter.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":15318,"sha256":"b8a13339e6612a2c2f5d16deb7bc87f61eb94282c5499b9ff4e25e75c0b8ded6"},
     {"path":"scripts/lib/stripeMetrics.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":4403,"sha256":"402ea7cb96dcf59b6993bc5d0c2d2bf537f08a147e5f31022aad3b25e834bc4f"},
-    {"path":"scripts/lib/sunAngularRadiusFor.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":5353,"sha256":"ed5c473869cf2a752aec6bd0acd05a4406fb84bf27f2335ee077a9156a54d5f4"},
+    {"path":"scripts/lib/sunAngularRadiusFor.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":5310,"sha256":"db7a4409c0b37f0d9f974e5f6ee039fb365d364cfe51d48a351834df83041558","initialSha256":"ed5c473869cf2a752aec6bd0acd05a4406fb84bf27f2335ee077a9156a54d5f4"},
     {"path":"scripts/lib/synthesizeSlope.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":6345,"sha256":"a933e3963f2b1083b3af18b2a6534935e5faf0089b04334fb04cf238961c2cb6"},
     {"path":"scripts/lib/synthHeightMap.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":13849,"sha256":"92f86bf3c9412c620b12f9ddb5c5387a44f6265488efa489a1d541212e3fb0a8"},
     {"path":"scripts/lib/synthNoise.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":7111,"sha256":"8b49c245bdc4c3ce2ed2f14078842ff527b90c3ca7d0bde4e0451065bdd58587"},
@@ -554,12 +877,12 @@
     {"path":"src/config/planetImpostor.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1526,"sha256":"621d67f0b9258d88e7035c99d0c0fbe625894e6f91771c90339eb9d80d149a7a"},
     {"path":"src/config/pulsar.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":510,"sha256":"f5bbd6d40cb44a3a895cde88621dafe7076ad22ce3ea275e796ff8f60cbb3c15"},
     {"path":"src/config/ring.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1435,"sha256":"af768b15b311f7280e60264223d56c0d6fbad8dcd47fe7e65c05c492a85ae6d5"},
-    {"path":"src/config/scenarios.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":7908,"sha256":"feaf30c16d6f0fd35b5f983ded3c18afc4514b8e63662e23244de0111f16dea8"},
+    {"path":"src/config/scenarios.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":7869,"sha256":"2d553b5ce86e38c735976580c298aa688ef78e06b0706024e97f9691fc2eebe7","initialSha256":"feaf30c16d6f0fd35b5f983ded3c18afc4514b8e63662e23244de0111f16dea8"},
     {"path":"src/config/sphereDetail.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1200,"sha256":"57bc223ad0726afffdbd57d7b78ecc215084716c9bcef8900c7a757db84b4253"},
     {"path":"src/config/star.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":3036,"sha256":"482732f2784528da573c78c351bf4d93eeb62766657d19fcee0655f7c60d1e8b"},
     {"path":"src/config/streaming.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":6024,"sha256":"9f5866cd5918c49d580a68b884610d8451e9eb7f7ba09672f90f1a59ff7bf29c"},
     {"path":"src/config/terrain.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":9522,"sha256":"a9d28c6c65b691e9108be081e5baa43632d866152b9043fbabd2614810ea6aa9"},
-    {"path":"src/config/three.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1755,"sha256":"caf31f5912b57fd14fc33d83b17e442b68e1b96f5bc23860345ba4d523228845"},
+    {"path":"src/config/three.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1813,"sha256":"87bcce5741bb0935beb92be59e752d9613d7c10586be238559bcd434c72affad","initialSha256":"caf31f5912b57fd14fc33d83b17e442b68e1b96f5bc23860345ba4d523228845"},
     {"path":"src/config/whiteDwarf.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":2205,"sha256":"9cc54723dedba8ab5852929f1cf51ab64132611710e3d5c826410bcbf441d04e"},
     {"path":"src/core/bodyInfo/BodyInfoService.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":4888,"sha256":"004dd371ec2b583a7549af23a52db807758d841a4aad5f74463e3baf3b372249","note":"Complete source read: physical/render units, astronomical frame conversions, orbital context, scene node cache, shared scratch state and consumers."},
     {"path":"src/core/bodyInfo/describeBody.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":5839,"sha256":"12e2beeeba6512815e159f86a2586bd21bd736ca39e414449501aa57fabf14a1","note":"Complete source read: physical/render units, astronomical frame conversions, orbital context, scene node cache, shared scratch state and consumers."},
@@ -585,7 +908,7 @@
     {"path":"src/core/framework/file/FileSystemDriver.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":97,"sha256":"c434cc9771544b312a6d3d2450227ab31070af0ddd10647989729a35c0ea1b2c"},
     {"path":"src/core/framework/file/LocalFileSystemDriver.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":349,"sha256":"a9418bb081558f11d91ad219d5da92ee94ddfc8ade6a6fbe0172f03950bf8632"},
     {"path":"src/core/framework/file/S3FileSystemDriver.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":337,"sha256":"ac720b41892f548bfff755919c18d45b4627568d4b1146a0de3cc204a22afea4"},
-    {"path":"src/core/framework/file/Storage.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":695,"sha256":"c23fb81e51a2994fe0141452746b0354730e5f483822a6a3b81eb15408faca19"},
+    {"path":"src/core/framework/file/Storage.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":606,"sha256":"3a310c2fcdea87f6c91901c7ed78abbf56b380a1f05481bf7e02fdbe6607b8e6","initialSha256":"c23fb81e51a2994fe0141452746b0354730e5f483822a6a3b81eb15408faca19","note":"Follow-up UI-DATA-05 resolved after owner approval: unused disk method removed; configuration-only driver made readonly; typecheck and lint passed."},
     {"path":"src/core/framework/generation/generateDatabaseFiles.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":7532,"sha256":"b3ac92ce11afe3d1df4901dac516d7cb717959585ce80e70c26ce5e2068cafe6"},
     {"path":"src/core/framework/Memoquent/Model.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":10680,"sha256":"2326ff83b1d5a7c25abf88143f3fabf99e393af7f3b40a51411b5431aa4fbc29"},
     {"path":"src/core/framework/Memoquent/ModelCollection.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":3207,"sha256":"089f0f79b55cf2e27030c86097cc74ed648bb9dad816f552276f854698dbd2b7"},
@@ -594,7 +917,7 @@
     {"path":"src/core/framework/support/Collection.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":16647,"sha256":"43e60abecef0d47d7c0b0f4bcb1b66cf93bfe00e1dce09d2e3296d09a169d82a"},
     {"path":"src/core/framework/TitanThree/index.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1159,"sha256":"ab52329cf57b9562573a035eb35f7cd37a45cc1d17e20b8e95df16b6254c22e6"},
     {"path":"src/core/framework/TitanThree/three-types.d.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":638,"sha256":"847974462ef4b3941a9da7ee36b03d02442aee21db747859801da498d8c58714"},
-    {"path":"src/core/framework/validation/validateDatabase.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":45026,"sha256":"b209210dab0f4f4b3209047eaf7189bc4ab46d2b78b154395b48e0420ec2d2f3"},
+    {"path":"src/core/framework/validation/validateDatabase.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":44875,"sha256":"9f03c242bbc906e0376e34ca63e94a0589f3516e0f3a850fd6572aabed5b177e","initialSha256":"b209210dab0f4f4b3209047eaf7189bc4ab46d2b78b154395b48e0420ec2d2f3","note":"Follow-up UI-DATA-03: numeric category-ID contract approved and implemented; validator/generator/editor rejection and editor recovery checked, existing consumers verified; independent scoped review passed."},
     {"path":"src/core/graphic/effects/atmosphere/atmosphereDepthMath.ts","group":"graphics","status":"reviewed","method":12,"kind":"text","trackedAtStart":true,"bytes":5361,"sha256":"aba6e899527e52d7b41fa4c228cf0cd463b00967078c572cdad5fc18df71ffe0"},
     {"path":"src/core/graphic/effects/atmosphere/AtmosphereEffect.ts","group":"graphics","status":"reviewed","method":12,"kind":"text","trackedAtStart":true,"bytes":11257,"sha256":"8adee518a8908a92e056014487f7742d5e746ca814d11beaba19cfcfa6e5b970"},
     {"path":"src/core/graphic/effects/atmosphere/atmosphereSlotShader.ts","group":"graphics","status":"reviewed","method":12,"kind":"text","trackedAtStart":true,"bytes":13458,"sha256":"de619e11e34421a8a5642d976cde5832bbc0a397dd20dd65a6c7c87ade00d76c"},
@@ -736,7 +1059,7 @@
     {"path":"src/core/models/Actor.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1995,"sha256":"b5dc6089c5ea411368b71e5db57b5e0dabfc75a7646494a48af53aa48ad2b365"},
     {"path":"src/core/models/ActorResource.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":235,"sha256":"c1f2671c09ea7836bfd37212e0e5d24f8df5fdafb962b1e27744feaa77a53aad"},
     {"path":"src/core/models/Category.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":443,"sha256":"500e8245a417c620275d3921b477860676968313cc63fdc4e2e9c608ae96cf5b"},
-    {"path":"src/core/models/defaults/NullActor.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":636,"sha256":"bd3d273c495b08a3425abf24f21877c66af9b75e2f04364c63f00682a05cc87d"},
+    {"path":"src/core/models/defaults/NullActor.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":583,"sha256":"4c5a4ec29a6ca8202cf17469626489d621a8106c12ef554b7c701144857f18e2","initialSha256":"bd3d273c495b08a3425abf24f21877c66af9b75e2f04364c63f00682a05cc87d","note":"Follow-up UI-DATA-03: numeric category-ID contract approved and implemented; validator/generator/editor rejection and editor recovery checked, existing consumers verified; independent scoped review passed."},
     {"path":"src/core/models/defaults/NullCategory.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":401,"sha256":"0f038c46329070ec541b07de7bcc6ed872261dfce9a47282b37556ba0b57e3a7"},
     {"path":"src/core/models/defaults/NullOrbit.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":814,"sha256":"e1419a18ba3e4da2dc753ca1b5380acbbf29dececd369d74e45360a8cc0848d1"},
     {"path":"src/core/models/defaults/NullPhysicalObject.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":767,"sha256":"3adf487767633ecfd17546cf837e2c919d31a4c6d924da5d0853a430d97b031c"},
@@ -750,7 +1073,7 @@
     {"path":"src/core/models/Resource.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":546,"sha256":"d369739c04043689cbd84f7088f44b24b61fd89af76115993dd21b2370511953"},
     {"path":"src/core/models/RotationObject.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":387,"sha256":"df9fedff21dfb26db802dd3ad83058bb3330ff223d090edbeaa1c354217c8c0f"},
     {"path":"src/core/models/scopes/ScenarioScope.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":738,"sha256":"2b049d445c1df9eb30d1829d1c35425215326bce637504f6860a306556487617"},
-    {"path":"src/core/models/types.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":38283,"sha256":"6ec0536ff9777cf5d2bcdb241aa1df9e3eed19bbc88da357bdb5ca1323e8c04e"},
+    {"path":"src/core/models/types.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":38392,"sha256":"686b17366268248b4e7f3afc48b81000c56bbc848429904c6c866460b5d04c35","initialSha256":"6ec0536ff9777cf5d2bcdb241aa1df9e3eed19bbc88da357bdb5ca1323e8c04e","note":"Follow-up UI-DATA-03: numeric category-ID contract approved and implemented; validator/generator/editor rejection and editor recovery checked, existing consumers verified; independent scoped review passed."},
     {"path":"src/core/ports/LoadingProgressReporter.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":261,"sha256":"79cb42b12167b3fd55c406e2ca1d9595e195f2c73a66fc1a4e57c2c38b56744e","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
     {"path":"src/core/ports/MenuController.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":138,"sha256":"ea4190452d07501b6a7280b745f033096bc6aad623048387b960fdf6da7f3488","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
     {"path":"src/core/ports/NotificationSink.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":633,"sha256":"5557a73e432b5aecde023614e31208e4dbee7e016f235f7926def4a56bcca61d","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
@@ -895,7 +1218,7 @@
     {"path":"src/core/renderables/utils/AsteroidCluster.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":1888,"sha256":"94fb166ec6f3b6637552e21a6a95561e0c4e1591f69ac6bb1d70f1adbd18f7aa"},
     {"path":"src/core/renderables/utils/Crosshair.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":4250,"sha256":"cbf50e0e6d12b8b0bd5bb931717a67c233f809f741fb0fd0b7f220030a5d11cd","initialSha256":"1f76b01317cf59810558e71ae6110a0064acdd2f33a3d8d8e4a5b783d6666383"},
     {"path":"src/core/renderables/utils/DistanceBasedCSS2DObject.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":1794,"sha256":"f285cc11d690ebe936424318eafbd4562d05899797dcd29de6ee92de5d231e2f"},
-    {"path":"src/core/renderables/utils/DynamicNode.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":4183,"sha256":"1719e2de9688328db70f95835c8bfcba979e51cbdfeee45f13daf938ed17d708"},
+    {"path":"src/core/renderables/utils/DynamicNode.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":3876,"sha256":"b153abc50e994a08cdf3ed72ffecc6cc8002bf8b24c7e630e2cc8431dbfa1209","initialSha256":"1719e2de9688328db70f95835c8bfcba979e51cbdfeee45f13daf938ed17d708"},
     {"path":"src/core/renderables/utils/FakePlanet.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":3733,"sha256":"69480eba419f7f79d595cb26e20d3998fca40714a5381eb34368684b8a19f739","initialSha256":"da942e0d68cda9936bc87bae985790b89a5a189bb4d3d76dc84fa7930e2eacf9"},
     {"path":"src/core/renderables/utils/FakeStar.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":5472,"sha256":"540535c2befd0eae7e307e01303ddc3295c2b83025c5c2d43ac5373add9275ea"},
     {"path":"src/core/renderables/utils/ObjectLabel.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":829,"sha256":"7e3a14d7d72e914e241aa31a8916cca1aca3702e86bfa562ca301ccec7989f91"},
@@ -924,7 +1247,7 @@
     {"path":"src/core/renderables/WhiteDwarf/WhiteDwarfShaderTemplate.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":5081,"sha256":"3a2193f069f6ef0c1cb3ac9f074823667f770a87d365d9a2f0a627a314e22c8a"},
     {"path":"src/core/scenario/ScenarioContext.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":1261,"sha256":"95c58692ccf9e790e9d763da26a7aa76e66209a1b594610d1ac4e456d461e8ec","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
     {"path":"src/core/services/AtmosphereRegistry.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":2276,"sha256":"8b00ee5a53575b9fb192ed0d0b04a9ed01d7509ce2d7c6ad27396c46e8f2c8b3","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
-    {"path":"src/core/services/CameraCollision.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":49195,"sha256":"2292b1a575cfd9d541a2c16bf9bcf400e6ac4a3685ec14760eaa99c9b8605f77","note":"Complete source read: frame/follow ownership, physical/render units, surface selection, collision sweep, keyboard/mouse reset, live flight target and restoration."},
+    {"path":"src/core/services/CameraCollision.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":35164,"sha256":"2a7f4762a51f7af6733f3da6a591599ec036e7fe204d7af932b32218cc30f048","initialSha256":"2292b1a575cfd9d541a2c16bf9bcf400e6ac4a3685ec14760eaa99c9b8605f77","note":"Complete source read: frame/follow ownership, physical/render units, surface selection, collision sweep, keyboard/mouse reset, live flight target and restoration."},
     {"path":"src/core/services/DepthVolumeRegistry.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":1115,"sha256":"32754776000fe575ab6dd7ddd88cc3b7f82c2f29217278e24347157b2abd64e4","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
     {"path":"src/core/services/HeightFieldGate.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":15174,"sha256":"fc897a712c25ef3c8f23e4e986410793d52e581eb30268144e86816faa11ef90","note":"Complete source read: epoch cancellation, timeout, aux publication, map release, cache/worker copies, terrain swap and context restoration."},
     {"path":"src/core/services/HeightFieldStorage.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":14526,"sha256":"87ca63d9693ebba5a2cc249ab1be87d0f94636a6617adeeca9270956bac9df42","note":"Complete source read: epoch cancellation, timeout, aux publication, map release, cache/worker copies, terrain swap and context restoration."},
@@ -939,9 +1262,9 @@
     {"path":"src/core/services/visitors/IObject3DVisitor.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":262,"sha256":"4f57046b8fd0a38046e62711313684776be200fbec0c44402d8baa59389742f8","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
     {"path":"src/core/services/visitors/Object3DVisitor.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":1448,"sha256":"73bcdcc60f0fc03f7583cc5cdaea90a2af36fc5db7561deda0f33a4eef5122fd","note":"Complete source read: interfaces, registration and disposal symmetry, DI singleton/transient scope, scene graph ownership and call sites."},
     {"path":"src/core/sky/atmosphereSkyVisibility.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":false,"bytes":4841,"sha256":"7072796898838cc1d65ab239a5db00c7b886e11d82619d1a762de5e6852c730a"},
-    {"path":"src/core/sky/GaiaSky.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":true,"bytes":7877,"sha256":"01728da760ab3cbe1efb2b77cd1d6c193e9d080d9277f7327908072e999cee8f"},
+    {"path":"src/core/sky/GaiaSky.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":true,"bytes":9800,"sha256":"401c60f654b8b55da9512bcfd213a7b9dd667972bf62aca7918db661d236df5d","initialSha256":"01728da760ab3cbe1efb2b77cd1d6c193e9d080d9277f7327908072e999cee8f","note":"Follow-up GFX-004: approved recreate/reload recovery implemented; cancellation, dispose/restart and repeated restoration verified; real WebGL loss/restore pixel regression and independent scoped review passed."},
     {"path":"src/core/sky/gaiaSkyUniforms.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":true,"bytes":1578,"sha256":"19390e851e94f5ddf849aa5f86f5b59760d6291d5f50ad8fad56d12fe8b1181c"},
-    {"path":"src/core/sky/gaiaTileLoader.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":true,"bytes":2049,"sha256":"5e8de0593d98a72de8a087d4bb98b69b2a7abe4c38facc6db50f9afcb913779c"},
+    {"path":"src/core/sky/gaiaTileLoader.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":true,"bytes":2692,"sha256":"563a7d44147ba479d570c3f677c7d84ff4c45594bd948070f53527b6980bca3a","initialSha256":"5e8de0593d98a72de8a087d4bb98b69b2a7abe4c38facc6db50f9afcb913779c","note":"Follow-up GFX-004: approved recreate/reload recovery implemented; cancellation, dispose/restart and repeated restoration verified; real WebGL loss/restore pixel regression and independent scoped review passed."},
     {"path":"src/core/sky/gaiaTiles.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":true,"bytes":6272,"sha256":"16377ecf2942d689cd92765b9f8edcd30edb00e860da6c7c63895d8294690854"},
     {"path":"src/core/sky/galacticFrame.ts","group":"graphics","status":"reviewed","method":14,"kind":"text","trackedAtStart":true,"bytes":1379,"sha256":"33d8d10ef69b4afa489df350fb82d1b44f8d63b9667be372bfd7e1ce26d31bfe"},
     {"path":"src/core/streaming/angularCutoff.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":3563,"sha256":"203878559d0fe804a0b9afa5c322011af29ea527d5905bfa557ed54bc09b128d","note":"Complete source read: shared-path accounting, bound owners, stale reservations, cancellation, retry/backoff, eviction/material resynchronization, resident registration."},
@@ -958,7 +1281,7 @@
     {"path":"src/core/terrain/heightPath.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":1607,"sha256":"b6209b69e44f55355dbf257330ea7abc49149b5a92f11c54e61232059eb6b574"},
     {"path":"src/core/terrain/macroSlopeStructureParams.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":4110,"sha256":"c4b66ff5db67ddcc3fd0c5a6ddab34aa6c2acde5a54a528f700c5b4fb9f03525"},
     {"path":"src/core/terrain/midbandEnvelopeGrid.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":9259,"sha256":"a38feb63d4dfb4fb33f62b607a0af1b524a05b2ceabd328338eea8d007fed047"},
-    {"path":"src/core/terrain/midbandField.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":15363,"sha256":"6aa196ed74f378f6a8a0a389d18a8c2bbc24067be6df014902b428ada22e1daa"},
+    {"path":"src/core/terrain/midbandField.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":15322,"sha256":"e2bccc6048762bb8809285d7c3e692e5fab068215fd352729bbc3b7493e4569f","initialSha256":"6aa196ed74f378f6a8a0a389d18a8c2bbc24067be6df014902b428ada22e1daa"},
     {"path":"src/core/terrain/midbandParams.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":6714,"sha256":"7978c756ed45d1b26492581005e73839555f5a6843ca1e02d788968455613959"},
     {"path":"src/core/terrain/NearShadowTile.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":6487,"sha256":"44109fd2541f7ff3b92de063bd4456b4c0f36c900a9eb662ef530817d9b5553f"},
     {"path":"src/core/terrain/nearTileBake.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":1508,"sha256":"2f6bf813538a1f97ce01523c0b9dc9fcdb5158a3ff29088085c3f1bbaebd75fb"},
@@ -966,6 +1289,7 @@
     {"path":"src/core/terrain/proceduralSurfaceParams.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":3927,"sha256":"6ba8bc3bc9b6bb2674028f3f45441d1f1e9d9f21caf9c7f9620f76a899f74257"},
     {"path":"src/core/terrain/regolithParams.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":2413,"sha256":"580c8be8f736669139f9ce3c292792e74cf24f0fe699e915bb1a6de6687447c7"},
     {"path":"src/core/terrain/simplexNoise3.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":9006,"sha256":"17983c76ed7d8d085d3c0f57a32e788678424d09cb182844507572e7efb88827"},
+    {"path":"src/core/terrain/simplexNoise3Bounds.ts","group":"terrain","status":"reviewed","method":37,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":4293,"sha256":"8180f1a577c4ecfb8388088767c10fb4dc1c5001bff94673c92bd8e61a2d4672"},
     {"path":"src/core/terrain/slopeMapFormat.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":2789,"sha256":"f0d3d8837d7bfcf89f2e2d5f275e505bed5fef908f9d96e58a7f07ecbcd39232"},
     {"path":"src/core/terrain/starRadius.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":563,"sha256":"b77027fff68a31b5c67b4a4449e8bb820b58dbd893cea6ed7938a49a29932b89"},
     {"path":"src/core/terrain/steepDetailPaths.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":854,"sha256":"7e7c727c2762558c8a94ddfd01416fefdb1149cb2ba740a09d093101df6bd069"},
@@ -973,8 +1297,9 @@
     {"path":"src/core/terrain/terrainAuxFormat.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":16800,"sha256":"d8ddd750cc481acfb6aa3d4e3beb50097fb85dd0cd086597fc42999d55345e60","initialSha256":"a847543ff429002b8189cb99df087f32da97904afc6f6e56acb97525e6109984","note":"Re-reviewed bounded cache-shape validation change and regression tests; actual format roundtrip preserved."},
     {"path":"src/core/terrain/terrainClass.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":1711,"sha256":"11c037a582c545d6f2f976cfeb5bd69c6932c264884fc7b5241008fe673a90f0"},
     {"path":"src/core/terrain/terrainClassPresets.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":2738,"sha256":"ca99cbb3d36ef46e1b574234161687c1cf4597365d39b770d731c06622bfdbf3"},
+    {"path":"src/core/terrain/terrainCollisionBounds.ts","group":"terrain","status":"reviewed","method":37,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":9703,"sha256":"8f5d4770b2792b2f7eb941f9b9dd85d25baa0c8497d7b932b67e773dd5295d5d"},
     {"path":"src/core/terrain/terrainDebug.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":2145,"sha256":"bd1ec6874bb5e2a29e276ad043398faf2f05e9e48c26c66f2a3000433dfe8bfe"},
-    {"path":"src/core/terrain/TerrainHeightField.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":102223,"sha256":"05959415a605ac97da3139fd58d6eb45d669168ca35a3fbad1f92dc37feaf1d9"},
+    {"path":"src/core/terrain/TerrainHeightField.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":102154,"sha256":"8a8a7bb86335124a1b3403a7ee687abdb8e75c1557d866cb6fcb5e0c9299153f","initialSha256":"05959415a605ac97da3139fd58d6eb45d669168ca35a3fbad1f92dc37feaf1d9"},
     {"path":"src/core/terrain/terrainLightParams.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":4378,"sha256":"54f9c708606f465138364f6159c966d1976ae4543abe8010c07e0cae84fe24d2"},
     {"path":"src/core/terrain/terrainMorph.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":353,"sha256":"dd853cb56cbd016e9fce150dab99df65ca1254cb34b2c0407a720fd215880a7e"},
     {"path":"src/core/terrain/terrainNearShadowMath.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":7732,"sha256":"fae494e6c63424c72b89d6aa999f95ec5ed9b57f37bbf1ec88b686b1d9f341f7"},
@@ -983,6 +1308,7 @@
     {"path":"src/core/terrain/TerrainPatchGroup.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":38744,"sha256":"d8f787941b04fccd1ae84931e3dbd20e845094dc095d6012191629c6ea1bf722"},
     {"path":"src/core/terrain/TerrainPatchPool.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":17470,"sha256":"074bbbced2a4a050c4d3102002e2ae53039bcae8b3b593e59c2e0a59f20ea751"},
     {"path":"src/core/terrain/terrainQuadtreeSelect.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":23124,"sha256":"569a30e8b74a3cf6da213d90c5480ebcc4147741be2c1adefbc7335e7ee9e545"},
+    {"path":"src/core/terrain/terrainRange.ts","group":"terrain","status":"reviewed","method":37,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":5380,"sha256":"ca9067ed773d1bb9678986f4ab958dd11697381c1de21b875598b3e503e7f92e"},
     {"path":"src/core/terrain/terrainShadowBits.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":2365,"sha256":"79fd974d8b8289b61c01a21d9778b309e16f26ea8512bfcede27163cf9638081"},
     {"path":"src/core/terrain/terrainShadowMap.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":5978,"sha256":"ef2f52bead4c3bf177138db63719485a2afc2f316a9091835a89ae0945ad9082"},
     {"path":"src/core/terrain/waterFoamParams.ts","group":"terrain","status":"reviewed","method":20,"kind":"text","trackedAtStart":true,"bytes":5321,"sha256":"30899a165c3a2afacba3c1fac3f5db15be5878197d2236586fbc9e26854497cb"},
@@ -1104,9 +1430,9 @@
     {"path":"storage/database/categories.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":859,"sha256":"5a103b1246660aef472d8dd2f6c99ccacb19b079aa1bb5fb7f9b84a37e38ad2e","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
     {"path":"storage/database/index.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":465,"sha256":"8b5b28a981971d484ff3de80bd7c1ae7785c84dda517fc04d1693340e4321ec9","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
     {"path":"storage/database/orbits.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":20996,"sha256":"5733cc168a944ac9772bee8d0c1fefb746bd301a04610e0551908188903186b0","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
-    {"path":"storage/database/physicalObjects.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":15267,"sha256":"dfd877ca735170c0091a2a2e5aec513ec98e10961a7244c7c05e296bcfa1d69c","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
+    {"path":"storage/database/physicalObjects.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":15269,"sha256":"2ba6cb9260811841bfb23490782658bc5a1e721e061b6bdab444fe1c130817e4","initialSha256":"dfd877ca735170c0091a2a2e5aec513ec98e10961a7244c7c05e296bcfa1d69c","note":"Generated TypeScript table read in full during the audit; references and units checked against models/validator. Follow-up UI-DATA-04 resolved after owner approval: Ceres mass verified against JPL, regenerated and saved as 9.38416e20 kg. Actual body-model physics, 53 existing tests, scoped ESLint and isolated TypeScript check passed. Other rows were not verified against external scientific catalogs."},
     {"path":"storage/database/placements.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":477,"sha256":"834b3b20ce779926d9aeacb871d2b9568d5618bd48a8e2bd125f34fdc9b42910","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
-    {"path":"storage/database/renderingObjects.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":63906,"sha256":"342a4037ab9429a3d5a4830676bbdffc8bc9242edc002f61993d3575e65cd8f2","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
+    {"path":"storage/database/renderingObjects.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":63906,"sha256":"1cfe80ee35f4fd841751eb3381718ba2799b39f031aa1eada855e4362ca4970f","initialSha256":"342a4037ab9429a3d5a4830676bbdffc8bc9242edc002f61993d3575e65cd8f2","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit. Follow-up TOOLS-003: only Mars atmosphere actor48 terrainFloorMeters regenerated to -8516.4423828125 from rebuilt height minimum; full database generator validation, fresh live floor check, 29 database/resource tests and prepared-copy full TypeScript passed."},
     {"path":"storage/database/resources.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":25335,"sha256":"f80a58289d7993cad4e6eebf303eb96d5bdd7fef5156f2da421148adefb80583","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
     {"path":"storage/database/rotationObjects.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":6583,"sha256":"4be78f9e746a3df5c15ab994b2c2c50675156c2007da338344349758eba8b7b0","note":"Generated TypeScript data tables read in full; checked references and units against models/validator. No external scientific catalog verification or asset-fetch audit."},
     {"path":"tests/alkaid/AlkaidSystem.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":15864,"sha256":"f3c7670afbe2483b32d0abb8fe9e4de0dd5244bb4bb32651937269f313332178"},
@@ -1266,7 +1592,7 @@
     {"path":"tests/brownDwarf/BrownDwarfParameters.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":7159,"sha256":"62c0fbe5d12c2b7e0b8e78f8feaca6b236f526029b3c24f1a4a3c7888c33f133"},
     {"path":"tests/brownDwarf/BrownDwarfSurface.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":38260,"sha256":"1f306efe26f45ed6f7453edb14d309b51b655556afb1df47c3d85f74d9c6636d"},
     {"path":"tests/brownDwarf/brownDwarfSurfaceMirror.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":15664,"sha256":"ed69306fb4c145465a7654334ee4bf955e136c9f9e8def6267c97368f3eb9481"},
-    {"path":"tests/browser/gpu.e2e.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":3978,"sha256":"84905f37118fc8352878b8ad64e20a55b57341234e8a08b6cf75400b83e56e39","initialSha256":"90331ce63135a00e692b469c3b1d49ad2fd727ffd778f37a433728a0aded8508"},
+    {"path":"tests/browser/gpu.e2e.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":4165,"sha256":"7bf4ea654199a347fb713c77ec2148d110c94faff681ad4c0565e56ae670fbff","initialSha256":"90331ce63135a00e692b469c3b1d49ad2fd727ffd778f37a433728a0aded8508"},
     {"path":"tests/browser/gpuTimer.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":2468,"sha256":"298d32e1429ec581e2cb0b92b0373ec8a0b129845ed291fd98a3b91e0f54cd39"},
     {"path":"tests/browser/harness.html","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":263,"sha256":"50e07389abf70cb2c7215f359601f62177b0f0b508b1b45e25f65575c1a4cc26"},
     {"path":"tests/browser/native.e2e.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":2564,"sha256":"06bde4d22ab837d747186326acaf8538beeafd730f3aa317cf9f6a6a70c9ae85"},
@@ -1282,7 +1608,8 @@
     {"path":"tests/Container.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":7067,"sha256":"e59bb664ece1035a7cda537450ae3f03c716899840841997786c4f2022433805"},
     {"path":"tests/container/KernelRetry.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":1436,"sha256":"de9d6cb05a883f66ff3df1b372dd21f3103cadcd7d69cadb26af1d974e8c6b24","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
     {"path":"tests/container/renderingWiring.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":5543,"sha256":"fbf5548218ac1c4db3a60a1b51bc7fed01cf7e019a699a306ce5f5063c3d1226","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
-    {"path":"tests/crab/CrabSystem.spec.ts","group":"nebula","status":"reviewed","method":26,"kind":"text","trackedAtStart":true,"bytes":7423,"sha256":"041960f21e6386e69244df9158612cc67c5cfe8e742becb4e1a30289778a562d"},
+    {"path":"tests/crab/CrabSystem.spec.ts","group":"nebula","status":"reviewed","method":26,"kind":"text","trackedAtStart":true,"bytes":7950,"sha256":"76c1793521431e106f12e01ebd69699c0f9f6e652e6b70b6038dfa6eadd24ad6","initialSha256":"041960f21e6386e69244df9158612cc67c5cfe8e742becb4e1a30289778a562d","note":"Follow-up NEBULA-01: actual proxy-geometry bound, expected red at far 5000 AU and green at 6000 AU; resource cleanup reviewed. All 296 related unit tests passed."},
+    {"path":"tests/crab/farPlane.gpu.ts","group":"nebula","status":"reviewed","method":35,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":4536,"sha256":"6c5b31a1da3d143ffd5c43bae7d86ceff8c752c012f1135ff503b4a0204b2f34"},
     {"path":"tests/eclipse/distance.gpu.ts","group":"graphics","status":"reviewed","method":34,"kind":"text","trackedAtStart":false,"addedDuringAudit":true,"bytes":2292,"sha256":"4209fea3f44e964d16baaf44dea79dfa5534adba4f259569a03d358f12279044"},
     {"path":"tests/eclipse/EclipseAtmosphere.spec.ts","group":"graphics","status":"reviewed","method":25,"kind":"text","trackedAtStart":true,"bytes":3943,"sha256":"a46867a9cc608bef95e645077233d28d887c3e51e1ac52bdda50a10f72a1571d"},
     {"path":"tests/eclipse/EclipseMath.spec.ts","group":"graphics","status":"reviewed","method":25,"kind":"text","trackedAtStart":true,"bytes":6898,"sha256":"5f9371310a94096993af17f4f11bbd4507df737396080709013e456a9dfc527c","initialSha256":"90b1b8999228a59275702af7b6bf43207da71982cbf934ed098d4b4bbc41c75d"},
@@ -1292,7 +1619,7 @@
     {"path":"tests/EngineDispose.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":4385,"sha256":"bcfec49f2bcd2b1bc3d8795f203ce8566c4117d3cc75b34a10ec97f36cae9b84","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
     {"path":"tests/EngineFrame.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":19624,"sha256":"5aea6c36e0d4515911c170b10d4db99ef5ac19cbb3d6df8c3f913d048cd488de","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
     {"path":"tests/EventEmitter.types.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":2465,"sha256":"b0f3363befe50b6259e5a025daefe466c8a322e0715fdd821a6958a729cd815e","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
-    {"path":"tests/generateDatabaseFiles.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":10114,"sha256":"f56998f37d5da64ab12340ea0ad915361ff3614f99813740f72b34ad2b14a07f"},
+    {"path":"tests/generateDatabaseFiles.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":10439,"sha256":"357bb6e726a389b5da6f60497a3cd463dd21553470e844b25ded17a079afc816","initialSha256":"f56998f37d5da64ab12340ea0ad915361ff3614f99813740f72b34ad2b14a07f"},
     {"path":"tests/giantStar/GiantStarBody.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":7138,"sha256":"4fce5b503688a366cf2de490f762ec4f7811889731040cf5d14085f948a16d36"},
     {"path":"tests/giantStar/GiantStarCategory.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":2561,"sha256":"53c7367c1600fab4d32087aec6705505021030877c84c323b7a33fbb11d846e1"},
     {"path":"tests/giantStar/GiantStarImpostor.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":9716,"sha256":"00802366b1360ac3f3c231cc87485e1d1e514fe54d3846f189119dddcab2216f","initialSha256":"807b86183c1555d57a1c2e6e565e6199ce98f9de2640096b01ef308ab3aaaeda"},
@@ -1519,7 +1846,7 @@
     {"path":"tests/scripts/geoTiffFloat32.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":7749,"sha256":"948d3d12fad7077669e02c99074d0f9dbe1f40e65938ac5ea7c61af5e76c8b39","initialSha256":"70c910277894c3076c3f5f536c99c62451a307c31ad33778e8b9a8f1de52bf4c"},
     {"path":"tests/scripts/geoTiffInt16.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":10032,"sha256":"0a0a33a3e6508d65718900e1e3b2968bc5fb0494d982ee2b377eb12755afc500","initialSha256":"86f5f0f353528931832745effc6e8967f77ea5ac4f350b09dfcb4c10cea21350"},
     {"path":"tests/scripts/proceduralHeightInput.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":2254,"sha256":"0007e7fd209c7ae3fc39e5a15dca644018f6ccf0fb69c8a2b3b8bf595864c224"},
-    {"path":"tests/scripts/rawDem.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":2974,"sha256":"5d9ef043ef2e10caae7496446750b327fdec011dd27df39c31ab0597455e37ac"},
+    {"path":"tests/scripts/rawDem.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":5749,"sha256":"ddc8a930bb7c841774112f01bc92ec56d49154cdfda404858281072a1d2ae739","initialSha256":"5d9ef043ef2e10caae7496446750b327fdec011dd27df39c31ab0597455e37ac","note":"Follow-up TOOLS-003: overlap-area filter fixed and all six DEM height/slope/aux sets rebuilt and installed with verified backups. All original sources preserved under storage/local. 12 historical byte-identical replays, 172 pipeline tests, 29 database tests, full prepared-copy TypeScript and independent rollout review passed."},
     {"path":"tests/scripts/resampleDem.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":1837,"sha256":"db520c4815f7f807dc6f296c7d61a7404a82c0383ae2b142215d9b9a7fd3d3fc"},
     {"path":"tests/scripts/sculptHeightMap.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":4376,"sha256":"2319abcb71a3c168c092d4c4a5a83919a4d37a86c54a0337d772e63aa1c6da47"},
     {"path":"tests/scripts/shapeModel.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":9378,"sha256":"7b1ca0cc2b6c6b1682536fcea5dd2ad72cf1b1ea96949e3a79cea27aa5ef31b9"},
@@ -1534,7 +1861,7 @@
     {"path":"tests/scripts/synthNoise.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":4983,"sha256":"272fe8f223ea08e553fd83aa8bed7f27cce5b281dd946f934be8423da3a29cee"},
     {"path":"tests/scripts/terrainFloorStatus.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":3678,"sha256":"90e5f5d312a2236bb34b1df7a855aace1de872bad937aaa95a8259e6f535c938"},
     {"path":"tests/scripts/waterLevelMeasure.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":6071,"sha256":"715092ba77db95a6a242e38504fa9d10c60cc515086686894d6f936d243c19fb"},
-    {"path":"tests/services/CameraCollision.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":88131,"sha256":"5b89796ed7beedb30ee7fe88663d1f831f5b08fc820da371dada163532d7fc2c","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
+    {"path":"tests/services/CameraCollision.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":93092,"sha256":"77d750c5a1b35e6bb4769be8e9d47c6de88cdd392dc9f49c15f7846a6e3e5e2c","initialSha256":"5b89796ed7beedb30ee7fe88663d1f831f5b08fc820da371dada163532d7fc2c","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
     {"path":"tests/services/cameraCollisionStubs.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":3662,"sha256":"233c778415c3f6583d7165eba1a89d75ddea7bde6efca2b61eb257504d48d081","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
     {"path":"tests/services/ContextRestoreRebake.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":7376,"sha256":"1a98eb30647a92c7def18fa3314f410e3232cb8f1663cd5240a794c0df65c0f3","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
     {"path":"tests/services/HeightFieldGate.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":22741,"sha256":"b3b3ad82d7327d40d6785545da579b547fe02adf9e1ed3adab628d6924ef8ec2","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
@@ -1570,9 +1897,10 @@
     {"path":"tests/shaders/TerrainDetailSteepZone.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":9759,"sha256":"bda56ab4ee13f12ca27c2dab67972c6fd248c0a4fa647416e90b92fa87de3c9e"},
     {"path":"tests/ShippedDatabase.spec.ts","group":"tooling-docs","status":"reviewed","method":1,"kind":"text","trackedAtStart":true,"bytes":2613,"sha256":"2e77a941d4273a533cf3b1b068979e9ecacb768e30ea87680eb9eb34fbc3bd0b"},
     {"path":"tests/SimulationClock.spec.ts","group":"runtime","status":"reviewed","method":10,"kind":"text","trackedAtStart":true,"bytes":1266,"sha256":"db12038fed6d3d728701ddd239f67cd72dec1d68464563932459271631aa75c0","note":"Complete test/fixture read: setup, assertions, async settlement, isolation, and correspondence to source behavior."},
-    {"path":"tests/sky/GaiaSky.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":10157,"sha256":"db6f25cd6c5d22ea6a0dffbdbdbe7ff0b582d491f79c54d5adc52ceb285a6a3a"},
-    {"path":"tests/sky/gaiaTileLoader.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":3181,"sha256":"d214ad3204b93eefcdcc5bdd950126e0c1a6b9e2801e55ff72ca4497ebd9f94a"},
-    {"path":"tests/sky/gaiaTilePath.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":962,"sha256":"0e8b80955ae11c5aa7930da91dfdb9c4df7b016d738bd5f8eed2b689173ef892"},
+    {"path":"tests/sky/contextRecovery.gpu.ts","group":"graphics","status":"reviewed","method":36,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":6605,"sha256":"80d48eb82fb0130240fc27a8045f52a6fe3e6857cf639bd25092ae5a855627ed"},
+    {"path":"tests/sky/GaiaSky.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":15124,"sha256":"8a95bfc3ed6dae7c72a900d9a59197e6f6df1c303167afdf5f4970cc27869908","initialSha256":"db6f25cd6c5d22ea6a0dffbdbdbe7ff0b582d491f79c54d5adc52ceb285a6a3a","note":"Follow-up GFX-004: approved recreate/reload recovery implemented; cancellation, dispose/restart and repeated restoration verified; real WebGL loss/restore pixel regression and independent scoped review passed."},
+    {"path":"tests/sky/gaiaTileLoader.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":5766,"sha256":"0686f155c1249456cb8dc4ce0e4ba0cb906e41c119f14d70c8542f2aaba296e7","initialSha256":"d214ad3204b93eefcdcc5bdd950126e0c1a6b9e2801e55ff72ca4497ebd9f94a","note":"Follow-up GFX-004: approved recreate/reload recovery implemented; cancellation, dispose/restart and repeated restoration verified; real WebGL loss/restore pixel regression and independent scoped review passed."},
+    {"path":"tests/sky/gaiaTilePath.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":1120,"sha256":"6aa7844ea669c7c9302aefba936912b303e48049c5b78799d8dc829134f2ca13","initialSha256":"0e8b80955ae11c5aa7930da91dfdb9c4df7b016d738bd5f8eed2b689173ef892","note":"Follow-up GFX-004: approved recreate/reload recovery implemented; cancellation, dispose/restart and repeated restoration verified; real WebGL loss/restore pixel regression and independent scoped review passed."},
     {"path":"tests/sky/gaiaTiles.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":4896,"sha256":"5dec930f5faf3e494903d8d15712aee6cc7996bd472791c603d0ddb891d96f2e"},
     {"path":"tests/sky/galacticFrame.spec.ts","group":"graphics","status":"reviewed","method":27,"kind":"text","trackedAtStart":true,"bytes":2873,"sha256":"fc30167193169450a174c560d7edcdbb30a9f2f6f5becf3c969c6d7d9299ae7a"},
     {"path":"tests/star/cameraFinalization.gpu.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":7873,"sha256":"ad4698b774e681f635576ffc19bd7cd7d51ebe867ec4978e7e85411849b8cec1"},
@@ -1611,7 +1939,7 @@
     {"path":"tests/terrain/HeightPathSingleSource.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":3043,"sha256":"ce913e73abdfb3311b6ed9a2cb8242e4a5202b836f728eed63c28dc75ea1402c"},
     {"path":"tests/terrain/midbandBuildBudget.spec.ts","group":"terrain","status":"reviewed","method":30,"kind":"text","trackedAtStart":true,"bytes":10827,"sha256":"0986c54ae28480943f48e2bd08efae55e0088313325e054c73af3e79870400bf","note":"Real Moon asset/performance test source fully reviewed; test is conditional on asset availability and performance mode, not run here."},
     {"path":"tests/terrain/midbandEnvelopeGrid.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":5388,"sha256":"d317c5b24a492db28e8d6f497c803635f2408db3152f0dda052944c4db3d6184"},
-    {"path":"tests/terrain/midbandField.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":19843,"sha256":"db7283d74e96c43d3b8161cf09b6865e0bfe75f427648dd4fa82d7c448d2cc8d"},
+    {"path":"tests/terrain/midbandField.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":20535,"sha256":"28437a063b7949b7b79d14fd0be903607081e2f93a58dc6161816ab5fb6e8449","initialSha256":"db7283d74e96c43d3b8161cf09b6865e0bfe75f427648dd4fa82d7c448d2cc8d"},
     {"path":"tests/terrain/midbandParams.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":4657,"sha256":"4ae1763fc60babf55b8b714b064a299a59d701a45985a96b5ae2ce0a102b42c2"},
     {"path":"tests/terrain/NearShadowTile.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":12636,"sha256":"39ffa767665b268aede206fe2e585235343709ea1c1f8c74861334bb1157343b"},
     {"path":"tests/terrain/nearTileBake.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":3021,"sha256":"2830c4565c362974c3dc1205c62dbdf6273b43359e4391cede2f2ea09073a04c"},
@@ -1622,6 +1950,7 @@
     {"path":"tests/terrain/ProceduralSurfaceField.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":4489,"sha256":"8182947ac2417a3d59b9344c59e8fce5d43a1236924c53ddecc0209816a6cfb7"},
     {"path":"tests/terrain/ProceduralSurfaceParams.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":2217,"sha256":"4ace6080274a5f228185b142c393de162f9944581ead6f19f604dc59832db48a"},
     {"path":"tests/terrain/RegolithParams.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":1886,"sha256":"6755d46674645540967466b529d7443ecd4e42f0ec121b61534927b9782afab2"},
+    {"path":"tests/terrain/simplexNoise3Bounds.spec.ts","group":"terrain","status":"reviewed","method":37,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":1955,"sha256":"213bab016b75866c2af40dc19e8d6b781a9925e95fa2423afbe47c98d274d8ce"},
     {"path":"tests/terrain/simplexNoise3Grad.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":2137,"sha256":"f1e4f2035bfd87bf1a943a1e232fcf66bbe78b85f880d2925c0a7d39a9dbebca"},
     {"path":"tests/terrain/SlopeRangeGrid.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":1168,"sha256":"15f1d19206355b3d5e8408a78cb46fafdbdcf67516a076b3eda5743a61355045"},
     {"path":"tests/terrain/SteepZoneParams.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":2303,"sha256":"49fdac072f586aa4ff0fb5035a0b9d26304dccbe5e118bba09697e3e724172e9"},
@@ -1629,10 +1958,11 @@
     {"path":"tests/terrain/terrainBuildHandler.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":9154,"sha256":"61c879434fa9a2bbbfd90ab3edcf054d2bb30c773cea8d237b57c5243b86547b"},
     {"path":"tests/terrain/TerrainClass.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":2574,"sha256":"2122414e8d1ac580011f7a05e667f027471cfd2fdfde3cac68bbb336d8d45e95"},
     {"path":"tests/terrain/TerrainClassPresets.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":3881,"sha256":"9f03532426749b67fd6d44e877c1a1b404706da11e4c5e8fa94b834c238c640a"},
+    {"path":"tests/terrain/TerrainCollisionBounds.spec.ts","group":"terrain","status":"reviewed","method":37,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":3453,"sha256":"663beba9d68946369008235530832c15d7fe8f9d5e4d88f33d755381273d4f48"},
     {"path":"tests/terrain/TerrainCoverageReady.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":7733,"sha256":"c8f8db2883c878c10948ff7f1ebb305c21be108395d42fcd3511ca9811d406e2"},
     {"path":"tests/terrain/TerrainHeightField.spec.ts","group":"terrain","status":"reviewed","method":30,"kind":"text","trackedAtStart":true,"bytes":65198,"sha256":"b3847f99e80254fa45d5acee1224ad6207314c54ad0dbcf8478c89bd2c24df62"},
     {"path":"tests/terrain/TerrainHeightFieldAux.spec.ts","group":"terrain","status":"reviewed","method":31,"kind":"text","trackedAtStart":true,"bytes":7876,"sha256":"12ac11125d81e6576d68060acbde477869217dcfad0cf2e9f7233109ad938b5b"},
-    {"path":"tests/terrain/TerrainHeightFieldMidband.spec.ts","group":"terrain","status":"reviewed","method":30,"kind":"text","trackedAtStart":true,"bytes":15147,"sha256":"185774d613023587b7ae331c2ef3288f89f84afe2d65b1bbd848747e70f4fd7f"},
+    {"path":"tests/terrain/TerrainHeightFieldMidband.spec.ts","group":"terrain","status":"reviewed","method":30,"kind":"text","trackedAtStart":true,"bytes":15081,"sha256":"5a8300e6f5826bb91e81159f908f8a6e766b2a56b53188aad5bd7fe758a06b9c","initialSha256":"185774d613023587b7ae331c2ef3288f89f84afe2d65b1bbd848747e70f4fd7f"},
     {"path":"tests/terrain/TerrainLevelScale.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":2742,"sha256":"565a3bfc5725e357bd3ac5aff8564fc962984fe67a7c8cc344f846e31c3f73f7"},
     {"path":"tests/terrain/TerrainLightParams.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":2679,"sha256":"7699db888759004d2915e639253d3d282d7a70c11ea7cb9cf95e374787ff3819"},
     {"path":"tests/terrain/terrainMorph.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":1216,"sha256":"23d10f71296b824d8d4ab9e2cc9ea67192998d49cd46e6954093ea7ebe2c5522"},
@@ -1643,6 +1973,7 @@
     {"path":"tests/terrain/TerrainPatchGroupMorph.spec.ts","group":"terrain","status":"reviewed","method":30,"kind":"text","trackedAtStart":true,"bytes":22717,"sha256":"0120a1d362b8421cef73073063f13844dbfc917bc0d69e8bf966b2f69dcc92f9"},
     {"path":"tests/terrain/TerrainPatchPool.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":20680,"sha256":"2bf09e924c807b706388d5ce4cd14aa5253ddf7a4de901983f57817c70689e3c"},
     {"path":"tests/terrain/terrainQuadtreeSelect.spec.ts","group":"terrain","status":"reviewed","method":30,"kind":"text","trackedAtStart":true,"bytes":39084,"sha256":"ff3202ba60cebece87e1cc19f9109ee6518babcb2d17ee7b11f0a98153466063"},
+    {"path":"tests/terrain/terrainRange.spec.ts","group":"terrain","status":"reviewed","method":37,"kind":"text","trackedAtStart":false,"addedAfterAudit":true,"bytes":3676,"sha256":"91d410d7306fbf446029a6db5a7ff13d94532c5a0c79179183788281f4a8408c"},
     {"path":"tests/terrain/terrainShadowMap.spec.ts","group":"terrain","status":"reviewed","method":29,"kind":"text","trackedAtStart":true,"bytes":7604,"sha256":"59bad69ac40fc7792b051cd3457d97d18dfe51a60a72c83823f8385e600c9337"},
     {"path":"tests/terrain/waterFoamParams.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":3325,"sha256":"5fc26681af32cc8d20c74cb19c87e63685a9b0c4a41720a09fd398426afbde85"},
     {"path":"tests/terrain/waterSurfaceParams.spec.ts","group":"terrain","status":"reviewed","method":28,"kind":"text","trackedAtStart":true,"bytes":1485,"sha256":"a5a1c033f8724e563c19e8193030c942d23414992370b67e3f33cced183a9a8f"},
@@ -1669,7 +2000,7 @@
     {"path":"tests/ui/CameraStore.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1510,"sha256":"5eb0ecb708bb6f5277525871812566df7f20084d1d0d4b30b15d90187a2b5ad4","initialSha256":"3fe5dba0424576d52cc2d4be9e47140db9062270fce7177adbb9222113515ec4"},
     {"path":"tests/ui/dataTemplates.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":3562,"sha256":"6037b1f6f426d8679be9e788774080f74a0e37a2e9902f73868d697137f49ee9"},
     {"path":"tests/ui/DeferredRuntime.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":5150,"sha256":"a4b8c881bdbd3958005f26b778c09ff7c2000175476903b3e0a449744e3ddb6c"},
-    {"path":"tests/ui/EditorSave.spec.tsx","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":11217,"sha256":"94bbed53e17b71cb9d28c8353c52521cb0d53b1d44abf54cc01da1d10e08d8f1","initialSha256":"cf4e5ba1c9f1bf3773ce014b7954ba8ad6532597c4e39d841f9bc7e5d261db1d"},
+    {"path":"tests/ui/EditorSave.spec.tsx","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":13097,"sha256":"0ed528b8175e1c86ad196a76f85a713a6874210b66d5c3cf5cea1fb64563e5cd","initialSha256":"cf4e5ba1c9f1bf3773ce014b7954ba8ad6532597c4e39d841f9bc7e5d261db1d","note":"Follow-up UI-DATA-03: numeric category-ID contract approved and implemented; validator/generator/editor rejection and editor recovery checked, existing consumers verified; independent scoped review passed."},
     {"path":"tests/ui/EditorSelection.spec.tsx","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":5036,"sha256":"2eac1e485739e62e9ea532bd2c797b944adbe6d417b0a74b53eb15544d232af2"},
     {"path":"tests/ui/EngineStore.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":966,"sha256":"e25e04da46a527a0ed2154282fe26b56dc1ba4d3c2887de4f781890371e15614"},
     {"path":"tests/ui/EngineStoreCameraReset.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":2719,"sha256":"e38d256e3fa2e69b24ae0eb89d23322adb46078656cc60fca6217d7124d7817d"},
@@ -1694,7 +2025,7 @@
     {"path":"tests/ui/trackHelpers.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1545,"sha256":"907819e901ae49cf8a20a87c6ffc85960a18c796f6f78bd6018b3c019b282833"},
     {"path":"tests/ui/UiProviderRetry.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":1953,"sha256":"e0d18a8017c672aeb6e334fee54f6b16eb9d7d5a91cd68440f7c98a207c24ba4"},
     {"path":"tests/ui/useDebounce.spec.tsx","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":2840,"sha256":"b3b87adbe21492e5fda1a871205af715ad12d69c89e156b5738d9c6538689d72"},
-    {"path":"tests/validateDatabase.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":35262,"sha256":"f07e20b7e717019102f6b5caccd4ad37f4bdc50b60b763672acc5be83538190f"},
+    {"path":"tests/validateDatabase.spec.ts","group":"ui-data","status":"reviewed","method":11,"kind":"text","trackedAtStart":true,"bytes":35037,"sha256":"c8f88009a407d503ac160f312fc92b070cfa3c81f9c8c0a7c7e99afdd8c5c15b","initialSha256":"f07e20b7e717019102f6b5caccd4ad37f4bdc50b60b763672acc5be83538190f","note":"Follow-up UI-DATA-03: numeric category-ID contract approved and implemented; validator/generator/editor rejection and editor recovery checked, existing consumers verified; independent scoped review passed."},
     {"path":"tests/w26/W26Bodies.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":5313,"sha256":"b1d9f81b275debfcd7f8208f2dab1015460357e3ff88a79ce49db4691830de1d"},
     {"path":"tests/w26/W26Halcyra.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":4899,"sha256":"dbaf15c52b9742cc114dd6474064531b55bcd2c83c2e4714d1879a10a0dd6e12"},
     {"path":"tests/w26/W26MoonPlane.spec.ts","group":"bodies","status":"reviewed","method":16,"kind":"text","trackedAtStart":true,"bytes":2682,"sha256":"941536e1c1600079969eff0e99b925bd08e7340a7e814053e4554b5528ef3a8d"},

@@ -6,10 +6,18 @@ export const MIDBAND_ASPECT = 0.03
 export const MIDBAND_OCTAVES = 3
 export const MIDBAND_LACUNARITY = 2
 export const MIDBAND_ENVELOPE_MAX = 2
+/** Та же полярная область, где раньше warp отключался скачком. */
+export const MIDBAND_POLAR_COS = 1e-4
+
+export function midbandPolarWeight(cosLat: number): number {
+  if (cosLat >= MIDBAND_POLAR_COS) return 1
+  const t = Math.max(0, cosLat / MIDBAND_POLAR_COS)
+  return t * t * (3 - 2 * t)
+}
 /** Домен варпа — вдвое грубее базовой октавы. */
-const WARP_FREQUENCY = 0.5
+export const WARP_FREQUENCY = 0.5
 /** Смещение домена варпа от домена октав — иначе варп коррелирует с гребнями. */
-const WARP_OFFSET = 31.7
+export const WARP_OFFSET = 31.7
 
 /**
  * Среднее гребневой октавы r = 1 − |snoise| по домену: E[r] = 1 − E|snoise|.
@@ -23,23 +31,11 @@ const WARP_OFFSET = 31.7
 export const MIDBAND_RIDGE_MEAN = 0.69
 
 /**
- * Бонд |r − MIDBAND_RIDGE_MEAN|: аналитический максимум 0.69 при |n| → 1
- * (r → 0, |0 − 0.69| = 0.69), запас округлён вверх до 0.7. Это НЕ p99 —
- * имя историческое (переименовывать не нужно, на него пинуются консьюмеры
- * и другие константы), но с центрированием бонд стал точным максимумом,
- * а не статистической оценкой.
+ * Исторический амплитудный запас для LOD, при принятом |noise|≤1.
+ * Для коллизий достаточно односторонней границы r−mean≤0.31 независимо
+ * от |noise|; абсолютный диапазон legacy-шума этим коэффициентом не доказывается.
  */
 export const MIDBAND_P99 = 0.7
-/**
- * max |∇r| единичной гребневой октавы в единицах 1/домен = max |∇snoise|
- * (модуль меняет только знак). Аналитический градиент snoiseGrad3 по 100k
- * точкам обхода домена даёт maxGrad ≈ 6.139, ×1.1 ≈ 6.753, округлено вверх до
- * 7 (страж в midbandField.spec пересчитывает и падает, если эмпирика выше).
- * Число архива этапа 5 (27.6) было артефактом конечных разностей h=1e-4 на
- * стыках симплексов — с ним липшицев шаг марча коллизии стал бы мельче.
- */
-export const MIDBAND_GRAD_BOUND = 7
-
 /** Найквист по шагу вершин: до LO·λ октава целиком, от HI·λ её нет; между — smoothstep. */
 export const MIDBAND_NYQUIST_LO = 0.5
 export const MIDBAND_NYQUIST_HI = 1
@@ -81,16 +77,17 @@ const UP = new Vector3(0, 1, 0)
 /**
  * Геометрия средней полосы (арка B): гребневой шум 3 октавы с варпом домена
  * вдоль стока, амплитуда A_i = ASPECT·λ_i, огибающая от уклона/кривизны карты.
- * Домен dir·R/λ₀ бесшовен на сфере. Все наклоны — аналитический градиент
+ * Домен dir·R/λ₀ бесшовен на сфере. Наклоны — локальный градиент
  * (без попиксельного шума в шейдере: наклон уходит атрибутом midTilt).
- * Бонды (maxAmplitudeMeters, slopeBound) консервативны: огибающая ≤ ENVELOPE_MAX.
+ * Огибающая ≤ ENVELOPE_MAX. Глобального slopeBound нет: огибающая,
+ * направление стока и разрывы legacy-шума не допускают прежнего допущения.
+ * Коллизии используют интервалы значений через TerrainCollisionBounds.
  * Октавы взвешены по шагу вершин уровня (midbandOctaveWeight) и отсечены по cutoffWavelengthMeters.
  */
 export class MidbandField {
   public readonly wavelengthsMeters: ReadonlyArray<number>
   public readonly amplitudesMeters: ReadonlyArray<number>
   public readonly maxAmplitudeMeters: number
-  public readonly slopeBound: number
   public readonly octaveCount: number
   /** Ширина затухания огибающей у уровня воды, метры; 0 — уровня нет (огибающая от карты не зависит). */
   public readonly waterFadeMeters: number
@@ -123,9 +120,6 @@ export class MidbandField {
     this.domainScale = radiusMeters / baseWavelengthMeters
     const scale = this.strength * MIDBAND_ENVELOPE_MAX
     this.maxAmplitudeMeters = scale * amplitudes.reduce((s, a) => s + a * MIDBAND_P99, 0)
-    // наклон октавы i: A_i·|∇r|·2^i/λ₀ = A_i·GRAD_BOUND/λ_i; варп добавляет множитель (1 + warp·GRAD_BOUND·WARP_FREQUENCY) к производной домена
-    const warpFactor = 1 + params.midbandWarp * MIDBAND_GRAD_BOUND * WARP_FREQUENCY
-    this.slopeBound = scale * warpFactor * amplitudes.reduce((s, a, i) => s + (a * MIDBAND_GRAD_BOUND) / wavelengths[i], 0)
     this.waterFadeMeters = params.waterLevelMeters === null ? 0 : (params.midbandWaterFadeMeters ?? 2 * amplitudes[0])
   }
 
@@ -177,7 +171,8 @@ export class MidbandField {
       parentOut.tiltE = 0
       parentOut.tiltN = 0
       parentOut.envelope = 0
-      for (let i = 0; i < this.octaveCount; i++) parentWeightSum += midbandOctaveWeight(parentStepMeters, this.wavelengthsMeters[i])
+      for (let i = 0; i < this.octaveCount; i++)
+        parentWeightSum += midbandOctaveWeight(parentStepMeters, this.wavelengthsMeters[i])
       parentOut.octaveWeightSum = this.octaveCount > 0 ? parentWeightSum / this.octaveCount : 0
     }
 
@@ -187,7 +182,10 @@ export class MidbandField {
 
     if (this.strength === 0) return out
 
-    const env = this.envelope(e, mapMeters)
+    const cosLat = Math.hypot(dirX, dirZ)
+    const polarWeight = midbandPolarWeight(cosLat)
+    const baseEnv = this.envelope(e, mapMeters)
+    const env = baseEnv * polarWeight
     if (env === 0) return out
     // шаг уровня грубее всех октав — полосы на нём нет
     if (weightSum === 0) return out
@@ -199,7 +197,7 @@ export class MidbandField {
     this.east.set(dirX, dirY, dirZ)
     this.east.crossVectors(UP, this.east)
     const eastLen = this.east.length()
-    const polar = eastLen < 1e-4
+    const polar = eastLen === 0
     if (!polar) {
       this.east.divideScalar(eastLen)
       this.north.set(dirX, dirY, dirZ).cross(this.east)
@@ -210,9 +208,9 @@ export class MidbandField {
     let px = dirX * k
     let py = dirY * k
     let pz = dirZ * k
-    const wx = polar ? 0 : e.downE * this.east.x + e.downN * this.north.x
-    const wy = polar ? 0 : e.downE * this.east.y + e.downN * this.north.y
-    const wz = polar ? 0 : e.downE * this.east.z + e.downN * this.north.z
+    const wx = polar ? 0 : (e.downE * this.east.x + e.downN * this.north.x) * polarWeight
+    const wy = polar ? 0 : (e.downE * this.east.y + e.downN * this.north.y) * polarWeight
+    const wz = polar ? 0 : (e.downE * this.east.z + e.downN * this.north.z) * polarWeight
     const warpAmp = this.params.midbandWarp
     const wg = snoiseGrad3(px * WARP_FREQUENCY + WARP_OFFSET, py * WARP_FREQUENCY, pz * WARP_FREQUENCY, this.warpGrad)
     px += warpAmp * wx * wg.value
@@ -222,15 +220,32 @@ export class MidbandField {
     // производная домена по дуге вдоль E и N (единицы домена на метр): dir меняется на E/R за метр;
     // домен p = dir·R/λ₀ ⇒ ∂p/∂s = E/λ₀; варп — цепным правилом при замороженном w
     const invLambda = 1 / this.baseWavelengthMeters
-    const wgE = polar ? 0 : (wg.dx * this.east.x + wg.dy * this.east.y + wg.dz * this.east.z) * WARP_FREQUENCY * invLambda
-    const wgN = polar ? 0 : (wg.dx * this.north.x + wg.dy * this.north.y + wg.dz * this.north.z) * WARP_FREQUENCY * invLambda
+    const wgE = polar
+      ? 0
+      : (wg.dx * this.east.x + wg.dy * this.east.y + wg.dz * this.east.z) * WARP_FREQUENCY * invLambda
+    const wgN = polar
+      ? 0
+      : (wg.dx * this.north.x + wg.dy * this.north.y + wg.dz * this.north.z) * WARP_FREQUENCY * invLambda
     // ∂p/∂s_E = E/λ₀ + warp·w·wgE  (вектор в домене), аналогично N
     const dpEx = polar ? 0 : this.east.x * invLambda + warpAmp * wx * wgE
     const dpEy = polar ? 0 : this.east.y * invLambda + warpAmp * wy * wgE
     const dpEz = polar ? 0 : this.east.z * invLambda + warpAmp * wz * wgE
-    const dpNx = polar ? 0 : this.north.x * invLambda + warpAmp * wx * wgN
-    const dpNy = polar ? 0 : this.north.y * invLambda + warpAmp * wy * wgN
-    const dpNz = polar ? 0 : this.north.z * invLambda + warpAmp * wz * wgN
+    let dpNx = polar ? 0 : this.north.x * invLambda + warpAmp * wx * wgN
+    let dpNy = polar ? 0 : this.north.y * invLambda + warpAmp * wy * wgN
+    let dpNz = polar ? 0 : this.north.z * invLambda + warpAmp * wz * wgN
+
+    if (cosLat < MIDBAND_POLAR_COS && !polar) {
+      const t = cosLat / MIDBAND_POLAR_COS
+      // dc/ds_N = -dirY/R. В центре env=0 и ранний выход выше,
+      // поэтому деление на вес здесь не требуется.
+      const weightGradN = (-dirY * 6 * t * (1 - t)) / (MIDBAND_POLAR_COS * this.domainScale * this.baseWavelengthMeters)
+      envGradE *= polarWeight
+      envGradN = envGradN * polarWeight + baseEnv * weightGradN
+      const warpWeightGrad = warpAmp * wg.value * weightGradN
+      dpNx += (e.downE * this.east.x + e.downN * this.north.x) * warpWeightGrad
+      dpNy += (e.downE * this.east.y + e.downN * this.north.y) * warpWeightGrad
+      dpNz += (e.downE * this.east.z + e.downN * this.north.z) * warpWeightGrad
+    }
 
     let height = 0
     let tE = 0
@@ -262,7 +277,7 @@ export class MidbandField {
 
     const scale = this.strength * env
     out.heightMeters = scale * height
-    // полная производная strength·env·B: env·∂B + ∂env·B
+    // Производная strength·env·B при замороженном направлении стока: env·∂B + ∂env·B.
     out.tiltE = polar ? 0 : scale * tE + this.strength * height * envGradE
     out.tiltN = polar ? 0 : scale * tN + this.strength * height * envGradN
 

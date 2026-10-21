@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
-import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import {
+  TERRAIN_MODEL_LEVEL,
+  TERRAIN_QUADTREE_MAX_LEVEL,
+  TERRAIN_QUADTREE_MIN_LEVEL
+} from '@/core/terrain/terrainQuadtreeSelect'
 import type { MidbandSample } from '@/core/terrain/midbandField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
@@ -11,7 +15,8 @@ function makeMap(width: number, height: number, values: number[], minMeters = 0,
 }
 const R_KM = 1736
 function bumpyMap(): HeightMapData {
-  const w = 64, h = 32
+  const w = 64,
+    h = 32
   const values = Array.from({ length: w * h }, (_, k) => (k * 4001) % 65535)
   return makeMap(w, h, values, -2000, 9000)
 }
@@ -24,11 +29,20 @@ function dirs(n: number): Vector3[] {
 }
 
 describe('TerrainHeightField: геометрия средней полосы в каноне высоты', () => {
+  it('зависимость огибающей от долготы гаснет при приближении к любому полюсу', () => {
+    const field = new TerrainHeightField(bumpyMap(), R_KM)
+    for (const sign of [-1, 1])
+      for (let i = 0; i < 12; i++) {
+        const lon = (i * Math.PI) / 6
+        const dir = new Vector3(1e-9 * Math.cos(lon), sign * Math.sqrt(1 - 1e-18), 1e-9 * Math.sin(lon))
+        expect(Math.abs(field.heightMeters(dir) - field.mapHeightMeters(dir))).toBeLessThan(1e-5)
+      }
+  })
+
   it('strength 0 — heightMeters бит-в-бит как без параметров; midband null, бонды 0', () => {
     // Пинит: при strength 0 heightMeters тождественно raw-карте (sampleMeters), без вклада полосы.
     const off = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
     expect(off.midband).toBeNull()
-    expect(off.midbandSlopeBound).toBe(0)
     expect(off.maxHeightWithMidbandMeters).toBe(off.maxMeters)
     for (const d of dirs(200)) {
       const uv = off.dirToUv(d, new Vector2())
@@ -62,25 +76,32 @@ describe('TerrainHeightField: геометрия средней полосы в 
       const n = new Vector3().crossVectors(d, e)
       field.midbandTilt(d, tilt)
       const mid = (p: Vector3): number => field.heightMeters(p) - plain.heightMeters(p)
-      const dE1 = d.clone().addScaledVector(e, hArc / R_M).normalize()
-      const dE0 = d.clone().addScaledVector(e, -hArc / R_M).normalize()
-      const dN1 = d.clone().addScaledVector(n, hArc / R_M).normalize()
-      const dN0 = d.clone().addScaledVector(n, -hArc / R_M).normalize()
-      worst = Math.max(worst, Math.abs(tilt.x - (mid(dE1) - mid(dE0)) / (2 * hArc)), Math.abs(tilt.y - (mid(dN1) - mid(dN0)) / (2 * hArc)))
+      const dE1 = d
+        .clone()
+        .addScaledVector(e, hArc / R_M)
+        .normalize()
+      const dE0 = d
+        .clone()
+        .addScaledVector(e, -hArc / R_M)
+        .normalize()
+      const dN1 = d
+        .clone()
+        .addScaledVector(n, hArc / R_M)
+        .normalize()
+      const dN0 = d
+        .clone()
+        .addScaledVector(n, -hArc / R_M)
+        .normalize()
+      worst = Math.max(
+        worst,
+        Math.abs(tilt.x - (mid(dE1) - mid(dE0)) / (2 * hArc)),
+        Math.abs(tilt.y - (mid(dN1) - mid(dN0)) / (2 * hArc))
+      )
     }
     expect(worst).toBeLessThan(2e-2) // огибающая билинейна по сетке (ячейка ~10 км) — её производная в наклон не входит намеренно, отсюда допуск шире, чем у поля
     field.midbandTilt(new Vector3(0, 1, 0), tilt)
     expect(tilt.x).toBe(0)
     expect(tilt.y).toBe(0)
-  })
-
-  it('slopeBound накрывает замер max |∇mid| по 3000 направлениям', () => {
-    const field = new TerrainHeightField(bumpyMap(), R_KM)
-    const tilt = new Vector2()
-    let maxTilt = 0
-    for (const d of dirs(3000)) maxTilt = Math.max(maxTilt, field.midbandTilt(d, tilt).length())
-    expect(maxTilt).toBeLessThanOrEqual(field.midbandSlopeBound)
-    expect(field.midbandSlopeBound).toBeLessThan(3) // ≈ 2.8 при GRAD_BOUND 7 и варпе 0.35; с бондом архива (27.6) было бы ≈ 29 и марш коллизии замедлился бы в ~10 раз
   })
 })
 
@@ -92,7 +113,8 @@ describe('ε-пирамида с полосой B', () => {
       const step = (2 * Math.PI * R_KM * 1000) / (4 * 2 ** level * 64)
       expect(field.vertexStepMeters(level)).toBeCloseTo(step, 6)
       expect(field.midbandErrorMeters(level)).toBeCloseTo(field.midband!.residualAmplitudeMeters(step), 9)
-      if (level > TERRAIN_QUADTREE_MIN_LEVEL) expect(field.midbandErrorMeters(level)).toBeLessThanOrEqual(field.midbandErrorMeters(level - 1) + 1e-9)
+      if (level > TERRAIN_QUADTREE_MIN_LEVEL)
+        expect(field.midbandErrorMeters(level)).toBeLessThanOrEqual(field.midbandErrorMeters(level - 1) + 1e-9)
     }
     expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL)).toBe(0)
     expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeCloseTo(field.midband!.maxAmplitudeMeters, 9)
@@ -125,8 +147,14 @@ describe('ε-пирамида с полосой B', () => {
     const on = new TerrainHeightField(bumpyMap(), R_KM)
     const off = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
-      expect(on.geometricErrorMeters(level)).toBeCloseTo(off.geometricErrorMeters(level) + on.midbandErrorMeters(level), 9)
-      expect(on.nodeGeometricErrorMeters(0, level, 0, 0)).toBeCloseTo(off.nodeGeometricErrorMeters(0, level, 0, 0) + on.midbandErrorMeters(level), 9)
+      expect(on.geometricErrorMeters(level)).toBeCloseTo(
+        off.geometricErrorMeters(level) + on.midbandErrorMeters(level),
+        9
+      )
+      expect(on.nodeGeometricErrorMeters(0, level, 0, 0)).toBeCloseTo(
+        off.nodeGeometricErrorMeters(0, level, 0, 0) + on.midbandErrorMeters(level),
+        9
+      )
     }
   })
 
@@ -146,7 +174,11 @@ describe('ε-пирамида с полосой B', () => {
 
 describe('TerrainHeightField: огибающая у уровня воды', () => {
   it('поле с уровнем воды: полоса на урезе гаснет, вдали от уреза — как без уровня', () => {
-    const wet = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, waterLevelMeters: 4500, midbandWaterFadeMeters: 100 })
+    const wet = new TerrainHeightField(bumpyMap(), R_KM, {
+      ...MIDBAND_DEFAULTS,
+      waterLevelMeters: 4500,
+      midbandWaterFadeMeters: 100
+    })
     const dry = new TerrainHeightField(bumpyMap(), R_KM)
     // bumpyMap не гарантирует точку с |h − 4500| < 1 м (проверено — таких нет
     // среди 2000 направлений) — ближайшая к урезу точка ищется явно, порог < 20 м
@@ -215,20 +247,28 @@ describe('TerrainHeightField: наклон полосы сходится с её
   }
 
   it('берег с уклоном 0.3: у уреза затухание полосы входит в наклон', () => {
-    const field = new TerrainHeightField(zonalMap((lat) => 0.3 * lat), RADIUS_KM, {
-      ...MIDBAND_DEFAULTS,
-      midbandRidge: 0,
-      waterLevelMeters: 0
-    })
+    const field = new TerrainHeightField(
+      zonalMap((lat) => 0.3 * lat),
+      RADIUS_KM,
+      {
+        ...MIDBAND_DEFAULTS,
+        midbandRidge: 0,
+        waterLevelMeters: 0
+      }
+    )
     expect(tiltErrorP90(field, -600, 600)).toBeLessThan(0.005)
   })
 
   it('перегиб склона без воды: изменение огибающей по сетке входит в наклон', () => {
     // равнина севернее экватора, склон 0.3 южнее: огибающая растёт через ячейку сетки
-    const field = new TerrainHeightField(zonalMap((lat) => (lat > 0 ? 0 : 0.3 * lat)), RADIUS_KM, {
-      ...MIDBAND_DEFAULTS,
-      midbandRidge: 0
-    })
+    const field = new TerrainHeightField(
+      zonalMap((lat) => (lat > 0 ? 0 : 0.3 * lat)),
+      RADIUS_KM,
+      {
+        ...MIDBAND_DEFAULTS,
+        midbandRidge: 0
+      }
+    )
     expect(tiltErrorP90(field, -8000, 8000)).toBeLessThan(0.005)
   })
 })
@@ -241,7 +281,10 @@ describe('TerrainHeightField.midbandSample: parentOut', () => {
     for (const d of dirs(40)) {
       const uv = field.dirToUv(d, new Vector2())
       const map = field.sampleMeters(uv.x, uv.y)
-      const own = fresh(), parent = fresh(), ref = fresh(), ownRef = fresh()
+      const own = fresh(),
+        parent = fresh(),
+        ref = fresh(),
+        ownRef = fresh()
       field.midbandSample(d, uv.x, uv.y, map, own, 150, true, 300, parent)
       field.midbandSample(d, uv.x, uv.y, map, ref, 300)
       field.midbandSample(d, uv.x, uv.y, map, ownRef, 150)

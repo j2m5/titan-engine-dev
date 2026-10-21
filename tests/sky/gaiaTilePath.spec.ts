@@ -13,12 +13,14 @@ describe('путь тайла Gaia: общий для рантайма и ман
 
   it('fetchGaiaTile запрашивает файл по gaiaTilePath', async () => {
     const tile = gaiaTiles()[0]
-    const fetchMock = vi.fn(async (_url: string) => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(4) }))
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(4) }))
     vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
 
-    await fetchGaiaTile(tile)
+    await fetchGaiaTile(tile, controller.signal)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0][0].endsWith(`/${gaiaTilePath(tile)}`)).toBe(true)
+    expect(fetchMock.mock.calls[0][1]?.signal).toBe(controller.signal)
   })
 })

@@ -14,10 +14,10 @@ import {
   type GaiaTile
 } from '@/core/sky/gaiaTiles'
 
-export type GaiaSkyRenderer = Pick<WebGLRenderer, 'getContext' | 'state' | 'properties' | 'extensions' | 'capabilities'>
+export type GaiaSkyRenderer = Pick<WebGLRenderer, 'domElement' | 'getContext' | 'state' | 'properties' | 'extensions' | 'capabilities'>
 
-export const fetchGaiaTile: GaiaTileFetcher = async (tile) => {
-  const response = await fetch(Storage.url(gaiaTilePath(tile)))
+export const fetchGaiaTile: GaiaTileFetcher = async (tile, signal) => {
+  const response = await fetch(Storage.url(gaiaTilePath(tile)), { signal })
   if (!response.ok) throw new Error(`${tile.name}: HTTP ${response.status}`)
   return response.arrayBuffer()
 }
@@ -25,6 +25,7 @@ export const fetchGaiaTile: GaiaTileFetcher = async (tile) => {
 const TEXTURE_KEYS: readonly GaiaTextureKey[] = ['galaxy', 'stars', 'starsCoarse']
 
 function reportGaiaLoad(result: GaiaLoadResult): GaiaLoadResult {
+  if (result.cancelled) return result
   if (result.aborted) {
     console.warn('[GaiaSky] Тайлы неба не найдены — скачать: npm run fetch:gaia-sky')
   } else if (result.failed.length > 0) {
@@ -47,7 +48,8 @@ function reportGaiaLoad(result: GaiaLoadResult): GaiaLoadResult {
  * __webglInit не ставится, удаляет текстуры только GaiaSky. Привязки — только
  * через renderer.state: голый gl.bindTexture рассинхронизирует кэш three.
  *
- * Одна на приложение: небо общее для всех сценариев
+ * Одна на приложение: небо общее для всех сценариев. После восстановления
+ * контекста текстуры пересоздаются, тайлы загружаются заново; CPU-копии нет.
  */
 export class GaiaSky {
   private gl: WebGL2RenderingContext | null = null
@@ -59,7 +61,9 @@ export class GaiaSky {
   }
   private tracker = new GaiaLevelTracker()
   private galaxyMinLod = GAIA_LEVELS - 1
-  /** Тайлы прошлой загрузки (до dispose) в новые текстуры не пишутся */
+  private started = false
+  private loadController: AbortController | null = null
+  /** Тайлы прошлой загрузки (до dispose или потери контекста) в новые текстуры не пишутся */
   private generation = 0
 
   public constructor(
@@ -69,10 +73,36 @@ export class GaiaSky {
     private readonly tiles: readonly GaiaTile[] = gaiaTiles()
   ) {}
 
-  /** Повторный вызов до dispose — null, без эффекта */
+  /** Повторный вызов до dispose — null; при потерянном контексте ждём восстановления */
   public start(): Promise<GaiaLoadResult> | null {
+    if (this.started) return null
+    this.started = true
+    this.renderer.domElement.addEventListener('webglcontextlost', this.onContextLost)
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.onContextRestored)
+    return this.load()
+  }
+
+  public dispose(): void {
+    this.started = false
+    this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost)
+    this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored)
+    this.releaseTextures()
+  }
+
+  private readonly onContextLost = (): void => {
+    this.releaseTextures()
+  }
+
+  private readonly onContextRestored = (): void => {
+    // Обработчик WebGLRenderer зарегистрирован первым: state/properties уже новые.
+    if (this.started) void this.load()
+  }
+
+  private load(): Promise<GaiaLoadResult> | null {
     if (this.textures) return null
-    this.gl = this.renderer.getContext() as WebGL2RenderingContext
+    const gl = this.renderer.getContext() as WebGL2RenderingContext
+    if (gl.isContextLost()) return null
+    this.gl = gl
     this.tracker = new GaiaLevelTracker()
     this.textures = {
       galaxy: this.createCube(GAIA_LEVELS, GAIA_CUBE_SIZE, true),
@@ -94,20 +124,26 @@ export class GaiaSky {
     this.uniforms.uGaiaStarsCoarse.value = this.wrappers.starsCoarse
 
     const generation = ++this.generation
+    this.loadController = new AbortController()
     return loadGaiaTiles(this.tiles, this.fetchTile, (tile, data) => {
       if (generation === this.generation) this.upload(tile, data)
-    }).then(reportGaiaLoad)
+    }, { signal: this.loadController.signal }).then(result =>
+      generation === this.generation ? reportGaiaLoad(result) : result
+    )
   }
 
-  public dispose(): void {
+  private releaseTextures(): void {
     this.generation++
+    this.loadController?.abort()
+    this.loadController = null
     const gl = this.gl
     const textures = this.textures
-    if (gl && textures) {
-      for (const key of TEXTURE_KEYS) {
+    for (const key of TEXTURE_KEYS) {
+      // При потере контекста GL уже уничтожил объекты; старые handles не удаляем.
+      if (gl && textures && !gl.isContextLost()) {
         gl.deleteTexture(textures[key])
-        this.renderer.properties.remove(this.wrappers[key])
       }
+      this.renderer.properties.remove(this.wrappers[key])
     }
     this.gl = null
     this.textures = null
@@ -143,7 +179,8 @@ export class GaiaSky {
   private upload(tile: GaiaTile, data: Uint32Array): void {
     const gl = this.gl
     const textures = this.textures
-    if (!gl || !textures) return
+    // isContextLost становится true ещё до доставки webglcontextlost.
+    if (!gl || !textures || gl.isContextLost()) return
     // three оставляет флаги распаковки своих текстур (flipY) — сброс до своих
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)

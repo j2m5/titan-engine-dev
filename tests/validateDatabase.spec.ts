@@ -287,21 +287,12 @@ describe('validateDatabase — внешние ключи', () => {
     expect(result.errors.some((e) => /categoryId=999/.test(e.message))).toBe(true)
   })
 
-  it('принимает строковый алиас категории', () => {
-    const db = baseSnapshot()
-    db.actors.push({ id: 11, categoryId: 'planet', parentId: 10, name: 'X', description: '', color: '#fff' })
-
-    const result = validateDatabase(db)
-
-    expect(result.errors.some((e) => /categoryId/.test(e.message))).toBe(false)
-  })
-
-  it('ловит неизвестный строковый алиас категории', () => {
+  it.each(['planet', 'wormhole', '2'])('отклоняет строковый categoryId=%s из нетипизированных данных', (categoryId) => {
     const db = baseSnapshot()
     db.actors.push({
       id: 11,
-      // намеренно битое значение: валидатор обязан поймать несуществующую категорию
-      categoryId: 'wormhole' as unknown as number,
+      // Как при загрузке старого JSON: типы TS не защищают runtime-вход.
+      categoryId: categoryId as unknown as number,
       parentId: 10,
       name: 'X',
       description: '',
@@ -310,7 +301,10 @@ describe('validateDatabase — внешние ключи', () => {
 
     const result = validateDatabase(db)
 
-    expect(result.errors.some((e) => /not a known category alias/.test(e.message))).toBe(true)
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: 11, message: expect.stringMatching(/categoryId.*numeric/)
+    }))
   })
 
   it('ловит висячий parentId', () => {
