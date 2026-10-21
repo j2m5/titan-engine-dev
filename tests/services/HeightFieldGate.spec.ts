@@ -123,6 +123,21 @@ afterEach(() => {
 })
 
 describe('HeightFieldGate: запрос и освобождение карт по дистанции', () => {
+  it('releases obsolete reservations before requesting their replacements', () => {
+    const moon = Actor.find(MOON_ID)!
+    const callisto = Actor.find(23)!
+    const { gate, observer } = makeStand([moon, callisto])
+    const oldPath = heightPathOf(moon)!
+    vi.spyOn(heightFieldStorage, 'heldPaths').mockReturnValue([oldPath])
+    const release = vi.spyOn(heightFieldStorage, 'release')
+    const request = vi.spyOn(heightFieldStorage, 'request').mockImplementation(() => {
+      expect(release).toHaveBeenCalledWith(oldPath)
+    })
+    observeAt(observer, callisto, config('terrain.heightMapLoadPixels') * 2)
+    gate.recompute()
+    expect(request).toHaveBeenCalledWith(heightPathOf(callisto))
+  })
+
   it('близкое тело запрашивает свою карту', () => {
     const moon: Actor = Actor.find(MOON_ID)!
     const { gate, observer } = makeStand([moon])

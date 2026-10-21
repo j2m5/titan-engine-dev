@@ -40,8 +40,8 @@ interface AuxFetch {
 class HeightFieldStorage {
   private maps: Map<string, HeightMapData> = new Map()
 
-  /** Пути, чей fetch ещё не завершился: пинятся от release (см. докблок release). */
-  private inFlight: Set<string> = new Set()
+  /** Each path owns its cancellation identity, including within the same epoch. */
+  private inFlight: Map<string, AbortController> = new Map()
 
   /** Путь → Date.now() последнего провала. Ключ уходит по истечении бэкоффа. */
   private failedAt: Map<string, number> = new Map()
@@ -105,7 +105,7 @@ class HeightFieldStorage {
 
   /** Загруженные плюс летящие: то, за что гейт уже «заплатил». */
   public heldPaths(): string[] {
-    return [...new Set([...this.maps.keys(), ...this.inFlight])]
+    return [...new Set([...this.maps.keys(), ...this.inFlight.keys()])]
   }
 
   /**
@@ -124,17 +124,19 @@ class HeightFieldStorage {
       this.failedAt.delete(path)
     }
 
-    this.inFlight.add(path)
-    void this.fetchInto(path, this.epoch)
+    const request = new AbortController()
+    this.inFlight.set(path, request)
+    void this.fetchInto(path, this.epoch, request)
   }
 
-  /**
-   * Путь в полёте не трогается: иначе догрузка после await записала бы карту
-   * в уже вычищенное состояние, и она осталась бы резидентной вне учёта
-   * навсегда. Отпустится на следующем пересчёте, когда прилетит.
-   */
+  /** Cancel obsolete demand before allowing its budget to fund another path. */
   public release(path: string): void {
-    if (this.inFlight.has(path)) return
+    const request = this.inFlight.get(path)
+    if (request) {
+      // Invalidate before abort: late callbacks must not affect a replacement.
+      this.inFlight.delete(path)
+      request.abort()
+    }
     const map = this.maps.get(path)
     if (!map) return
 
@@ -155,10 +157,9 @@ class HeightFieldStorage {
     this.registryVersion += 1
   }
 
-  private async fetchInto(path: string, epoch: number): Promise<void> {
+  private async fetchInto(path: string, epoch: number, request: AbortController): Promise<void> {
     const auxPath: string = terrainAuxPathFor(path)
     // один сигнал на карту и компаньон: смена сценария, таймаут или провал карты обрывают оба
-    const request = new AbortController()
     const epochSignal: AbortSignal = this.epochAbort.signal
     const onEpochAbort = (): void => request.abort(new Error('смена сценария'))
     epochSignal.addEventListener('abort', onEpochAbort, { once: true })
@@ -182,7 +183,8 @@ class HeightFieldStorage {
       const map: HeightMapData = parseHeightMap(await response.arrayBuffer())
       const auxFetch: AuxFetch = await auxPending
 
-      if (epoch !== this.epoch) return
+      if (epoch !== this.epoch || this.inFlight.get(path) !== request) return
+      request.signal.throwIfAborted()
 
       // о компаньоне говорим только при пришедшей карте: без неё его судьба не важна
       if (auxFetch.failure !== undefined) this.warnAuxUnused(auxPath, auxFetch.failure)
@@ -196,8 +198,8 @@ class HeightFieldStorage {
       this.maps.set(path, aux ? { ...map, aux } : map)
       this.registryVersion += 1
     } catch (cause) {
-      // оборванное сменой сценария — не сбой: молча
-      if (epoch !== this.epoch) return
+      // Cancellation by scenario or demand is not a retryable failure.
+      if (epoch !== this.epoch || this.inFlight.get(path) !== request) return
 
       console.warn(`[HeightFieldStorage] карта высот не загружена: ${path}`, cause)
       this.failedAt.set(path, Date.now())
@@ -206,9 +208,8 @@ class HeightFieldStorage {
       epochSignal.removeEventListener('abort', onEpochAbort)
       // провал карты обрывает и ещё летящий компаньон; после успеха — no-op
       request.abort()
-      // Только своя эпоха: после clear() под этим ключом уже может лежать
-      // запись новой эпохи, и удалить её значило бы разрешить дубль-fetch.
-      if (epoch === this.epoch) this.inFlight.delete(path)
+      // A same-path replacement can exist even within this epoch.
+      if (epoch === this.epoch && this.inFlight.get(path) === request) this.inFlight.delete(path)
     }
   }
 

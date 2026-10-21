@@ -118,8 +118,6 @@ export class HeightFieldGate {
       this.builder.mapCopies
     )
 
-    for (const path of decision.request) heightFieldStorage.request(path)
-
     for (const path of decision.release) {
       // Даунгрейд до release: узел обязан отцепиться от поля высот раньше,
       // чем карта уйдёт из реестра, иначе TerrainSphere осталась бы стоять
@@ -136,6 +134,8 @@ export class HeightFieldGate {
       // реестр уже без карты (см. RenderableFactory.resyncSurfaceMaterials).
       for (const node of nodes) this.factory.resyncSurfaceMaterials(node)
     }
+
+    for (const path of decision.request) heightFieldStorage.request(path)
 
     // Апгрейд тех, чьи карты уже доехали: приход асинхронен и никого не
     // будит, поэтому проверка на каждом пересчёте.
