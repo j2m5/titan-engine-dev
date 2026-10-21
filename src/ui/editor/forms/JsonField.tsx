@@ -63,6 +63,10 @@ const JsonField: FC<JsonFieldProps> = ({ label, value, cloneOptions, templates, 
   const handleText = (next: string): void => {
     try {
       const parsed = JSON.parse(next)
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        updateInput({ text: next, error: 'Expected a JSON object' })
+        return
+      }
       updateInput({ text: next, error: null })
       onChange(parsed)
     } catch (e) {

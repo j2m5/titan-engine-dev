@@ -65,4 +65,14 @@ describe('JsonField: ввод не переформатируется', () => {
 
     expect(textarea().value).toBe(JSON.stringify({ size: 5 }, null, 2))
   })
+
+  it('preserves semantically invalid text and clears its error after correction', () => {
+    type('[]')
+    expect(textarea().value).toBe('[]')
+    expect(container.textContent).toContain('JSON error')
+
+    type('{"seed": 3}')
+    expect(textarea().value).toBe('{"seed": 3}')
+    expect(container.textContent).not.toContain('JSON error')
+  })
 })

@@ -18,7 +18,7 @@ describe('SceneObserver: периодический пересчёт', () => {
     observer.scene = makeSceneWithBody('planet', 'Mars')
 
     const seen: string[] = []
-    observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
+    observer.subscribe('ClosestChange', (record: ObservableRecord | null): void => { if (record) seen.push(record.name) })
 
     // дефолт интервала — 500 мс. Шаг тика ограничен клампом
     // MAX_TICK_DELTA_SECONDS (0.1 с) — накопление симулируем несколькими
@@ -38,7 +38,7 @@ describe('SceneObserver: периодический пересчёт', () => {
     observer.scene = makeSceneWithBody('planet', 'Mars')
 
     const seen: string[] = []
-    observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
+    observer.subscribe('ClosestChange', (record: ObservableRecord | null): void => { if (record) seen.push(record.name) })
 
     // Тот же кламп 0.1 с, что и в соседнем тесте — тики режем на кадровые
     // шаги вместо одного тика, перепрыгивающего интервал.
@@ -71,7 +71,7 @@ describe('SceneObserver: периодический пересчёт', () => {
     observer.scene = makeSceneWithBody('planet', 'Mars')
 
     const seen: string[] = []
-    observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
+    observer.subscribe('ClosestChange', (record: ObservableRecord | null): void => { if (record) seen.push(record.name) })
 
     observer.tick(10)
 
@@ -90,7 +90,7 @@ describe('SceneObserver: периодический пересчёт', () => {
     observer.scene = makeSceneWithBody('planet', 'Mars')
 
     const seen: string[] = []
-    observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
+    observer.subscribe('ClosestChange', (record: ObservableRecord | null): void => { if (record) seen.push(record.name) })
 
     // по 0.1 с — ровно потолок MAX_TICK_DELTA_SECONDS, кламп ничего не режет
     for (let i = 0; i < 4; i += 1) observer.tick(0.1)

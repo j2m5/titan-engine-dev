@@ -43,27 +43,27 @@ const ARRIVAL_DISTANCE = 300
 
 describe('decideFlight', () => {
   it('нет полёта и камера далеко — лететь', () => {
-    expect(decideFlight(null, 'Mars', 5000, ARRIVAL_DISTANCE, 1)).toBe('start')
+    expect(decideFlight(null, 1, 5000, ARRIVAL_DISTANCE, 1)).toBe('start')
   })
 
   it('во время полёта к тому же объекту — повторный клик игнорируется', () => {
-    expect(decideFlight('Mars', 'Mars', 5000, ARRIVAL_DISTANCE, 1)).toBe('ignore')
+    expect(decideFlight(1, 1, 5000, ARRIVAL_DISTANCE, 1)).toBe('ignore')
   })
 
   it('во время полёта к другому объекту — разворот', () => {
-    expect(decideFlight('Mars', 'Venus', 5000, ARRIVAL_DISTANCE, 1)).toBe('redirect')
+    expect(decideFlight(1, 2, 5000, ARRIVAL_DISTANCE, 1)).toBe('redirect')
   })
 
   it('камера уже у объекта и смотрит на него — полёта нет', () => {
-    expect(decideFlight(null, 'Mars', ARRIVAL_DISTANCE * 1.005, ARRIVAL_DISTANCE, 1)).toBe('arrived')
+    expect(decideFlight(null, 1, ARRIVAL_DISTANCE * 1.005, ARRIVAL_DISTANCE, 1)).toBe('arrived')
   })
 
   it('у объекта, но смотрит в сторону — лететь (довернуть взгляд)', () => {
-    expect(decideFlight(null, 'Mars', ARRIVAL_DISTANCE, ARRIVAL_DISTANCE, Math.cos((10 * Math.PI) / 180))).toBe('start')
+    expect(decideFlight(null, 1, ARRIVAL_DISTANCE, ARRIVAL_DISTANCE, Math.cos((10 * Math.PI) / 180))).toBe('start')
   })
 
   it('смотрит на объект, но заметно дальше точки прилёта — лететь', () => {
-    expect(decideFlight(null, 'Mars', ARRIVAL_DISTANCE * 1.2, ARRIVAL_DISTANCE, 1)).toBe('start')
+    expect(decideFlight(null, 1, ARRIVAL_DISTANCE * 1.2, ARRIVAL_DISTANCE, 1)).toBe('start')
   })
 })
 
@@ -108,30 +108,31 @@ function rig(): Rig {
   const run = async (name: string): Promise<void> => {
     const instance = command()
 
-    instance.model = actor(name)
+    instance.model = objects.get(name)!.model!
     await instance.handle()
   }
 
   return { run, camera: camera as Rig['camera'], notifications, renderCamera, records, controls, scene, objects }
 }
 
-function actor(name: string): Actor {
+function actor(id: number, name: string): Actor {
+  const attributes = { id, name }
   return {
-    attributes: { name },
-    getAttribute: () => name,
+    attributes,
+    getAttribute: (key: keyof typeof attributes) => attributes[key],
     category: { getAttribute: () => 'planet' },
     physicalObject: { getAttribute: () => 100 }
   } as unknown as Actor
 }
 
 /** Запись наблюдателя для тела в точке position относительно камеры */
-function record(r: Rig, name: string, position: Vector3): void {
+function record(r: Rig, key: string, position: Vector3, name = key): void {
   const object = new Object3D()
-  object.model = actor(name)
+  object.model = actor(r.objects.size + 1, name)
   object.position.copy(position)
   r.scene.add(object)
-  r.objects.set(name, object)
-  r.records.set(name, { name, position, distance: position.distanceTo(r.renderCamera.position) })
+  r.objects.set(key, object)
+  r.records.set(key, { actorId: object.model.getAttribute('id')!, name, position, distance: position.distanceTo(r.renderCamera.position) })
 }
 
 /** Завершить полёт: позвать complete у шага пути (второй шаг таймлайна) */
@@ -284,6 +285,71 @@ describe('live flight geometry and ownership', () => {
   beforeEach(() => {
     CameraToObjectTransition.cancelActive()
     timelines.length = 0
+  })
+
+  it('flies to the selected actor when two actors share the same name', async () => {
+    const r = rig()
+    record(r, 'first', new Vector3(0, 0, -10000), 'Twin')
+    record(r, 'second', new Vector3(10000, 0, 0), 'Twin')
+    await r.run('second')
+    expect(timelines).toHaveLength(1)
+    step(timelines[0], 1, 1)
+    const target = r.objects.get('second')!.position
+    expect(r.renderCamera.position.distanceTo(target)).toBeCloseTo(toThreeJSUnits(100) * 3, 8)
+    expect(r.renderCamera.getWorldDirection(new Vector3()).dot(target.clone().sub(r.renderCamera.position).normalize())).toBeCloseTo(1, 10)
+    complete(timelines[0])
+    expect(r.notifications).toEqual([{ type: 'success', message: 'Target acquired: Twin' }])
+  })
+
+  it('redirects between distinct actors with the same name', async () => {
+    const r = rig()
+    record(r, 'first', new Vector3(0, 0, -10000), 'Twin')
+    record(r, 'second', new Vector3(10000, 0, 0), 'Twin')
+    await r.run('first')
+    step(timelines[0], 1, 0.5)
+    await r.run('second')
+    expect(timelines).toHaveLength(2)
+    expect(timelines[0].pause).toHaveBeenCalledTimes(1)
+    step(timelines[1], 1, 1)
+    expect(r.renderCamera.position.distanceTo(r.objects.get('second')!.position)).toBeCloseTo(toThreeJSUnits(100) * 3, 8)
+    complete(timelines[1])
+    expect(r.controls.enabled).toBe(true)
+    expect(r.camera.speed).toBe(10)
+  })
+
+  it.each([false, true])('continues flying after rename without restarting (repeat click: %s)', async (repeatClick) => {
+    const r = rig()
+    record(r, 'selected', new Vector3(0, 0, -10000))
+    await r.run('selected')
+    const target = r.objects.get('selected')!
+    target.model!.attributes.name = 'Renamed'
+    if (repeatClick) await r.run('selected')
+    expect(timelines).toHaveLength(1)
+    step(timelines[0], 1, 1)
+    expect(r.renderCamera.position.distanceTo(target.position)).toBeCloseTo(toThreeJSUnits(100) * 3, 8)
+    expect(timelines[0].pause).not.toHaveBeenCalled()
+    complete(timelines[0])
+    expect(r.notifications).toHaveLength(1)
+    expect(r.controls.enabled).toBe(true)
+  })
+
+  it.each([0, 1])('cancels step %i if only a different actor with the same name remains', async (index) => {
+    const r = rig()
+    record(r, 'selected', new Vector3(0, 0, -10000), 'Twin')
+    await r.run('selected')
+    r.camera.setSpeed(999)
+    r.objects.get('selected')!.removeFromParent()
+    record(r, 'replacement', new Vector3(10000, 0, 0), 'Twin')
+    const position = r.renderCamera.position.clone()
+    step(timelines[0], index, 1)
+    complete(timelines[0])
+    expect(r.renderCamera.position.equals(position)).toBe(true)
+    expect(r.controls.enabled).toBe(true)
+    expect(r.camera.speed).toBe(10)
+    expect(r.notifications).toHaveLength(0)
+    expect(timelines[0].pause).toHaveBeenCalledTimes(1)
+    await r.run('replacement')
+    expect(timelines).toHaveLength(2)
   })
 
   it('exits follow, rebases after turn, and arrives at the live world target', async () => {

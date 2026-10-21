@@ -1,4 +1,4 @@
-import { Color, Group, Vector3 } from 'three'
+import { Color, Group, PerspectiveCamera, Vector3 } from 'three'
 import type { Actor } from '@/core/models/Actor'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
@@ -33,7 +33,7 @@ const MID_THRESHOLD_AU = 1
  * Три состояния по расстоянию камеры до ТОРА (см. distanceToTorus):
  *  - Near — стример (AsteroidRingSystem, три тира L0/Near/L1) создан и виден;
  *  - Mid  — стример спит (visible = false, сектора деактивирует его же
- *           updateObject по isEffectivelyVisible), не уничтожается;
+ *           updateView по isEffectivelyVisible), не уничтожается;
  *  - Far  — стример ещё не создан (пул ~14 МБ не аллоцируется до первого
  *           приближения).
  *
@@ -65,6 +65,7 @@ class AsteroidBelt extends Group {
 
   private lodState: BeltLodState = BeltLodState.Far
   private streamer: AsteroidRingSystem | null = null
+  private frameContext: UpdateContext | null = null
   private readonly impostorRegistration: RingImpostorRegistration | null
   private disposed = false
   private readonly dustVolume: RingDustVolume | null
@@ -248,9 +249,12 @@ class AsteroidBelt extends Group {
   }
 
   public updateObject(ctx: UpdateContext): void {
+    this.frameContext = ctx
+  }
+
+  public updateView(camera: PerspectiveCamera): void {
     this.updateWorldMatrix(true, false)
 
-    const camera = ctx.camera
     this._cameraLocal.copy(camera.getWorldPosition(this._worldPos))
     this.worldToLocal(this._cameraLocal)
 
@@ -264,6 +268,8 @@ class AsteroidBelt extends Group {
 
     if (this.lodState === BeltLodState.Near && !this.streamer) {
       this.streamer = this.__createStreamer()
+      // A lazily created child missed the simulation traversal of this frame.
+      if (this.frameContext) this.streamer.updateObject(this.frameContext)
       this.add(this.streamer)
     }
 

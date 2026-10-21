@@ -1,5 +1,6 @@
+import { observedActor, observedRecord as record } from './observedActor'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { Mesh, Scene, Texture, Vector3 } from 'three'
+import { Mesh, Scene, Texture } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
@@ -83,9 +84,6 @@ describe('ResourceObserver — опечатка в расширении не в�
 const SOLAR_SYSTEM = Scenarios.find((s) => s.rootId === 1)!
 const SIZE_8K: number = textureBytes(8192, 4096)
 
-function record(name: string, distance: number): ObservableRecord {
-  return { name, distance, position: new Vector3() }
-}
 
 function makeTexture(): Texture {
   const texture: Texture = new Texture()
@@ -111,11 +109,11 @@ function makeClosestChangeObserver(
 ): {
   observer: ResourceObserver
   handlers: Record<string, (event: ObservableRecord) => Promise<void>>
-  data: Map<string, ObservableRecord>
+  data: Map<number, ObservableRecord>
   scene: Scene
 } {
   const handlers: Record<string, (event: ObservableRecord) => Promise<void>> = {}
-  const data: Map<string, ObservableRecord> = new Map()
+  const data: Map<number, ObservableRecord> = new Map()
 
   const sceneObserver = {
     subscribe: vi.fn((event: string, handler: (e: ObservableRecord) => Promise<void>): void => {
@@ -170,11 +168,13 @@ describe('ResourceObserver — провал по значимости пути (
 
     const mesh = new Mesh()
     mesh.name = 'Mercury'
+
+    mesh.model = observedActor(mesh.name)
     const material = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
     scene.add(mesh)
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
     await handlers['ClosestChange'](record('Mercury', 300))
 
     expect(material.resetMaterial).toHaveBeenCalled()
@@ -207,11 +207,13 @@ describe('ResourceObserver — провал по значимости пути (
 
     const mesh = new Mesh()
     mesh.name = 'Mercury'
+
+    mesh.model = observedActor(mesh.name)
     const material = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
     scene.add(mesh)
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
     await handlers['ClosestChange'](record('Mercury', 300))
 
     // Тело живёт: резета на заглушку не было, диффуз успешно загружен и
@@ -239,6 +241,8 @@ describe('ResourceObserver — провал по значимости пути (
 
     const mesh = new Mesh()
     mesh.name = 'Mercury'
+
+    mesh.model = observedActor(mesh.name)
     const material = {
       resetMaterial: vi.fn(),
       updateMaterial: vi.fn(() => {
@@ -248,7 +252,7 @@ describe('ResourceObserver — провал по значимости пути (
     Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
     scene.add(mesh)
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
     await handlers['ClosestChange'](record('Mercury', 300))
 
     const state = streamingState(observer)

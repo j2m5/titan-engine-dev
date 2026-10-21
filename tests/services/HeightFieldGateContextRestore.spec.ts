@@ -128,7 +128,7 @@ describe('HeightFieldGate: восстановление WebGL-контекста
     const priority: number = minBodyPixelsToPriorityThreshold(config('terrain.heightMapLoadPixels') * 2, config('camera.fov'), NOMINAL_HEIGHT)
 
     heightFieldStorage['maps'].set(heightPathOf(moon)!, { width: 4, height: 2, minMeters: 0, maxMeters: 1000, data: new Uint16Array(8).fill(32768) })
-    observer.data.set(nodes[0].name, { name: nodes[0].name, distance: radiusUnits / priority, position: undefined as never })
+    observer.data.set(MOON_ID, { actorId: MOON_ID, name: nodes[0].name, distance: radiusUnits / priority, position: undefined as never })
 
     restoreContext(canvas)
 

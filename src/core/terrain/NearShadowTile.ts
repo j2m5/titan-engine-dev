@@ -76,10 +76,9 @@ export class NearShadowTile {
     return this.state
   }
 
-  /** Снимает плитку и запрос в полёте; следующий update начнёт заново. */
+  /** Invalidate the result, but retain the guard until the builder actually settles. */
   public release(): void {
     this.generation++
-    this.inFlight = false
     this.anchor = null
     this.state?.texture.dispose()
     this.state = null
@@ -112,14 +111,14 @@ export class NearShadowTile {
       this.field,
       { center, east, north, texels, texelMeters },
       (heights) => {
-        if (generation !== this.generation) return
         this.inFlight = false
+        if (generation !== this.generation) return
         this.anchor = center
         this.install(heights, center, east, north)
       },
       (error) => {
-        if (generation !== this.generation) return
         this.inFlight = false
+        if (generation !== this.generation) return
         // повтор — только после сдвига за порог, не каждый кадр
         this.anchor = center
         if (!this.warned) console.warn('[NearShadowTile] плитка ближней тени не построена', error)

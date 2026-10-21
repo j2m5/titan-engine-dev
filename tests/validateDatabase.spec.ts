@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
 import { shippedSnapshot } from './helpers/shippedSnapshot'
+import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
 
 /**
  * Минимальный валидный снимок: один анкор-актор (barycenter) без обязательных связей.
@@ -29,6 +30,70 @@ function planet(id: number, parentId: number) {
   return { id, categoryId: 2, parentId, name: `P${id}`, description: '', color: '#fff' }
 }
 
+describe('validateDatabase — optional enums', () => {
+  it.each([null, 0, 2, '1', true])('rejects invalid direction %j', (direction) => {
+    const db = baseSnapshot()
+    db.rotationObjects.push({ id: 1, actorId: 10, meridianAngle: 0, ascendingNode: 0,
+      inclination: 0, period: 1, direction: direction as never })
+    expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
+      collection: 'rotationObjects', entity: 1, message: expect.stringContaining('direction')
+    }))
+  })
+
+  it.each([undefined, 1, -1])('accepts direction %j', (direction) => {
+    const db = baseSnapshot()
+    db.rotationObjects.push({ id: 1, actorId: 10, meridianAngle: 0, ascendingNode: 0,
+      inclination: 0, period: 1, direction: direction as 1 | -1 | undefined })
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+
+  it.each([null, 0, 6, '4', true])('rejects invalid lagrange %j', (lagrange) => {
+    const db = baseSnapshot()
+    db.categories.push({ id: 4, alias: 'nebula', name: 'Nebula' })
+    db.actors.push({ ...planet(11, 10), categoryId: 4 })
+    db.placements.push({ id: 1, actorId: 11, x: 0, y: 0, z: 0, lagrange: lagrange as never })
+    expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
+      collection: 'placements', entity: 1, message: expect.stringContaining('lagrange')
+    }))
+  })
+})
+
+describe('validateDatabase — rendering data boundary', () => {
+  it.each([1, true, 'x', 0, false, '', [], null, undefined])('rejects non-object data %j without throwing', (data) => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: data as never })
+
+    const result = validateDatabase(db)
+
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      collection: 'renderingObjects', entity: 1, message: expect.stringMatching(/data.*object/i)
+    }))
+  })
+
+  it('accepts objects containing nested arrays and null values', () => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: { values: [1, 2], optional: null } })
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+})
+
+describe('validateDatabase — resource color space', () => {
+  it.each(['sRGB', 'unknown', null, 0, false])('rejects unsupported color space %j', (colorSpace) => {
+    const db = baseSnapshot()
+    db.resources.push({ id: 1, resourceType: 'diffuse', lifecycle: 'streamable', path: 'image.webp', colorSpace: colorSpace as never })
+    expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
+      collection: 'resources', entity: 1, message: expect.stringContaining('colorSpace')
+    }))
+  })
+
+  it.each([undefined, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace])('accepts color space %j', (colorSpace) => {
+    const db = baseSnapshot()
+    db.resources.push({ id: 1, resourceType: 'diffuse', lifecycle: 'streamable', path: 'image.webp', colorSpace })
+    expect(validateDatabase(db).errors).toEqual([])
+  })
+})
+
 describe('validateDatabase — форма данных атмосфер', () => {
   /** Валидный слой плотности и валидная строка атмосферы для мутаций */
   const layer = () => ({ width: 0, expTerm: 1, expScale: -0.125, linearTerm: 0, constantTerm: 0 })
@@ -50,15 +115,59 @@ describe('validateDatabase — форма данных атмосфер', () => 
       absorptionExtinction: [0.00065, 0.001881, 0.000085],
       groundAlbedo: [0.1, 0.1, 0.1],
       muSMin: -0.207912
-    }
+    } as Record<string, unknown>
   })
 
-  function snapshotWith(row: ReturnType<typeof atmosphereRow>): DatabaseSnapshot {
+  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number | 'atmosphere' = 2): DatabaseSnapshot {
     const db = baseSnapshot()
-    db.actors.push(planet(11, 10))
+    db.categories.push({ id: 5, alias: 'atmosphere', name: 'Atmosphere' })
+    db.actors.push({ ...planet(11, 10), categoryId })
     db.renderingObjects.push(row)
     return db
   }
+
+  it.each([5, 'atmosphere'] as const)('checks missing irradiance using atmosphere category %s', (categoryId) => {
+    const row = atmosphereRow()
+    expect(validateDatabase(snapshotWith(row, categoryId)).errors).toEqual([])
+    delete row.data.solarIrradiance
+    expect(validateDatabase(snapshotWith(row, categoryId)).errors).toContainEqual(expect.objectContaining({
+      collection: 'renderingObjects', entity: 1, message: expect.stringContaining('data.solarIrradiance')
+    }))
+  })
+
+  it.each([5, 'atmosphere'] as const)('rejects empty atmosphere data for category %s', (categoryId) => {
+    const row = { ...atmosphereRow(), data: {} }
+    const result = validateDatabase(snapshotWith(row, categoryId))
+    for (const field of ['solarIrradiance', 'rayleighDensity', 'sunAngularRadius', 'miePhaseFunctionG', 'muSMin']) {
+      expect(result.errors.some((e) => e.message.includes(`data.${field}`)), field).toBe(true)
+    }
+    expect(result.errors.some((e) => e.message.includes('radii invalid'))).toBe(true)
+  })
+
+  it.each(['sunAngularRadius', 'miePhaseFunctionG', 'muSMin'])('requires finite %s', (field) => {
+    for (const value of [undefined, null, '0', false, NaN, Infinity]) {
+      const row = atmosphereRow()
+      row.data[field] = value
+      expect(validateDatabase(snapshotWith(row, 'atmosphere')).errors.some((e) =>
+        e.message.includes(`data.${field}`)), String(value)).toBe(true)
+    }
+    const row = atmosphereRow()
+    row.data[field] = 0
+    expect(validateDatabase(snapshotWith(row, 'atmosphere')).errors).toEqual([])
+  })
+
+  it('keeps radius and extent checks active without irradiance', () => {
+    const row = atmosphereRow()
+    delete row.data.solarIrradiance
+    row.data.topRadius = 1
+    expect(validateDatabase(snapshotWith(row, 5)).errors.some((e) => e.message.includes('radii invalid'))).toBe(true)
+    row.data.topRadius = 6361
+    expect(validateDatabase(snapshotWith(row, 5)).warnings.some((e) => e.message.includes('hard edge'))).toBe(true)
+  })
+
+  it('does not require atmosphere fields for ordinary planet rendering', () => {
+    expect(validateDatabase(snapshotWith({ ...atmosphereRow(), data: { bumpScale: 1 } })).errors).toEqual([])
+  })
 
   it('валидная строка атмосферы проходит без ошибок формы', () => {
     const result = validateDatabase(snapshotWith(atmosphereRow()))
@@ -705,6 +814,53 @@ describe('validateDatabase — форма конфига туманности', 
     row.data.palette = { stops: [{ t: 1.5, color: '#06141c' }] }
 
     expect(validateDatabase(snapshotWith(row)).errors.some((e) => /palette\.stops/.test(e.message))).toBe(true)
+  })
+
+  it.each(['lobes', 'cavities', 'palette.stops'])('rejects malformed %s arrays and entries', (field) => {
+    for (const value of [null, {}, 7, 'bad', false, [null], [1], ['bad'], [false], [[]]]) {
+      const row = nebulaRow()
+      if (field === 'palette.stops') row.data.palette = { stops: value }
+      else row.data[field] = value
+
+      const result = validateDatabase(snapshotWith(row))
+      expect(result.errors.some((e) => e.message.includes(`data.${field}`)), JSON.stringify(value)).toBe(true)
+    }
+  })
+
+  it.each([null, [], 3, 'bad', false].map((value) => [value]))('rejects a malformed palette group: %j', (palette) => {
+    const row = nebulaRow()
+    row.data.palette = palette
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => e.message.includes('data.palette'))).toBe(true)
+  })
+
+  it.each(['lobes', 'cavities'])('validates finite centers and numeric fields in %s', (field) => {
+    const malformed: Record<string, unknown>[] = [
+      { center: null }, { center: [0, 1] }, { center: [0, '1', 0] }, { center: [0, Infinity, 0] },
+      { radius: '1' }, { radius: null }, { radius: NaN },
+      ...(field === 'lobes' ? [{ weight: false }, { seed: Infinity }] : [{ strength: '1' }])
+    ]
+    for (const entry of malformed) {
+      const row = nebulaRow()
+      row.data[field] = [entry]
+      const key = Object.keys(entry)[0]
+      expect(validateDatabase(snapshotWith(row)).errors.some((e) =>
+        e.message.includes(`data.${field}[0].${key}`)), String(entry[key])).toBe(true)
+    }
+  })
+
+  it.each([{}, { t: 0 }, { t: 0, color: null }, { t: 0, color: 'red' }])(
+    'requires a finite position and hex color for palette stops: %j', (stop) => {
+      const row = nebulaRow()
+      row.data.palette = { stops: [stop] }
+      expect(validateDatabase(snapshotWith(row)).errors.some((e) => e.message.includes('data.palette.stops[0]'))).toBe(true)
+    })
+
+  it.each([
+    { size: 30 },
+    { size: 30, lobes: [], cavities: [], palette: { stops: [] } },
+    { size: 30, lobes: [{}, { center: [0, -1, 0], weight: 0, seed: 0 }], cavities: [{}, { strength: 0 }] }
+  ])('accepts omitted arrays, empty arrays and partial entries: %j', (data) => {
+    expect(validateDatabase(snapshotWith({ ...nebulaRow(), data })).errors).toEqual([])
   })
 
   it('строки других категорий этой проверкой не трогаются', () => {

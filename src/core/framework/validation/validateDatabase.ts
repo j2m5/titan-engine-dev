@@ -11,6 +11,7 @@ import {
 } from '@/core/models/types'
 import { NEBULA_SHAPE_IDS } from '@/core/renderables/Nebula/NebulaParams'
 import { ringMoonletProblems } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
+import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
 
 /**
  * Валидатор целостности данных приложения.
@@ -155,8 +156,7 @@ function checkPositioning(db: DatabaseSnapshot, aliasByActor: Map<number, string
     }
 
     // Точка Лагранжа считается по орбите РОДИТЕЛЯ: без неё узел стоит в нуле.
-    // null — очищенное поле редактора, то же, что отсутствие
-    if (placement.lagrange != null) {
+    if (placement.lagrange !== undefined) {
       const actor = db.actors.find((a) => a.id === placement.actorId)
       const parentHasOrbit = actor?.parentId != null && db.orbits.some((o) => o.actorId === actor.parentId)
       if (placement.lagrange !== 4 && placement.lagrange !== 5) {
@@ -218,16 +218,14 @@ function isDensityLayer(value: unknown): boolean {
 }
 
 /**
- * Форма данных атмосфер (duck-typing по solarIrradiance): битая структура
+ * Форма данных выбранных атмосфер: битая структура
  * не ловится типами (data — свободный JSON) и роняет LUT-генератор в рантайме.
  */
 function checkAtmosphereShapes(
-  rows: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  rows: IRenderingObject[],
   issues: ValidationIssue[]
 ): void {
   for (const row of rows) {
-    if (!row.data || !('solarIrradiance' in row.data)) continue
-
     const bad = (field: string, reason: string): void => {
       issues.push({
         level: 'error',
@@ -248,6 +246,12 @@ function checkAtmosphereShapes(
       const v = row.data[field]
       if (!Array.isArray(v) || v.length !== 2 || !v.every(isDensityLayer)) {
         bad(field, 'must be a pair of density layers [layer0, layer1]')
+      }
+    }
+
+    for (const field of ['sunAngularRadius', 'miePhaseFunctionG', 'muSMin']) {
+      if (typeof row.data[field] !== 'number' || !Number.isFinite(row.data[field])) {
+        bad(field, 'must be a finite number')
       }
     }
 
@@ -275,7 +279,7 @@ function checkAtmosphereShapes(
  * (H = √(top² − bottom²)).
  */
 function checkAtmosphereAnchoring(
-  renderingObjects: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  renderingObjects: IRenderingObject[],
   actors: IActor[],
   physicalObjects: IPhysicalObject[],
   issues: ValidationIssue[]
@@ -287,8 +291,6 @@ function checkAtmosphereAnchoring(
   for (const p of physicalObjects) physByActor.set(p.actorId, p)
 
   for (const row of renderingObjects) {
-    if (!row.data || !('solarIrradiance' in row.data)) continue
-
     const bottom: unknown = row.data.bottomRadius
     const top: unknown = row.data.topRadius
 
@@ -373,12 +375,10 @@ function isActiveSpecies(coefficients: unknown): boolean {
 }
 
 function checkAtmosphereExtent(
-  rows: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  rows: IRenderingObject[],
   issues: ValidationIssue[]
 ): void {
   for (const row of rows) {
-    if (!row.data || !('solarIrradiance' in row.data)) continue
-
     const bottom: unknown = row.data.bottomRadius
     const top: unknown = row.data.topRadius
 
@@ -445,15 +445,15 @@ function isPositiveTriple(value: unknown): boolean {
   )
 }
 
-/** Сужение свободного JSON до объекта: null и примитивы дают undefined */
+/** Сужение свободного JSON до объекта: null, массивы и примитивы дают undefined */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>) : undefined
 }
 
 /**
  * Форма конфига туманности. Диспетчеризация по алиасу категории, а не по
- * утиной типизации: в снимке есть и акторы, и категории, гадать по полям
- * незачем (в отличие от атмосфер, чья проверка появилась раньше).
+ * утиной типизации: в снимке есть и акторы, и категории, гадать по полям незачем.
  *
  * size обязателен: без него движок подставит дефолт ~0.013 а.е., то есть
  * туманность будет невидима — пропуск поля почти наверняка баг данных.
@@ -498,24 +498,53 @@ function checkNebulaShapes(
 
     const palette = asRecord(data.palette)
     const dust = asRecord(data.dust)
+    if (data.palette !== undefined && !palette) bad('palette', 'must be an object')
+
+    const checkEntries = (
+      field: string, value: unknown, check: (entry: Record<string, unknown>, path: string) => void
+    ): void => {
+      if (value === undefined) return
+      if (!Array.isArray(value)) {
+        bad(field, 'must be an array')
+        return
+      }
+      value.forEach((entry: unknown, index: number) => {
+        const path = `${field}[${index}]`
+        const record = asRecord(entry)
+        if (!record) bad(path, 'must be an object')
+        else check(record, path)
+      })
+    }
+
+    for (const field of ['lobes', 'cavities']) {
+      checkEntries(field, data[field], (entry, path) => {
+        if (entry.center !== undefined && (!Array.isArray(entry.center) || entry.center.length !== 3 ||
+          !entry.center.every((n: unknown) => typeof n === 'number' && Number.isFinite(n)))) {
+          bad(`${path}.center`, 'must be a triple of finite numbers')
+        }
+        const numbers = field === 'lobes' ? ['radius', 'weight', 'seed'] : ['radius', 'strength']
+        for (const key of numbers) {
+          if (entry[key] !== undefined && (typeof entry[key] !== 'number' || !Number.isFinite(entry[key]))) {
+            bad(`${path}.${key}`, 'must be a finite number')
+          }
+        }
+      })
+    }
 
     const colors: Array<[string, unknown]> = [
       ['palette.secondary', palette?.secondary],
       ['dust.color', dust?.color]
     ]
 
-    const stops = palette?.stops
-    if (Array.isArray(stops)) {
-      stops.forEach((entry: unknown, index: number) => {
-        const stop = asRecord(entry)
-        colors.push([`palette.stops[${index}].color`, stop?.color])
-
-        const t = stop?.t
-        if (typeof t !== 'number' || !Number.isFinite(t) || t < 0 || t > 1) {
-          bad(`palette.stops[${index}].t`, 'must be a number within [0, 1]')
-        }
-      })
-    }
+    checkEntries('palette.stops', palette?.stops, (stop, path) => {
+      if (typeof stop.color !== 'string' || !HEX_COLOR.test(stop.color)) {
+        bad(`${path}.color`, 'must be a "#rrggbb" hex color string')
+      }
+      const t = stop.t
+      if (typeof t !== 'number' || !Number.isFinite(t) || t < 0 || t > 1) {
+        bad(`${path}.t`, 'must be a number within [0, 1]')
+      }
+    })
 
     for (const [field, value] of colors) {
       if (value !== undefined && (typeof value !== 'string' || !HEX_COLOR.test(value))) {
@@ -929,6 +958,25 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   checkRequiredNumbers(db, issues)
   checkOrbitDomain(db, issues)
 
+  for (const resource of db.resources) {
+    const value = resource.colorSpace
+    if (value !== undefined && value !== NoColorSpace && value !== SRGBColorSpace && value !== LinearSRGBColorSpace) {
+      issues.push({
+        level: 'error', collection: 'resources', entity: resource.id,
+        message: `resources#${resource.id} colorSpace must be omitted, "", "srgb" or "srgb-linear"`
+      })
+    }
+  }
+
+  for (const rotation of db.rotationObjects) {
+    if (rotation.direction !== undefined && rotation.direction !== 1 && rotation.direction !== -1) {
+      issues.push({
+        level: 'error', collection: 'rotationObjects', entity: rotation.id,
+        message: `rotationObjects#${rotation.id} direction must be 1 or -1, got ${rotation.direction}`
+      })
+    }
+  }
+
   // --- 6b. Физически невозможные значения (warning) ---
   for (const phys of db.physicalObjects) {
     if (phys.mass <= 0) {
@@ -978,21 +1026,35 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
     }
   }
 
+  // Reject invalid input before specialized validators inspect object properties.
+  const renderingObjects = db.renderingObjects.filter((row) => {
+    if (row.data !== null && typeof row.data === 'object' && !Array.isArray(row.data)) return true
+    issues.push({
+      level: 'error', collection: 'renderingObjects', entity: row.id,
+      message: `renderingObjects#${row.id} data must be a non-null JSON object`
+    })
+    return false
+  })
+
   // --- 6c. Форма данных атмосфер (битая структура роняет LUT-генератор в рантайме) ---
-  checkAtmosphereShapes(db.renderingObjects, issues)
+  // Категория задаёт схему даже без обязательных полей. Сохраняем и старую
+  // диагностику atmosphere-подобных данных, записанных в другую категорию.
+  const atmospheres = renderingObjects.filter((row) =>
+    aliasByActor.get(row.actorId) === 'atmosphere' || 'solarIrradiance' in row.data)
+  checkAtmosphereShapes(atmospheres, issues)
 
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
-  checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
+  checkAtmosphereAnchoring(atmospheres, db.actors, db.physicalObjects, issues)
 
   // --- 6g. Протяжённость атмосферы: оболочка против шкалы высот ---
-  checkAtmosphereExtent(db.renderingObjects, issues)
+  checkAtmosphereExtent(atmospheres, issues)
 
   // --- 6f. Форма конфига туманностей ---
-  checkNebulaShapes(db.renderingObjects, aliasByActor, issues)
+  checkNebulaShapes(renderingObjects, aliasByActor, issues)
 
   // --- 6h. Форма конфига пояса астероидов ---
-  checkAsteroidBeltShapes(db.renderingObjects, aliasByActor, issues)
-  checkRingMoonlets(db.renderingObjects, aliasByActor, issues)
+  checkAsteroidBeltShapes(renderingObjects, aliasByActor, issues)
+  checkRingMoonlets(renderingObjects, aliasByActor, issues)
 
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)

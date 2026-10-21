@@ -40,6 +40,7 @@ function makeCamera(): PerspectiveCamera {
 
 function frame(system: AsteroidRingSystem, camera: PerspectiveCamera): void {
   system.updateObject({ delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext)
+  system.updateView(camera)
 }
 
 describe('AsteroidRingSystem: cullFovScale — запас отсечения вокруг кадра', () => {

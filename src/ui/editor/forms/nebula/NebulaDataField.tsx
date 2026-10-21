@@ -28,7 +28,13 @@ export default function NebulaDataField({ value, inputState, onInputChange, cont
   const drafts = useMemo(() => decodeDrafts(controls), [controls])
   const defaults = useMemo(() => editorDefaults(value), [value])
   const error = controlError(value, drafts)
-  const malformed = structureError(value)
+  const malformed = useMemo(() => {
+    // JsonField retains the last valid object; visibility must follow the text being repaired.
+    if (json.error) {
+      try { return structureError(JSON.parse(json.text)) } catch { /* Incomplete syntax keeps controls disabled. */ }
+    }
+    return structureError(value)
+  }, [json.error, json.text, value])
   const setJson = onInputChange ?? setLocalJson
   const setControls = onControlsInputChange ?? setLocalControls
 

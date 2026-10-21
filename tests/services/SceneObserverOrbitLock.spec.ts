@@ -64,7 +64,7 @@ describe('SceneObserver: замок цели орбиты при зажатой 
     observer.scene = makeTwoBodyScene()
 
     const seen: string[] = []
-    observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
+    observer.subscribe('ClosestChange', (record: ObservableRecord | null): void => { if (record) seen.push(record.name) })
 
     controls.dispatch(new Vector3())
     controls.isOrbiting = true

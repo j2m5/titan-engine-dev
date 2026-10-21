@@ -240,20 +240,40 @@ describe('NearShadowTile: перепечка и запросы в полёте',
     expect(builder.requests).toBe(1)
   })
 
-  it('ответ, перекрытый выходом за порог и новым запросом, отбрасывается', () => {
+  it('re-entry waits for the obsolete request to finish before requesting the current tile', () => {
     const field = makeField()
     const builder = new QueuedNearBuilder()
     const tile = new NearShadowTile(field, builder, SMALL)
     tile.update(cameraAt(field, 2000))
     tile.update(cameraAt(field, 60000))
     tile.update(cameraAt(field, 2000, 30000))
-    expect(builder.requests).toBe(2)
+    expect(builder.requests).toBe(1)
 
     builder.reply() // устаревший — центр у +X
     expect(tile.update(cameraAt(field, 2000, 30000))).toBeNull()
+    expect(builder.requests).toBe(2)
     builder.reply()
     const state = tile.update(cameraAt(field, 2000, 30000))!
     expect(state.center[2]).toBeCloseTo(-Math.sin(30000 / (RADIUS_KM * 1000)), 9)
+    tile.dispose()
+  })
+
+  it.each(['reply', 'fail'] as const)('repeated altitude crossings retain one physical request until %s', (completion) => {
+    const field = makeField()
+    const builder = new QueuedNearBuilder()
+    const tile = new NearShadowTile(field, builder, SMALL)
+    for (let cycle = 0; cycle < 5; cycle++) {
+      tile.update(cameraAt(field, 49000, cycle * 10000))
+      tile.update(cameraAt(field, 51000))
+    }
+    expect(builder.pending).toHaveLength(1)
+    expect(builder.requests).toBe(1)
+    builder[completion]()
+    expect(tile.update(cameraAt(field, 49000, 60000))).toBeNull()
+    expect(builder.requests).toBe(2)
+    builder.reply()
+    expect(tile.update(cameraAt(field, 49000, 60000))?.center[2])
+      .toBeCloseTo(-Math.sin(60000 / (RADIUS_KM * 1000)), 9)
     tile.dispose()
   })
 

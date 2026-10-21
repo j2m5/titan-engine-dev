@@ -6,7 +6,7 @@ import { SceneObserver } from '@/core/services/SceneObserver'
 import { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadResult, TextureRequest } from '@/core/textures/types'
 import { cubeTextureRequest, textureRequestFrom } from '@/core/textures/textureRequest'
-import { CubeTexture, Scene } from 'three'
+import { CubeTexture, Scene, type Object3D } from 'three'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -119,7 +119,7 @@ class ResourceObserver {
    */
   private readonly pathActors: Map<string, Set<number>> = new Map()
   /** Material bindings outlive current demand, including direct loadPath callers. */
-  private readonly boundOwners: Map<string, Map<number, string>> = new Map()
+  private readonly boundOwners: Map<string, Set<number>> = new Map()
   /**
    * Счётчик сбросов сценария. `loadPath` захватывает значение до первого
    * `await`: если к моменту догрузки оно изменилось, сценарий сменился посреди
@@ -483,25 +483,6 @@ class ResourceObserver {
   }
 
   /**
-   * Находит актора сценария по имени наблюдаемого тела.
-   *
-   * Имена не уникальны: кольцо и атмосфера названы так же, как сама планета
-   * (восемнадцать пересечений в данных). Перебор идёт по `_map`, а не запросом
-   * к ORM, потому что порядок вставки в него структурный: карта строится
-   * обходом дерева сценария, где родитель посещается строго до детей, а кольцо
-   * и атмосфера — всегда дети своей планеты. Значит первое совпадение по имени
-   * гарантированно тело, а не его кольцо. Запрос по таблице такой гарантии не
-   * давал: он опирался на порядок объявления в данных.
-   */
-  private findActorByName(name: string): Actor | undefined {
-    for (const actor of this._map.values()) {
-      if (actor.getAttribute('name') === name) return actor
-    }
-
-    return undefined
-  }
-
-  /**
    * Собирает кандидатов: по одному `MapCandidate` на каждый streamable-ресурс
    * каждого наблюдаемого тела. Приоритет тела (радиус/дистанция) считается
    * один раз на актора, а не на карту.
@@ -544,7 +525,7 @@ class ResourceObserver {
     this.pathActors.clear()
 
     for (const record of this.sceneObserver.data.values()) {
-      const actor: Actor | undefined = this.findActorByName(record.name)
+      const actor: Actor | undefined = this._map.get(record.actorId)
 
       if (!actor) continue
 
@@ -583,7 +564,7 @@ class ResourceObserver {
 
         owners.add(actorId)
 
-        if (this.loaded.has(path)) this.rememberOwners(path, actorId, record.name)
+        if (this.loaded.has(path)) this.rememberOwners(path, actorId)
         if (this.loaded.has(path) && !previousOwners.get(path)?.has(actorId)) catchUp.add(actorId)
       }
 
@@ -720,8 +701,7 @@ class ResourceObserver {
       try {
         this.withActorMaterial(
           actorId,
-          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
-          this.boundOwners.get(candidate.path)?.get(actorId) ?? (actorId === candidate.actorId ? candidate.name : undefined)
+          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial())
         )
       } catch {
         // см. докблок выше
@@ -731,18 +711,18 @@ class ResourceObserver {
   }
 
   /** Remember bindings until storage removal and material reset have both completed. */
-  private rememberOwners(path: string, actorId: number, name: string): void {
-    const owners = this.boundOwners.get(path) ?? new Map<number, string>()
+  private rememberOwners(path: string, actorId: number): void {
+    const owners = this.boundOwners.get(path) ?? new Set<number>()
     for (const id of this.pathActors.get(path) ?? []) {
-      owners.set(id, this._map.get(id)?.getAttribute('name') ?? '')
+      owners.add(id)
     }
-    owners.set(actorId, name)
+    owners.add(actorId)
     this.boundOwners.set(path, owners)
   }
 
   /** Current demand plus all materials that may still hold the texture. */
   private materialOwners(path: string, fallbackActorId: number): ReadonlySet<number> {
-    return new Set([fallbackActorId, ...(this.pathActors.get(path) ?? []), ...(this.boundOwners.get(path)?.keys() ?? [])])
+    return new Set([fallbackActorId, ...(this.pathActors.get(path) ?? []), ...(this.boundOwners.get(path) ?? [])])
   }
 
   /**
@@ -750,10 +730,8 @@ class ResourceObserver {
    * применяет к нему `fn`. Двойная проверка узла обязательна: актора может не
    * быть в графе сцены, а `hasRenderable` пропускает и `renderable: null`.
    *
-   * Имя резолвится через `_map`, а при промахе — через `fallbackName`: заявитель
-   * (`candidate.actorId`/`candidate.name`) прямого вызова (тесты, ручное
-   * вытеснение) может прийти в обход `collectCandidates`, и тогда `_map` про
-   * него ничего не знает — сам кандидат уже несёт своё имя.
+   * Идентичность берётся из модели узла, включая прямые вызовы загрузки и
+   * вытеснения без `_map`: переименование и совпадающие имена не меняют владельца.
    *
    * Помимо самого `renderable.material`, синхронизирует и дочерние
    * материалы-подписчики (см. `syncSubscriberMaterials` в `materialSync`) — находка №2
@@ -761,12 +739,11 @@ class ResourceObserver {
    * `TerrainSphere`, а не самим `.renderable` узла (см. докблок
    * `WaterSphere.material`), и раньше не входила в этот фан-аут вовсе.
    */
-  private withActorMaterial(actorId: number, fn: (material: AbstractShaderMaterial) => void, fallbackName?: string): void {
-    const name: string | undefined = this._map.get(actorId)?.getAttribute('name') ?? fallbackName
-
-    if (!name) return
-
-    const node = this.scene.getObjectByName(name)
+  private withActorMaterial(actorId: number, fn: (material: AbstractShaderMaterial) => void): void {
+    let node: Object3D | undefined
+    this.scene.traverse((object) => {
+      if (!node && object.model?.getAttribute('id') === actorId && hasRenderable(object)) node = object
+    })
 
     if (!node || !hasRenderable(node) || node.renderable === null) return
 
@@ -804,7 +781,7 @@ class ResourceObserver {
     const current = (): boolean => this.epoch === epoch &&
       (!reservation || (this.pathLoads.get(path) === reservation && !reservation.controller.signal.aborted))
 
-    this.rememberOwners(path, candidate.actorId, candidate.name)
+    this.rememberOwners(path, candidate.actorId)
     this.inFlight.add(path)
     this.loaded.add(path)
     try {
@@ -841,8 +818,7 @@ class ResourceObserver {
       for (const actorId of this.materialOwners(path, candidate.actorId)) {
         this.withActorMaterial(
           actorId,
-          (material: AbstractShaderMaterial): void => material.updateMaterial(),
-          this.boundOwners.get(path)?.get(actorId) ?? (actorId === candidate.actorId ? candidate.name : undefined)
+          (material: AbstractShaderMaterial): void => material.updateMaterial()
         )
       }
     } catch (cause) {
@@ -896,8 +872,7 @@ class ResourceObserver {
       try {
         this.withActorMaterial(
           actorId,
-          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
-          this.boundOwners.get(candidate.path)?.get(actorId) ?? (actorId === candidate.actorId ? candidate.name : undefined)
+          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial())
         )
       } catch {
         // см. докблок выше

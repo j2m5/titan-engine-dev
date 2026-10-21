@@ -1,6 +1,7 @@
 import { ResourceTypes, ResourceLifecycles } from '@/core/models/types'
 import { shortenResourcePath } from '@/ui/editor/forms/shortenResourcePath'
 import { TableSpec } from '@/ui/editor/forms/fieldSpec'
+import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
 
 const resourceTypeOptions = (Object.keys(ResourceTypes) as string[])
   .filter((k) => isNaN(Number(k)))
@@ -18,7 +19,14 @@ export const resourcesSpec: TableSpec = {
     { key: 'resourceType', label: 'Type', kind: 'select-enum', options: resourceTypeOptions },
     { key: 'lifecycle', label: 'Lifecycle', kind: 'select-enum', options: lifecycleOptions },
     { key: 'path', label: 'Path', kind: 'text', full: true },
-    { key: 'colorSpace', label: 'Color space', kind: 'text' }
+    {
+      key: 'colorSpace', label: 'Color space', kind: 'select-enum', optional: true,
+      options: [
+        { value: NoColorSpace, label: 'NoColorSpace' },
+        { value: SRGBColorSpace, label: 'sRGB' },
+        { value: LinearSRGBColorSpace, label: 'Linear sRGB' }
+      ]
+    }
   ],
   // в списке показываем тип + усечённый путь
   listLabel: (row) => `#${row.id} [${row.resourceType}] ${shortenResourcePath(String(row.path ?? ''))}`,

@@ -6,6 +6,7 @@ import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { disposeTerrainShadowMaps, terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
 import { encodeHeightMap } from '../../scripts/lib/heightMapEncode'
 import { encodeTerrainAux } from '../../scripts/lib/terrainAuxEncode'
+import { decideHeightMaps } from '@/core/terrain/heightMapGatePolicy'
 
 const MAP_PATH = 'planets/moon/moon_height.raw'
 const AUX_PATH = 'planets/moon/moon_height.aux'
@@ -123,14 +124,15 @@ describe('HeightFieldStorage: спросовый режим', () => {
     expect(heightFieldStorage.version).toBe(before)
   })
 
-  it('карта в полёте переживает release и всё равно доезжает', async () => {
+  it('release discards an in-flight response even if fetch ignores cancellation', async () => {
     stubFetch(validBody())
 
     heightFieldStorage.request('planets/moon/moon_height.raw')
     heightFieldStorage.release('planets/moon/moon_height.raw')
     await settle()
 
-    expect(heightFieldStorage.get('planets/moon/moon_height.raw')?.width).toBe(2)
+    expect(heightFieldStorage.get('planets/moon/moon_height.raw')).toBeUndefined()
+    expect(heightFieldStorage.heldPaths()).toEqual([])
   })
 
   it('heldPaths считает и загруженные, и летящие', async () => {
@@ -206,6 +208,74 @@ function stubHangingFetch(): AbortSignal[] {
 }
 
 describe('HeightFieldStorage: отмена и таймаут загрузки', () => {
+  it('release cancels both requests immediately without imposing retry backoff', async () => {
+    const signals = stubHangingFetch()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      heightFieldStorage.request(MAP_PATH)
+      heightFieldStorage.release(MAP_PATH)
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, true])
+      expect(heightFieldStorage.heldPaths()).toEqual([])
+      await settle()
+      heightFieldStorage.request(MAP_PATH)
+      expect(mapFetchCount()).toBe(2)
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it.each(['success', 'failure'])('late old %s cannot publish or release a replacement request', async (outcome) => {
+    const pending: Array<{ resolve(response: Response): void; reject(reason: Error): void }> = []
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve, reject) => pending.push({ resolve, reject }))))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const body = validBody()
+    const response = (payload: Buffer): Response => ({ ok: true, arrayBuffer: async () => toArrayBuffer(payload) }) as Response
+    try {
+      heightFieldStorage.request(MAP_PATH)
+      heightFieldStorage.release(MAP_PATH)
+      heightFieldStorage.request(MAP_PATH)
+      expect(pending).toHaveLength(4)
+      if (outcome === 'success') pending[0].resolve(response(body))
+      else pending[0].reject(new Error('late old failure'))
+      pending[1].resolve(response(auxFor(body)))
+      await settle()
+      expect(heightFieldStorage.get(MAP_PATH)).toBeUndefined()
+      expect(heightFieldStorage.heldPaths()).toEqual([MAP_PATH])
+      heightFieldStorage.request(MAP_PATH)
+      expect(pending).toHaveLength(4)
+      pending[2].resolve(response(body))
+      pending[3].resolve(response(auxFor(body)))
+      await settle()
+      expect(heightFieldStorage.get(MAP_PATH)?.width).toBe(2)
+      expect(warn).not.toHaveBeenCalled()
+      heightFieldStorage.release(MAP_PATH)
+      stubFetch(body)
+      heightFieldStorage.request(MAP_PATH)
+      await settle()
+      expect(heightFieldStorage.get(MAP_PATH)?.width).toBe(2)
+    } finally {
+      // Settle even after a failed assertion so intentionally uncooperative fetches leave no timers.
+      for (const request of pending) request.resolve(response(body))
+      await settle()
+      warn.mockRestore()
+    }
+  })
+
+  it('candidate churn holds only one admitted budget of unfinished downloads', async () => {
+    const signals = stubHangingFetch()
+    for (let batch = 0; batch < 3; batch++) {
+      const candidates = Array.from({ length: 4 }, (_, index) => ({ path: `${batch}-${index}.raw`, actorPriority: 1 }))
+      const decision = decideHeightMaps(candidates, heightFieldStorage.heldPaths(), 0.5, 0.25,
+        (path) => heightFieldStorage.bytesOf(path), 512 * 1024 * 1024, 2)
+      for (const path of decision.release) heightFieldStorage.release(path)
+      for (const path of decision.request) heightFieldStorage.request(path)
+      expect(heightFieldStorage.heldPaths()).toEqual(candidates.map((candidate) => candidate.path))
+      expect(signals.filter((signal) => !signal.aborted)).toHaveLength(8)
+      await settle()
+    }
+  })
+
   it('clear() обрывает загрузки прошлого сценария — и карту, и компаньон, без предупреждений', async () => {
     const signals = stubHangingFetch()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

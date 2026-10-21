@@ -12,6 +12,7 @@ import { Star } from '@/core/renderables/Star'
 import { Actor } from '@/core/models/Actor'
 import { UpdateContext } from '@/core/UpdateContext'
 import { config } from '@/core/framework/config'
+import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 
 describe('apparentSize: видимый размер и расстояние', () => {
   it('перевод туда и обратно тождественен', () => {
@@ -92,6 +93,26 @@ function diskWorldSize(disk: Star): number {
 }
 
 describe('стык LOD звезды', () => {
+  it('updateView selects current levels with hysteresis and refreshed parent transforms', () => {
+    const lod = new ApparentSizeLod(RADIUS_KM, stubRenderer(1080), 12)
+    const near = new Object3D()
+    const far = new Object3D()
+    const camera = new PerspectiveCamera(FOV)
+    const parent = new Object3D()
+    parent.add(lod)
+    const threshold = lod.switchDistance(FOV)
+    lod.addLevel(near, 0)
+    lod.addLevel(far, threshold, 0.1)
+    // Leave matrices stale: updateView must use this frame's transforms.
+    parent.position.z = threshold * 3
+    for (const [distance, farVisible] of [[1.2, true], [0.95, true], [0.8, false], [0.95, false], [1.01, true]] as const) {
+      camera.position.z = parent.position.z + distance * threshold
+      lod.updateView(camera)
+      expect(far.visible).toBe(farVisible)
+      expect(near.visible).toBe(!farVisible)
+    }
+  })
+
   it('на расстоянии переключения диск звезды и билборд одного размера', () => {
     // Тест держит СОГЛАСОВАННОСТЬ двух сторон, а не формулу: обе считают
     // видимый размер одной парой взаимно обратных функций, так что подмена

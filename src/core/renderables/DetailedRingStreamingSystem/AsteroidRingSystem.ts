@@ -320,7 +320,7 @@ interface AsteroidRingConfig {
   cascades?: CascadeSpec[]
   /**
    * Запас отсечения секторов вокруг видимого конуса: множитель fov камеры
-   * отсечения (см. updateObject) — секторы вокруг кадра населяются заранее, и
+   * отсечения (см. updateView) — секторы вокруг кадра населяются заранее, и
    * поворот камеры находит их уже готовыми вместо резкого появления за 0.25 с.
    * Цена — больше активных секторов, примерно пропорционально телесному углу
    * (кв. масштаба). Не задан или 1 — путь БЕЗ отдельной камеры отсечения:
@@ -441,12 +441,13 @@ class AsteroidRingSystem extends Group {
 
   /**
    * Камера отсечения — используется ТОЛЬКО для построения расширенной
-   * view-projection при cullFovScale (см. updateObject); никогда не рендерит.
+   * view-projection при cullFovScale (см. updateView); никогда не рендерит.
    */
   private readonly _cullCamera = new PerspectiveCamera()
 
   /** Флаг: система была деактивирована (parent invisible) */
   private wasDeactivated = false
+  private frameDelta = 0
 
   // Троттлинг dev-предупреждения об исчерпании пула инстансов
   private lastPoolWarnAt = 0
@@ -636,7 +637,7 @@ class AsteroidRingSystem extends Group {
     // растёт с классом): билборд-материал один на все каскады
     const l1MaxDist = toThreeJSUnits(specs[specs.length - 1].lodThresholdsKm.l1)
 
-    // Радиусы кольца в three-units — для readback профиля (см. updateObject)
+    // Радиусы кольца в three-units — для readback профиля (см. updateView)
     this.ringInnerTU = innerRadius
     this.ringOuterTU = outerRadius
 
@@ -1020,7 +1021,7 @@ class AsteroidRingSystem extends Group {
    * Вызывается каждый кадр из render loop.
    */
   public updateObject(ctx: UpdateContext): void {
-    const dt = ctx.delta
+    this.frameDelta = ctx.delta
 
     // uSpinTime — время СИМУЛЯЦИИ, не рендер-часы: ускорение времени и паузы
     // обязаны вращать камни так же, как меридиан планет (см.
@@ -1035,8 +1036,11 @@ class AsteroidRingSystem extends Group {
       const simSeconds = getJ2000SecondsFromJD(ctx.epoch)
       this.pool.geometryMaterial.uniforms.uSpinTime.value = wrapAsteroidSpinTime(simSeconds, spinPeriod)
     }
+  }
 
-    // Проверить видимость parent'а
+  /** Camera-dependent work runs after follow/collision and world transforms. */
+  public updateView(camera: PerspectiveCamera): void {
+    // Include the streamer's own visibility (the belt toggles it directly).
     if (!this.isEffectivelyVisible()) {
       if (!this.wasDeactivated) {
         this.cascades.deactivateAll()
@@ -1053,9 +1057,6 @@ class AsteroidRingSystem extends Group {
     // Профиль плотности строится, когда текстура кольца догрузилась;
     // до того — дешёвая проверка флага
     this.__tryBuildDensityProfile()
-
-    // Получить камеру
-    const camera = ctx.camera
 
     // Позиция камеры в local space системы
     this._localCamPos.copy(camera.getWorldPosition(this._worldPos))
@@ -1129,7 +1130,7 @@ class AsteroidRingSystem extends Group {
     const localToWorld = this.matrixWorld
 
     // Обновить менеджер секторов
-    this.cascades.update(cameraAngle, cameraRadius, this._localCamPos.y, this._viewProjMatrix, localToWorld, dt)
+    this.cascades.update(cameraAngle, cameraRadius, this._localCamPos.y, this._viewProjMatrix, localToWorld, this.frameDelta)
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
@@ -1399,6 +1400,7 @@ class AsteroidRingSystem extends Group {
    * Проверка, видна ли система (учитывает LOD-переключения родителя).
    */
   private isEffectivelyVisible(): boolean {
+    if (!this.visible) return false
     let obj: Object3D | null = this.parent
     while (obj) {
       if (obj.visible === false) return false

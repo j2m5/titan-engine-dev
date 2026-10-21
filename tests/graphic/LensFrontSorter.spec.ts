@@ -4,6 +4,8 @@ import { LensFrontSorter, isInFrontOfLens } from '@/core/graphic/passes/LensFron
 import { LENS_FRONT_DEPTH_LAYER, LENS_FRONT_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
 import { LensRegistry } from '@/core/services/LensRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import type { WebGLRenderer } from 'three'
+import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 
 const FRONT_MASK = 1 << LENS_FRONT_LAYER
 /** Перенесённый объект, пишущий глубину: ещё и слой глубины */
@@ -77,6 +79,36 @@ describe('isInFrontOfLens: ближе точки наибольшего сбли
 })
 
 describe('LensFrontSorter: разметка тел перед активной линзой', () => {
+  it('uses the current LOD on the first frame crossing either side of the lens threshold', () => {
+    const { scene, camera, hole, lensMesh, sorter } = setup()
+    const lod = new ApparentSizeLod(2000, { domElement: { height: 1080 } } as WebGLRenderer, 12)
+    const threshold = lod.switchDistance(camera.fov)
+    lod.addLevel(lensMesh, 0)
+    lod.addLevel(new Object3D(), threshold, 0.1)
+    hole.add(lod)
+    const front = body(0, 0, threshold * 0.1)
+    const transparent = mesh({ transparent: true })
+    front.add(transparent)
+    scene.add(front)
+    camera.position.z = threshold * 2
+    scene.updateMatrixWorld(true)
+    lod.update(camera) // previous frame's main render selected the far level
+    expect(lensMesh.visible).toBe(false)
+
+    camera.position.z = threshold * 0.5
+    lod.updateView(camera)
+    sorter.split()
+    expect(lensMesh.visible).toBe(true)
+    expect(sorter.frontObjects()).toEqual([transparent])
+
+    camera.position.z = threshold * 2
+    lod.updateView(camera)
+    sorter.split()
+    expect(lensMesh.visible).toBe(false)
+    expect(sorter.frontObjects()).toEqual([])
+    expect(transparent.layers.mask).toBe(1)
+  })
+
   it('у тела перед дырой переносятся прозрачное, без записи глубины и депт-препасс; непрозрачное — нет', () => {
     const { scene, sorter } = setup()
     const near = body(0, 0, 5)

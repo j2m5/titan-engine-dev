@@ -271,6 +271,7 @@ function frameAt(belt: AsteroidBelt, x: number, y: number = 0): void {
   camera.position.set(x, y, 0)
   camera.updateMatrixWorld(true)
   belt.updateObject({ delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext)
+  belt.updateView(camera)
 }
 
 const BELT_DATA: IAsteroidBeltRenderingObject = {

@@ -1,5 +1,6 @@
+import { observedActor, observedRecord as record } from './observedActor'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { Scene, Texture, Vector3 } from 'three'
+import { Scene, Texture } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -28,9 +29,6 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
 const SOLAR_SYSTEM = Scenarios.find((s) => s.rootId === 1)!
 const SIZE_8K: number = textureBytes(8192, 4096)
 
-function record(name: string, distance: number): ObservableRecord {
-  return { name, distance, position: new Vector3() }
-}
 
 function makeObserver(
   budgetBytes: number,
@@ -38,10 +36,10 @@ function makeObserver(
 ): {
   observer: ResourceObserver
   handlers: Record<string, (event: ObservableRecord) => Promise<void>>
-  data: Map<string, ObservableRecord>
+  data: Map<number, ObservableRecord>
 } {
   const handlers: Record<string, (event: ObservableRecord) => Promise<void>> = {}
-  const data: Map<string, ObservableRecord> = new Map()
+  const data: Map<number, ObservableRecord> = new Map()
 
   const sceneObserver = {
     subscribe: vi.fn((event: string, handler: (e: ObservableRecord) => Promise<void>): void => {
@@ -82,7 +80,7 @@ describe('ResourceObserver: steep-набор зон материала в кан
     const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Enceladus', record('Enceladus', 10))
+    data.set(observedActor('Enceladus').getAttribute('id')!, record('Enceladus', 10))
     await handlers['ClosestChange'](record('Enceladus', 10))
 
     // Родной ice-набор Энцелада запрошен как обычно.
@@ -123,7 +121,7 @@ describe('ResourceObserver: steep-набор зон материала в кан
     const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Moon', record('Moon', 10))
+    data.set(observedActor('Moon').getAttribute('id')!, record('Moon', 10))
     await handlers['ClosestChange'](record('Moon', 10))
 
     // Родной набор Луны: диффуз+slope+4 detail (уже rocky_trail-семейство) — 6 путей.
@@ -151,7 +149,7 @@ describe('ResourceObserver: steep-набор зон материала в кан
     const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Saturn', record('Saturn', 300))
+    data.set(observedActor('Saturn').getAttribute('id')!, record('Saturn', 300))
     await handlers['ClosestChange'](record('Saturn', 300))
 
     // Только диффуз планеты — легаси-тело, ни height, ни steep-набора.

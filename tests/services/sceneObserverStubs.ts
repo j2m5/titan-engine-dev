@@ -41,8 +41,7 @@ export function makeAstroControlsStub(): AstroControlsStub {
  * Сцена с одним телом заданного `userData.type` — тем полем, по которому
  * наблюдатель и ищет.
  *
- * `model` обязателен: имя записи `makeRecord` берёт из него, а не из
- * `Object3D.name`, и без заглушки любое тело зовётся «unknown».
+ * `model` обязателен: ID и имя записи `makeRecord` берёт из модели.
  */
 export function makeSceneWithBody(type: string, name: string = type): Scene {
   const scene = new Scene()
@@ -52,14 +51,15 @@ export function makeSceneWithBody(type: string, name: string = type): Scene {
   return scene
 }
 
-/** Тело для сцены наблюдателя: тип в `userData`, имя — через заглушку `model`. */
+/** Тело для сцены наблюдателя: тип в `userData`, стабильные ID/имя — через `model`. */
 export function makeBody(type: string, name: string, position: Vector3): Object3D {
   const body = new Object3D()
 
   body.name = name
   body.userData.type = type
   body.position.copy(position)
-  body.model = { getAttribute: (key: string, fallback?: unknown): unknown => (key === 'name' ? name : fallback) } as never
+  body.model = { getAttribute: (key: string, fallback?: unknown): unknown =>
+    key === 'id' ? body.id : key === 'name' ? name : fallback } as never
 
   return body
 }

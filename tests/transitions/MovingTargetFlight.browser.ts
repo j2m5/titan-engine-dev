@@ -16,9 +16,10 @@ export async function checkMovingTargetFlight(): Promise<unknown> {
   const target = new Object3D()
   target.userData.type = 'planet'
   target.position.set(0, 0, -10000)
+  const attributes = { id: 1, name: 'Moving probe' }
   const model = {
-    attributes: { name: 'Moving probe' },
-    getAttribute: () => 'Moving probe',
+    attributes,
+    getAttribute: (key: keyof typeof attributes) => attributes[key],
     category: { getAttribute: () => 'planet' },
     physicalObject: { getAttribute: () => 100 }
   } as unknown as Actor
@@ -38,7 +39,7 @@ export async function checkMovingTargetFlight(): Promise<unknown> {
   const observer = new SceneObserver()
   observer.observable = controls as unknown as AstroControls
   observer.scene = scene
-  observer.add({ name: 'Moving probe', data: { name: 'Moving probe', position: target.position.clone(), distance: 10000 } })
+  observer.add({ actorId: 1, name: 'Moving probe', position: target.position.clone(), distance: 10000 })
   let complete: (() => void) | undefined
   let timeout: ReturnType<typeof setTimeout> | undefined
   const finished = new Promise<void>((resolve, reject) => {

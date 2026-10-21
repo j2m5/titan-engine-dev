@@ -51,6 +51,61 @@ const renderer = {} as WebGLRenderer
 const buffer = {} as WebGLRenderTarget
 
 describe('AtmosphereEffect', () => {
+  it('behind-camera atmospheres cannot displace the visible shell from the limited slots', () => {
+    const registry = new AtmosphereRegistry()
+    for (let i = 0; i < ATMOSPHERE_SLOTS; i++) {
+      registry.register(entry(i, new Vector3(0, 0, 10000 + i * 1000), 6000, 6100))
+    }
+    const visible = entry(10, new Vector3(0, 0, -50000), 6000, 6100)
+    registry.register(visible)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const effect = new AtmosphereEffect(cameraAtOrigin(), registry)
+      effect.update(renderer, buffer)
+      expect(effect.slotCount).toBe(1)
+      expect(effect.uniforms.get(slotUniformName(0, 'transmittance'))!.value).toBe(visible.lut.transmittance)
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('keeps a sphere intersecting the screen edge, discards a fully offscreen sphere', () => {
+    const registry = new AtmosphereRegistry()
+    const edge = entry(1, new Vector3(5000, 0, -10000), 900, 1000)
+    registry.register(edge)
+    registry.register(entry(2, new Vector3(8000, 0, -10000), 900, 1000))
+    const effect = new AtmosphereEffect(cameraAtOrigin(), registry)
+    effect.update(renderer, buffer)
+    expect(effect.slotCount).toBe(1)
+    expect(effect.uniforms.get(slotUniformName(0, 'transmittance'))!.value).toBe(edge.lut.transmittance)
+  })
+
+  it('retains a containing shell even if its center is behind the camera and its near plane is outside', () => {
+    const registry = new AtmosphereRegistry()
+    registry.register(entry(1, new Vector3(0, 0, 5000), 6000, 6420))
+    const camera = cameraAtOrigin()
+    camera.near = 20000 * SpaceScale
+    camera.updateProjectionMatrix()
+    const effect = new AtmosphereEffect(camera, registry)
+    effect.update(renderer, buffer)
+    expect(effect.slotCount).toBe(1)
+  })
+
+  it('releases slot LUT references when camera rotation moves a shell out of view', () => {
+    const registry = new AtmosphereRegistry()
+    registry.register(entry(1, new Vector3(0, 0, -50000), 6000, 6100))
+    const camera = cameraAtOrigin()
+    const effect = new AtmosphereEffect(camera, registry)
+    effect.update(renderer, buffer)
+    expect(effect.slotCount).toBe(1)
+    camera.rotation.y = Math.PI
+    camera.updateMatrixWorld(true)
+    effect.update(renderer, buffer)
+    expect(effect.slotCount).toBe(0)
+    expect(effect.uniforms.get(slotUniformName(0, 'transmittance'))!.value).toBeNull()
+  })
+
   it('атрибут DEPTH и K троек сэмплеров в юниформах', () => {
     const effect = new AtmosphereEffect(cameraAtOrigin(), new AtmosphereRegistry())
     expect(effect.getAttributes() & EffectAttribute.DEPTH).toBeTruthy()

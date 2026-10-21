@@ -44,6 +44,8 @@ export interface EnumFieldSpec extends FieldSpecBase {
   kind: 'select-enum'
   options: Array<{ value: string; label: string }>
   nullable?: boolean
+  /** Empty selection omits the property instead of storing null. */
+  optional?: boolean
 }
 
 export interface JsonFieldSpec extends FieldSpecBase {

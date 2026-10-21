@@ -150,6 +150,8 @@ export interface TitanSelectProps extends TitanFieldProps {
   value: string
   options: TitanSelectOption[]
   placeholder?: string
+  /** Distinguishes the placeholder from an option whose value is an empty string. */
+  placeholderValue?: string
   onChange(value: string): void
 }
 
