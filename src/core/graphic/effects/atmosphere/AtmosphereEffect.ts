@@ -1,5 +1,5 @@
 import { BlendFunction, Effect, EffectAttribute, EffectPass } from 'postprocessing'
-import { PerspectiveCamera, Uniform, Vector3, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { Frustum, Matrix4, PerspectiveCamera, Sphere, Uniform, Vector3, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three'
 import { SpaceScale } from '@/core/constants'
 import { MAX_OCCLUDERS } from '@/core/eclipse/eclipseMath'
 import { AtmosphereRegistry, AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
@@ -60,6 +60,9 @@ export class AtmosphereEffect extends Effect {
   private warnedDropped = false
 
   private readonly cameraWorld = new Vector3()
+  private readonly viewProjection = new Matrix4()
+  private readonly frustum = new Frustum()
+  private readonly shell = new Sphere()
 
   public constructor(camera: PerspectiveCamera, registry: AtmosphereRegistry, options: { debugView?: number } = {}) {
     const uniforms = new Map<string, Uniform>([
@@ -117,18 +120,23 @@ export class AtmosphereEffect extends Effect {
     this.uniforms.get('uLogFarFactor')!.value = Math.log2(camera.far + 1)
 
     this.cameraWorld.setFromMatrixPosition(camera.matrixWorld)
+    this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    this.frustum.setFromProjectionMatrix(this.viewProjection)
 
     // Кандидаты собираются заново каждый кадр: хранить их между кадрами значит
     // держать узлы и LUT удалённых сценариев живыми до смерти композера
-    const items: SlotItem[] = this.registry.entries().map((entry) => {
+    const items: SlotItem[] = []
+    for (const entry of this.registry.entries()) {
       const centerWorld = new Vector3().setFromMatrixPosition(entry.object.matrixWorld)
+      this.shell.set(centerWorld, entry.config.topRadius * SpaceScale)
+      if (!this.shell.containsPoint(this.cameraWorld) && !this.frustum.intersectsSphere(this.shell)) continue
       // Звезда в мировом (0,0,0): направление от центра оболочки к нулю СЦЕНЫ,
       // а не к камере — иначе освещённая сторона всегда смотрела бы в кадр
       const sunDir = centerWorld.clone().negate().normalize()
       // Центр относительно камеры в float64, затем юниты → км
       const centerKm = centerWorld.sub(this.cameraWorld).multiplyScalar(1 / SpaceScale)
-      return { entry, centerKm, topRadiusKm: entry.config.topRadius, sunDir }
-    })
+      items.push({ entry, centerKm, topRadiusKm: entry.config.topRadius, sunDir })
+    }
 
     // filtered (мельче порога) в кадре не видны — про них молчим
     const { chosen, dropped } = orderSlots(items, ATMOSPHERE_SLOTS, MIN_ANGULAR)
