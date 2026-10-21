@@ -172,7 +172,7 @@ it('templates clear stale form drafts and use the same validated save path', asy
   expect(saveSpy).toHaveBeenCalledTimes(1)
 })
 
-it.each(['null', '[]', '{"size":30,"quality":null}', '{"size":30,"structure":[]}'])(
+it.each(['null', '[]', '1', 'true', '"x"', '{"size":30,"quality":null}', '{"size":30,"structure":[]}'])(
   'retains malformed object data %s and lets JSON recover without a crash', (text) => {
     act(() => input(container.querySelector('textarea')!, text))
     expect(editor.hasFieldErrors).toBe(true)
