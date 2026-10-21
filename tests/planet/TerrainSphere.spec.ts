@@ -94,7 +94,9 @@ describe('TerrainSphere: динамическое квадродерево па�
     sphere.material.resetMaterial()
     const defines = new Set(Object.keys(sphere.material.defines))
     // вершинник при дефайнах после reset берёт направление из центра патча
-    expect(preprocessGlsl(sphere.material.vertexShader, defines)).toContain('vec3 vertexDir = normalize(morphedPosition + patchCenter);')
+    expect(preprocessGlsl(sphere.material.vertexShader, defines)).toContain(
+      'vec3 vertexDir = normalize(morphedPosition + patchCenter);'
+    )
     expect(sphere.material.vertexShader).not.toMatch(/USE_TERRAIN_UV/)
     // атрибут, который он читает, есть у каждого меша патча
     const meshes = sphere.children.filter((c): c is Mesh => c instanceof Mesh)
@@ -352,42 +354,6 @@ describe('TerrainSphere: динамическое квадродерево па�
     // ожидание — ε(4−2)=ε(2), НЕ ε(4) (своя ε мельче на два порядка в этом поле)
     const expectedDepthUnits = toThreeJSUnits((field.geometricErrorMeters(2) + CLEARANCE_MARGIN_METERS) / 1000)
     expect(actualDepthUnits).toBeCloseTo(expectedDepthUnits, 6)
-  })
-
-  // Приёмочная волна 4, №3 (высотный fade облаков): onVisibleUpdate обязан
-  // освежать uCloudOpacity КАЖДЫЙ активный кадр (тот же паттерн, что
-  // WaterSphere.onVisibleUpdate/uTime) — дистанция камера-тело меняется
-  // ежекадрово, а не только при (пере)конструировании материала.
-  it('onVisibleUpdate зовёт sharedMaterial.updateCloudOpacity с мировыми позициями камеры и себя, каждый активный кадр', () => {
-    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
-    const spy = vi.spyOn(TerrainMaterial.prototype, 'updateCloudOpacity')
-
-    sphere.updateObject(makeCtx(2))
-
-    // Скретч-вектора переиспользуются между кадрами (см. cloudCameraWorldScratch
-    // докблок в TerrainSphere) — снимок ПОСЛЕ первого вызова, ДО второго,
-    // иначе spy.mock.calls[0] прочитал бы уже перезаписанное значение.
-    expect(spy).toHaveBeenCalledTimes(1)
-    const [cameraWorld, selfWorld] = spy.mock.calls[0]
-    expect(cameraWorld).toBeInstanceOf(Vector3)
-    expect(selfWorld).toBeInstanceOf(Vector3)
-    expect(cameraWorld.x).toBeCloseTo(toThreeJSUnits(1737.4 + 2), 6) // makeCtx(2) — камера на (радиус+2км, 0, 0)
-
-    sphere.updateObject(makeCtx(3))
-    expect(spy).toHaveBeenCalledTimes(2)
-
-    spy.mockRestore()
-  })
-
-  it('невидимый (LOD → FakePlanet) — updateCloudOpacity НЕ зовётся (заморожено вместе с деревом)', () => {
-    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
-    const spy = vi.spyOn(TerrainMaterial.prototype, 'updateCloudOpacity')
-
-    sphere.visible = false
-    sphere.updateObject(makeCtx(2))
-
-    expect(spy).not.toHaveBeenCalled()
-    spy.mockRestore()
   })
 
   it('dispose зовёт pool.dispose — освобождение владения пула не пропущено', () => {

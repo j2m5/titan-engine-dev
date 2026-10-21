@@ -1,3 +1,5 @@
+import type { CloudRegistry } from '@/core/services/CloudRegistry'
+import type { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
 /**
  * Реестр токенов приложения
  * Важно: все классы импортируются через `import type`
@@ -36,6 +38,8 @@ import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfa
 import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 
 export const Tokens = {
+  CloudRegistry: token<CloudRegistry>('CloudRegistry'),
+  SceneCloudRuntime: token<SceneCloudRuntime>('SceneCloudRuntime'),
   Engine: token<Engine>('Engine'),
   Application: token<Application>('Application'),
   TextureProvider: token<TextureProvider>('TextureProvider'),

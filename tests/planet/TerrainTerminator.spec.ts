@@ -10,8 +10,8 @@ describe.each([
 
   it('суша под landGate, облака своим светом слоя, огни гаснут под облаками, ночь под (1 − dayFactor)', () => {
     expect(frag).toContain('float landGate = mix(dayFactor, 1.0, uTerrainLambert);')
-    expect(frag).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
-    expect(frag).toContain('vec3 finalColor = night * (1.0 - dayFactor) * (1.0 - cloudAlphaSlant) + day;')
+    expect(frag).toContain('vec3 day = dayColor * landGate;')
+    expect(frag).toContain('vec3 finalColor = night * (1.0 - dayFactor) + day;')
   })
 
   it('легаси-формулы нет: одна сборка на оба пути', () => {
@@ -22,6 +22,6 @@ describe.each([
     const main = frag.slice(frag.indexOf('void main()'))
     expect((main.match(/sunTint\(muS\)/g) ?? []).length).toBe(1)
     expect(main).not.toMatch(/\bday \*=/)
-    expect(main).toContain('night * (1.0 - dayFactor) * (1.0 - cloudAlphaSlant) + day')
+    expect(main).toContain('night * (1.0 - dayFactor) + day')
   })
 })

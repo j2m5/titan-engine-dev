@@ -3,8 +3,10 @@ import TitanFlex from '@titanui/components/TitanFlex'
 import TitanLabel from '@titanui/components/TitanLabel'
 import TitanDivider from '@titanui/components/TitanDivider'
 import TitanToggle from '@titanui/components/TitanToggle'
+import TitanSelect from '@titanui/components/TitanSelect'
+import type { CloudQuality } from '@/core/clouds/SceneCloudConfig'
 import { settingsStore } from '@/ui/mobx/SettingsStore'
-import { toggleSettings } from '@/ui/components/common/settings/settingsSchema'
+import { toggleSettings, cloudQualitySetting } from '@/ui/components/common/settings/settingsSchema'
 
 const SettingsContent = observer(() => {
   const groups: string[] = [...new Set(toggleSettings.map((setting) => setting.group))]
@@ -26,6 +28,14 @@ const SettingsContent = observer(() => {
                   onChange={() => settingsStore.toggle(setting.key)}
                 />
               ))}
+            {group === cloudQualitySetting.group && (
+              <TitanSelect
+                label={cloudQualitySetting.label}
+                value={settingsStore.cloudQuality}
+                options={cloudQualitySetting.options}
+                onChange={(value) => settingsStore.setCloudQuality(value as CloudQuality)}
+              />
+            )}
           </TitanFlex>
         </div>
       ))}

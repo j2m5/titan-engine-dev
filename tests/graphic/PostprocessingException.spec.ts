@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Scene } from 'three'
+import { Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Scene, Vector2, type WebGLRenderer } from 'three'
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import type { Actor } from '@/core/models/Actor'
@@ -8,6 +8,15 @@ import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { EffectComposer, type Pass } from 'postprocessing'
 import type { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
+
+function rendererFixture(): WebGLRenderer {
+  return {
+    domElement: document.createElement('canvas'),
+    getContext: () => ({ getContextAttributes: () => ({ alpha: true }), isContextLost: () => false }),
+    getSize: (size: Vector2) => size.set(4, 4),
+    getDrawingBufferSize: (size: Vector2) => size.set(4, 4)
+  } as unknown as WebGLRenderer
+}
 
 function setup() {
   const scene = new Scene()
@@ -29,7 +38,7 @@ function setup() {
   scene.add(body, holeBody)
   const lenses = new LensRegistry()
   lenses.register({ object: hole, rsUnits: 1, simulationRadiusUnits: 3, background: () => null })
-  const pp = new Postprocessing(null as never, scene, camera, new AtmosphereRegistry(), new DepthVolumeRegistry(), lenses)
+  const pp = new Postprocessing(rendererFixture(), scene, camera, new AtmosphereRegistry(), new DepthVolumeRegistry(), lenses)
   return { pp, object, holeBody }
 }
 
@@ -48,6 +57,7 @@ describe('Postprocessing exception cleanup', () => {
       expect(object.layers.mask).not.toBe(1)
       expect((oldSorter as unknown as { lensBodies: Set<Object3D> }).lensBodies.has(holeBody)).toBe(true)
       const error = new Error('composer dispose')
+      const oldComposer = pp.composer!
       if (throws) vi.spyOn(pp.composer!, 'dispose').mockImplementationOnce(() => { throw error })
 
       if (throws) expect(() => pp.dispose()).toThrow(error)
@@ -55,7 +65,8 @@ describe('Postprocessing exception cleanup', () => {
       expect(object.layers.mask).toBe(1)
       expect(ownedSorter()).toBeNull()
       // If disposal threw before the composer released its passes, finish that fixture's cleanup.
-      if (throws) pp.composer!.dispose()
+      if (throws) oldComposer.dispose()
+      expect(pp.composer).toBeNull()
 
       pp.initialize()
       expect(ownedSorter()).not.toBe(oldSorter)
@@ -90,7 +101,7 @@ describe('Postprocessing exception cleanup', () => {
     scene.add(body, hole)
     const lenses = new LensRegistry()
     lenses.register({ object: hole, rsUnits: 1, simulationRadiusUnits: 3, background: () => null })
-    const pp = new Postprocessing(null as never, scene, camera, new AtmosphereRegistry(), new DepthVolumeRegistry(), lenses)
+    const pp = new Postprocessing(rendererFixture(), scene, camera, new AtmosphereRegistry(), new DepthVolumeRegistry(), lenses)
     const passes = pp.buildPasses()
     const error = new Error('earlier composer pass')
     let fail = true

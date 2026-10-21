@@ -26,6 +26,25 @@ import { UpdateContext } from '@/core/UpdateContext'
 const ORIENTED_CATEGORIES: Set<number> = new Set([3, 4, 8, 10])
 
 class DynamicNode extends Group implements Acceptable<IObject3DVisitor>, ShouldRenderOrbitLine {
+  private releaseCloudRegistration: (() => void) | null = null
+  private cloudReceivers: Array<() => void> = []
+  public setCloudRegistration(release: () => void): void {
+    this.releaseCloudRegistration?.()
+    this.releaseCloudRegistration = release
+  }
+  public setCloudReceivers(releases: Array<() => void>): void {
+    this.clearCloudReceivers()
+    this.cloudReceivers = releases
+  }
+  public clearCloudReceivers(): void {
+    for (const release of this.cloudReceivers) release()
+    this.cloudReceivers = []
+  }
+  public dispose(): void {
+    this.clearCloudReceivers()
+    this.releaseCloudRegistration?.()
+    this.releaseCloudRegistration = null
+  }
   public model: Actor
   public renderable: RenderableObject3D | null = null
   /** Экваториальная рамка: наклонена по полюсу тела, но не вращается — сюда цепляются кольца и атмосферы */

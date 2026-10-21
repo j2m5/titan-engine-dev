@@ -4,6 +4,8 @@ import { AtmosphereRegistry, AtmosphereEntry } from '@/core/services/AtmosphereR
 function entry(actorId: number): AtmosphereEntry {
   return {
     actorId,
+    generation: 0,
+    ready: true,
     name: `A${actorId}`,
     object: new Object3D(),
     config: {} as AtmosphereEntry['config'],
@@ -12,6 +14,28 @@ function entry(actorId: number): AtmosphereEntry {
 }
 
 describe('AtmosphereRegistry', () => {
+  it('invalidates generation on pending, readiness and same-actor replacement', () => {
+    const registry = new AtmosphereRegistry()
+    const first = entry(7)
+    registry.register(first)
+    const initial = first.generation
+    expect(initial).toBeGreaterThan(0)
+    registry.markPending(7)
+    expect(first.ready).toBe(false)
+    expect(first.generation).toBeGreaterThan(initial)
+    const pending = first.generation
+    registry.markReady(7)
+    expect(first.ready).toBe(true)
+    expect(first.generation).toBeGreaterThan(pending)
+    const ready = first.generation
+    registry.register(entry(7))
+    expect(registry.get(7)!.generation).toBeGreaterThan(ready)
+    registry.unregister(7)
+    registry.markReady(7)
+    expect(registry.get(7)).toBeUndefined()
+    registry.register(entry(8))
+    expect(registry.get(8)!.generation).toBeGreaterThan(ready)
+  })
   it('регистрирует, перечисляет, снимает', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry(1))

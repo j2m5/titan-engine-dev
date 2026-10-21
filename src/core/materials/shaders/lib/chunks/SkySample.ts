@@ -7,6 +7,7 @@ import {
   skyboxSampleUniforms
 } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
+import { skyAtmosphereUniforms } from '@/core/sky/atmosphereSkyVisibility'
 
 const gaiaUniforms = `
   uniform highp samplerCube uGaiaGalaxy;
@@ -103,7 +104,8 @@ const gaiaFunctions = `
     float amplification = min(omega / max(omegaPrime, 1e-30), 1e6);
     // Поток звёзд → яркость: площадь пикселя в текселях, не меньше одного
     float pixelArea = max(omega * GAIA_TEXEL_AREA_INV, 1.0);
-    return galaxy * uGaiaExposure + gaiaStars(d, dx, dy, uGaiaExposure * amplification / pixelArea);
+    return (galaxy * uGaiaExposure + gaiaStars(d, dx, dy, uGaiaExposure * amplification / pixelArea))
+      * uSkyAtmosphereVisibility;
   }
 
   // Небо по неотклонённому лучу (фон, слой неба): усиление ровно 1
@@ -118,11 +120,12 @@ const cubemapFunctions = `${skyboxSampleFunctions}
   // нулевой мип без анизотропии; явные производные это снимают
   vec3 sampleSkyLensed(vec3 dir, vec3 dDirDx, vec3 dDirDy, vec3 dPixDx, vec3 dPixDy) {
     vec3 flip = vec3(uSkyFlipX, 1.0, 1.0);
-    return skyboxHdrFromRaw(textureGrad(skybox, flip * dir, flip * dDirDx, flip * dDirDy).rgb);
+    return skyboxHdrFromRaw(textureGrad(skybox, flip * dir, flip * dDirDx, flip * dDirDy).rgb)
+      * uSkyAtmosphereVisibility;
   }
 
   vec3 sampleSky(vec3 dir, vec3 dDirDx, vec3 dDirDy) {
-    return sampleSkyboxHdr(skybox, dir, uSkyFlipX);
+    return sampleSkyboxHdr(skybox, dir, uSkyFlipX) * uSkyAtmosphereVisibility;
   }
 `
 
@@ -133,7 +136,7 @@ const cubemapFunctions = `${skyboxSampleFunctions}
  * проходом. Ветка cubemap читает `skybox` — потребитель объявляет его до include
  */
 export function buildSkySampleUniforms(source: BackgroundSource): string {
-  return source === 'gaia' ? gaiaUniforms : skyboxSampleUniforms
+  return `uniform float uSkyAtmosphereVisibility;\n${source === 'gaia' ? gaiaUniforms : skyboxSampleUniforms}`
 }
 
 export function buildSkySampleFunctions(source: BackgroundSource): string {
@@ -148,5 +151,8 @@ export const skySampleFunctions: string = buildSkySampleFunctions(config('backgr
  * текстуры и уровень загрузки); cubemap — свежие, из конфига фона
  */
 export function createSkyUniforms(source: BackgroundSource = config('background.source')): Record<string, IUniform> {
-  return source === 'gaia' ? { ...gaiaSkyUniforms } : createSkyboxSampleUniforms()
+  return {
+    ...(source === 'gaia' ? gaiaSkyUniforms : createSkyboxSampleUniforms()),
+    ...skyAtmosphereUniforms
+  }
 }

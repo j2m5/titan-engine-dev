@@ -17,6 +17,7 @@ import { type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereC
 import { RenderingObjects } from '@storage/database'
 import { checkOceanRegressions } from './oceanRegressions.gpu'
 import waterNormalMapUrl from './fixtures/waternormals.jpg?url'
+import { bindSceneCloudReceiver, sceneCloudReceiverDefines } from '@/core/clouds/receivers/SceneCloudReceiver'
 
 const metersPerUnit = 1000 / SpaceScale
 const radius = 6360000
@@ -91,6 +92,14 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
     uniforms: shader.uniforms, vertexShader: shader.vertexShader, fragmentShader: shader.fragmentShader,
     defines: { USE_WATER_WAVES: '1', USE_WATER_DEPTH: '1' }, blending: NoBlending, depthTest: true
   })
+  const cloudReceiver = bindSceneCloudReceiver(material, 'water')
+  cloudReceiver.setFarMap({
+    pattern: { kind: 'mask', encoding: 'rgb-cloud-map', map: { resourceId: 26 } },
+    mapping: { frame: 'planet-fixed', projection: 'equirectangular', longitudeOffsetRadians: 0 },
+    color: { kind: 'constant', srgb: [1, 1, 1] }
+  }, clouds)
+  const receiverDefines = sceneCloudReceiverDefines(material)
+  const cloudFragmentShader = material.fragmentShader
   const uniforms = material.uniforms
   uniforms.uWaterNormalMap.value = texture
   uniforms.uSlopeMap.value = depth
@@ -102,7 +111,7 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
   config.bottomRadius = radius / 1000
   const lut = generator.generate(config)
   const registry = new AtmosphereRegistry()
-  registry.register({ actorId: 47, name: 'Earth', object: new Object3D(), config, lut })
+  registry.register({ actorId: 47, generation: 0, ready: true, name: 'Earth', object: new Object3D(), config, lut })
   new SunTintBinding(material, registry, 47, radius / 1000).sync()
   new WaterSkyBinding(material, registry, 47, radius / 1000).sync()
   const fullDefines = { ...material.defines }
@@ -183,7 +192,7 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
   }
   const setBaseline = (enabled: boolean): void => {
     material.vertexShader = enabled ? AbstractShader.prepareSource(options.baseline!.vertexShader) : shader.vertexShader
-    material.fragmentShader = enabled ? AbstractShader.prepareSource(options.baseline!.fragmentShader) : shader.fragmentShader
+    material.fragmentShader = enabled ? AbstractShader.prepareSource(options.baseline!.fragmentShader) : cloudFragmentShader
     material.needsUpdate = true
   }
   try {
@@ -252,12 +261,11 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
     const variants: string[] = []
     for (const gates of [
       {}, { USE_WATER_DEPTH: '1' }, { USE_WATER_WAVES: '1' },
-      { USE_WATER_WAVES: '1', USE_WATER_DEPTH: '1', USE_WATER_CLOUD: '1' },
-      { ...fullDefines, USE_WATER_CLOUD: '1' }, fullDefines
+      { USE_WATER_WAVES: '1', USE_WATER_DEPTH: '1', ...receiverDefines },
+      { ...fullDefines, SCENE_CLOUD_NEAR: 1 }, fullDefines
     ]) {
       material.defines = gates
       material.needsUpdate = true
-      uniforms.uWaterCloudMap.value = clouds
       read()
       variants.push(Object.keys(gates).join('+') || 'bare')
     }
@@ -345,6 +353,7 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
       captures
     }
   } finally {
+    cloudReceiver.dispose()
     material.dispose()
     skyMaterial.dispose()
     skyQuad.geometry.dispose()

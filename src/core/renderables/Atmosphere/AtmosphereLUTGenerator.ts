@@ -35,12 +35,18 @@ import {
   type TextureDataType,
   Uniform,
   Vector3,
+  Vector4,
   WebGL3DRenderTarget,
   WebGLRenderTarget,
   type WebGLRenderer
 } from 'three'
 import { AtmosphereConfig } from './AtmosphereConfig'
 import { createParametricAtmosphereShader } from './atmosphereParametric'
+import {
+  appendProgramCacheKey,
+  captureShaderCompilation,
+  type ShaderCompilationScope
+} from '@/core/graphic/effects/atmosphere/shaderCompilationScope'
 
 // ════════════════════════════════════════════════════════════════════
 // Constants
@@ -341,6 +347,10 @@ function create3DRT(w: number, h: number, d: number, type: TextureDataType): Web
 // ════════════════════════════════════════════════════════════════════
 
 class AtmosphereLUTGenerator {
+  private static programEpoch = 0
+  private compilation: ShaderCompilationScope | null = null
+  private failed = false
+  private disposed = false
   private readonly renderer: WebGLRenderer
   private scene = new Scene()
   private camera = new Camera()
@@ -416,6 +426,21 @@ class AtmosphereLUTGenerator {
       { OUTPUT_ACCUMULATE: '1' }
     )
     setAdditiveBlending(this.multipleScatteringAccumMat, true)
+    const suffix = AtmosphereLUTGenerator.programEpoch
+      ? `atmosphere-retry-${AtmosphereLUTGenerator.programEpoch}`
+      : undefined
+    for (const material of [
+      this.transmittanceMat,
+      this.directIrradianceMat,
+      this.singleScatteringRayleighMat,
+      this.singleScatteringMieMat,
+      this.singleScatteringCombinedMat,
+      this.scatteringDensityMat,
+      this.indirectIrradianceMat,
+      this.multipleScatteringMat,
+      this.multipleScatteringAccumMat
+    ])
+      appendProgramCacheKey(material, suffix)
   }
 
   // ── Public API ──────────────────────────────────────────────────
@@ -424,6 +449,8 @@ class AtmosphereLUTGenerator {
     config: AtmosphereConfig,
     options: { scatteringOrders?: number; multiScatteringFactor?: number; multiScatteringNightFloor?: number } = {}
   ): AtmosphereLUTs {
+    if (this.disposed || this.failed)
+      throw new Error('Atmosphere LUT generator failed or is disposed; recreate before retry')
     const scatteringOrders = options.scatteringOrders ?? this.scatteringOrders
     const msFactor = options.multiScatteringFactor ?? 1
     const msNightFloor = options.multiScatteringNightFloor ?? 0
@@ -431,9 +458,15 @@ class AtmosphereLUTGenerator {
     const renderer = this.renderer
     const savedAutoClear = renderer.autoClear
     const savedRenderTarget = renderer.getRenderTarget()
+    const savedFace = renderer.getActiveCubeFace(),
+      savedMip = renderer.getActiveMipmapLevel()
+    const savedViewport = renderer.getViewport(new Vector4()),
+      savedScissor = renderer.getScissor(new Vector4())
+    const savedScissorTest = renderer.getScissorTest()
     const savedClearColor = renderer.getClearColor(new Color())
     const savedClearAlpha = renderer.getClearAlpha()
     renderer.autoClear = false
+    renderer.setScissorTest(false)
 
     // Set atmosphere parameters on all materials
     this.setAtmosphereOnAllMaterials(config)
@@ -445,6 +478,8 @@ class AtmosphereLUTGenerator {
     const deltaScatteringDensityRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D, this.lutType)
     // Reuse deltaRayleigh memory for deltaMultipleScattering (not needed simultaneously)
     const deltaMultipleScatteringRT = deltaRayleighRT
+    const compilation = captureShaderCompilation(renderer, 'Atmosphere LUT')
+    this.compilation = compilation
 
     try {
       // ═══════════════════════════════════════════════════════════
@@ -558,7 +593,13 @@ class AtmosphereLUTGenerator {
         scattering: this.scatteringRT.texture,
         irradiance: this.irradianceRT.texture
       }
+    } catch (error) {
+      this.failed = true
+      AtmosphereLUTGenerator.programEpoch++
+      throw error
     } finally {
+      compilation.restore()
+      this.compilation = null
       // Cleanup temp render targets
       deltaIrradianceRT.dispose()
       // deltaRayleighRT and deltaMultipleScatteringRT are the same object
@@ -568,11 +609,16 @@ class AtmosphereLUTGenerator {
 
       renderer.autoClear = savedAutoClear
       renderer.setClearColor(savedClearColor, savedClearAlpha)
-      renderer.setRenderTarget(savedRenderTarget)
+      renderer.setRenderTarget(savedRenderTarget, savedFace, savedMip)
+      renderer.setViewport(savedViewport)
+      renderer.setScissor(savedScissor)
+      renderer.setScissorTest(savedScissorTest)
     }
   }
 
   public dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
     this.transmittanceRT.dispose()
     this.scatteringRT.dispose()
     this.irradianceRT.dispose()
@@ -596,6 +642,7 @@ class AtmosphereLUTGenerator {
     this.mesh.material = material
     this.renderer.setRenderTarget(target)
     this.renderer.render(this.scene, this.camera)
+    this.compilation?.check()
   }
 
   private renderPass3D(material: RawShaderMaterial, target: WebGL3DRenderTarget): void {
@@ -604,6 +651,7 @@ class AtmosphereLUTGenerator {
       material.uniforms.u_layer.value = layer
       this.renderer.setRenderTarget(target, layer)
       this.renderer.render(this.scene, this.camera)
+      this.compilation?.check()
     }
   }
 

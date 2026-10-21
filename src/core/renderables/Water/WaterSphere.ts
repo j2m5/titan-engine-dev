@@ -1,5 +1,4 @@
-import { CubeTexture, Mesh, type Texture, type WebGLRenderer } from 'three'
-import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { CubeTexture, Mesh, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { WATER_DETAIL_WRAP } from '@/core/terrain/detailWrap'
@@ -105,6 +104,10 @@ class WaterSphere extends TerrainPatchGroup {
     return this.sharedMaterial
   }
 
+  public get sceneCloudReceiver() {
+    return this.sharedMaterial.sceneCloudReceiver
+  }
+
   protected configurePatchMesh(mesh: Mesh): void {
     mesh.renderOrder = WATER_RENDER_ORDER
     mesh.userData.clickable = false
@@ -133,12 +136,6 @@ class WaterSphere extends TerrainPatchGroup {
     this.sharedMaterial.syncSunTint()
     // высота буфера, не CSS: футпринт считается в пикселях рендера
     this.sharedMaterial.setPixelAngle(ctx.camera.fov, this.renderer.domElement.height)
-    // облака — у материала рельефа-родителя: его кадр (fade по высоте) прошёл раньше, обход сверху вниз
-    const host = (this.parent as { material?: unknown } | null)?.material
-    if (host instanceof TerrainMaterial) {
-      const cloudMap = host.defines.USE_CLOUD !== undefined ? ((host.uniforms.cloudMap.value as Texture | null) ?? null) : null
-      this.sharedMaterial.syncClouds(cloudMap, host.uniforms.uCloudOpacity.value as number)
-    }
   }
 }
 

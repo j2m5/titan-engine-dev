@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
 import { subsolarMuS, transmittanceUv } from '@/core/materials/shaders/lib/chunks/sunTransmittanceMath'
 import { TRANSMITTANCE_H, TRANSMITTANCE_W } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
-import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
+import {
+  sunTransmittanceFunctions,
+  sunTransmittanceUniforms
+} from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
 import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
 import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
@@ -33,7 +36,9 @@ describe('transmittanceUv — зеркало GetTransmittanceTextureUvFromRMu', 
   })
 
   it('u монотонно растёт при убывании mu (длиннее путь — правее в текстуре)', () => {
-    const us = [1, 0.75, 0.5, 0.25, 0].map((mu) => transmittanceUv(BOTTOM, mu, BOTTOM, TOP, TRANSMITTANCE_W, TRANSMITTANCE_H).u)
+    const us = [1, 0.75, 0.5, 0.25, 0].map(
+      (mu) => transmittanceUv(BOTTOM, mu, BOTTOM, TOP, TRANSMITTANCE_W, TRANSMITTANCE_H).u
+    )
     for (let i = 1; i < us.length; i++) expect(us[i]).toBeGreaterThan(us[i - 1])
   })
 
@@ -61,7 +66,14 @@ function coreLine(regex: RegExp): string {
 
 describe('чанк SunTransmittance — порт ядра Брунетона', () => {
   it('юниформы объявлены', () => {
-    for (const u of ['uniform sampler2D uAtmoTransmittance;', 'uniform float uAtmoBottomRadius;', 'uniform float uAtmoTopRadius;', 'uniform float uAtmoSunAngularRadius;', 'uniform float uAtmoDatumRadius;', 'uniform float uSunTintStrength;']) {
+    for (const u of [
+      'uniform sampler2D uAtmoTransmittance;',
+      'uniform float uAtmoBottomRadius;',
+      'uniform float uAtmoTopRadius;',
+      'uniform float uAtmoSunAngularRadius;',
+      'uniform float uAtmoDatumRadius;',
+      'uniform float uSunTintStrength;'
+    ]) {
       expect(sunTransmittanceUniforms).toContain(u)
     }
   })
@@ -81,7 +93,9 @@ describe('чанк SunTransmittance — порт ядра Брунетона', (
 
   it('пропускание к солнцу повторяет smoothstep ядра по угловому радиусу', () => {
     coreLine(/smoothstep\(-sin_theta_h \* atmosphere\.sun_angular_radius \/ rad,/)
-    expect(sunTransmittanceFunctions).toContain('smoothstep(-sin_theta_h * uAtmoSunAngularRadius, sin_theta_h * uAtmoSunAngularRadius, muS - cos_theta_h)')
+    expect(sunTransmittanceFunctions).toContain(
+      'smoothstep(-sin_theta_h * uAtmoSunAngularRadius, sin_theta_h * uAtmoSunAngularRadius, muS - cos_theta_h)'
+    )
     expect(sunTransmittanceFunctions).toContain('float sin_theta_h = uAtmoBottomRadius / r;')
   })
 
@@ -111,7 +125,7 @@ describe.each([
   it('тинт — один sunTintMix до освещения: им красятся прямой свет и пол; облака — sunTintAt на высоте слоя', () => {
     const tint = frag.indexOf('sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);')
     const lit = frag.indexOf('vec3 lit = mix(ambient')
-    const day = frag.indexOf('vec3 day = cloudRadiance + dayColor')
+    const day = frag.indexOf('vec3 day = dayColor')
     expect(tint).toBeGreaterThan(-1)
     expect(lit).toBeGreaterThan(tint)
     expect(day).toBeGreaterThan(lit)

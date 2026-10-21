@@ -16,10 +16,7 @@ import { onTerrainShadowMapReady, terrainShadowMapFor, type TerrainShadowMap } f
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import type { NearTileState } from '@/core/terrain/NearShadowTile'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import {
-  DETAIL_FADE_START_RATIO,
-  macroFadeMetersFor
-} from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
+import { DETAIL_FADE_START_RATIO, macroFadeMetersFor } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { TERRAIN_SHADOW_PENUMBRA_FLOOR } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
@@ -123,7 +120,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     ;(u.uNearCameraXY.value as Vector2).fromArray(state.cameraXY)
   }
 
-  protected updatePath({ planetData, cloudMap }: SurfaceMaps): Record<string, string> {
+  protected updatePath({ planetData }: SurfaceMaps): Record<string, string> {
     // Рельефный шейдинг сверяется с фактически загруженной картой высот — тем
     // же реестром, по которому строилась геометрия. Строка БД тут не
     // авторитет: если карты нет, рельефные дефайны молчат целиком.
@@ -136,9 +133,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     // попиксельно то, что не влезло в вершинную сетку, мипы фильтруют издалека.
     //
     // Нет строки ресурса — нет и запроса: пустой путь ключом карты не является.
-    const textureOf = (
-      type: 'detailDiffuse' | 'detailNormal' | 'detailArm' | 'detailNormal2'
-    ): Texture | undefined => {
+    const textureOf = (type: 'detailDiffuse' | 'detailNormal' | 'detailArm' | 'detailNormal2'): Texture | undefined => {
       const path = this.model.resources.where('resourceType', type).first()?.getAttribute('path')
 
       return typeof path === 'string' ? resourceStorage.getTexture(path) : undefined
@@ -212,7 +207,10 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     const steepNorMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.normal)
     const steepArmMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.arm)
     const steepDiffMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.diffuse)
-    const nativeDetailDiffusePath = this.model.resources.where('resourceType', 'detailDiffuse').first()?.getAttribute('path')
+    const nativeDetailDiffusePath = this.model.resources
+      .where('resourceType', 'detailDiffuse')
+      .first()
+      ?.getAttribute('path')
     const steepSetComplete = Boolean(steepNorMap) && Boolean(steepArmMap) && Boolean(steepDiffMap)
 
     this.uniforms.uSteepNorMap.value = steepNorMap ?? null
@@ -235,7 +233,12 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     // ниже требует ещё slope-карту (terrainMapSlopeVec экспозиции).
     const frost = resolveFrostParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     this.uniforms.uFrostStrength.value = frost.frostStrength
-    ;(this.uniforms.uFrostLine.value as Vector4).set(frost.frostLineMeters, frost.frostLineWidthMeters, frost.frostPolarDropMeters, frost.frostAspectMeters)
+    ;(this.uniforms.uFrostLine.value as Vector4).set(
+      frost.frostLineMeters,
+      frost.frostLineWidthMeters,
+      frost.frostPolarDropMeters,
+      frost.frostAspectMeters
+    )
     this.uniforms.uFrostSlopeMax.value = frost.frostSlopeMax
     ;(this.uniforms.uFrostColor.value as Color).copy(frost.frostColor)
 
@@ -274,8 +277,6 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
       // Мокрая кромка берега: fade кромки читает uMacroFadeRange чанка полосы —
       // при macroStrength 0 кромка выключается вместе с полосой.
       ...(useSlope && macroStrength > 0 && hasWaterShell && { USE_WATER_EDGE: '1' }),
-      // Тень облаков на земле: вторая выборка cloudMap (пара с USE_CLOUD) на рельефе
-      ...(cloudMap && hasHeightField && { USE_CLOUD_SHADOW: '1' }),
       // Тень рельефа: карта высот есть И ручка ненулевая — при 0 шейдер бит-в-бит прежний
       ...(useTerrainShadow && { USE_TERRAIN_SHADOW: '1' }),
       // Блеск льда: слой детали даёт шероховатость; на телах с водой блик суши под водой был бы вторым бликом

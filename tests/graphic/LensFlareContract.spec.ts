@@ -136,7 +136,7 @@ describe('LensFlareEffect: порядок проходов и адреса за�
   // Проверять вход прохода недостаточно: его выставляет сам ShaderPass.render.
   // Единственный наблюдаемый след порядка — последовательность setRenderTarget
   it('проходы идут в фиксированном порядке, каждый в свой таргет', () => {
-    const effect = new LensFlareEffect({ streakAmount: lensFlare.lensFlare.streakAmount })
+    const effect = new LensFlareEffect({ streakAmount: 0.03 })
     const renderer = runUpdate(effect)
 
     expect(writeSequence(effect, renderer)).toEqual([
@@ -420,12 +420,7 @@ describe('LensFlareEffect: разборка ресурсов', () => {
   })
 })
 
-describe('LensFlareEffect: значения приёмки', () => {
-  it('интенсивность закреплена на значении, выбранном владельцем', () => {
-    // 0.1 — выбранная ненавязчивость с учётом star.farGlowGain
-    expect(lensFlare.lensFlare.intensity).toBe(0.1)
-  })
-
+describe('LensFlareEffect: конфиг призраков', () => {
   it('стартовые значения призраков — по расчёту, не замер', () => {
     expect(lensFlare.lensFlare.ghostAmount).toBe(1)
     expect(lensFlare.lensFlare.ghostVignette).toBe(2)

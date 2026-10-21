@@ -111,7 +111,9 @@ describe('Шейдер: блеск льда', () => {
     expect(block).toContain('uniform float uIceGlintStrength;')
     expect(block).toContain('#define ICE_GLINT_F0 0.018')
     expect(block).toContain('float power = mix(8.0, 512.0, gloss * gloss);')
-    expect(block).toContain('float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - clamp(dot(viewDir, halfVec), 0.0, 1.0), 5.0);')
+    expect(block).toContain(
+      'float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - clamp(dot(viewDir, halfVec), 0.0, 1.0), 5.0);'
+    )
     expect(block).toContain(
       'return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss * max(dot(normal, lightDirection), 0.0);'
     )
@@ -119,19 +121,25 @@ describe('Шейдер: блеск льда', () => {
 
   it('добавка после ограничителя bloom и до потолка, с тенью рельефа и колец', () => {
     const clampAt = frag.indexOf('finalColor = clamp(finalColor, 0.0, 0.99);')
-    const glintAt = frag.indexOf('finalColor += terrainIceGlint(normal, lightDirection, viewDir, terrainRoughness) * uIceGlintStrength')
+    const glintAt = frag.indexOf(
+      'finalColor += terrainIceGlint(normal, lightDirection, viewDir, terrainRoughness) * uIceGlintStrength'
+    )
     const ceilingAt = frag.indexOf('gl_FragColor = vec4(min(finalColor, vec3(4.0)), 1.0);')
     expect(clampAt).toBeGreaterThan(-1)
     expect(glintAt).toBeGreaterThan(clampAt)
     expect(ceilingAt).toBeGreaterThan(glintAt)
-    expect(frag.slice(glintAt, ceilingAt)).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;')
+    expect(frag.slice(glintAt, ceilingAt)).toContain(
+      '* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * sceneCloudSunVisibility * eclipse;'
+    )
     expect((frag.match(/blinnPhongGlint\(/g) ?? []).length).toBe(2) // определение + вызов кромки (USE_SPECULAR теперь на waterGlintGlsl)
   })
 
   it('шероховатость: хост объявляет 1.0 до детали и передаёт в applyTerrainDetail', () => {
     expect(frag).toContain('float terrainRoughness = 1.0;')
     expect(frag.indexOf('float terrainRoughness = 1.0;')).toBeLessThan(frag.indexOf('applyTerrainDetail('))
-    expect(frag).toContain('applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);')
+    expect(frag).toContain(
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);'
+    )
   })
 
   it('деталь: канал G тех же выборок ARM, смешение по маске и затуханию', () => {
@@ -142,7 +150,10 @@ describe('Шейдер: блеск льда', () => {
     expect(terrainDetailFunctions).toContain('roughness = mix(1.0, rSteep, fade1);')
     expect(terrainDetailFunctions).toContain('roughness = mix(1.0, mix(rNative, rSteep, m), fade1);')
     // ARM читается по-прежнему один раз на набор
-    const helper = terrainDetailFunctions.slice(terrainDetailFunctions.indexOf('void sampleDetailSet('), terrainDetailFunctions.indexOf('void applyTerrainDetail('))
+    const helper = terrainDetailFunctions.slice(
+      terrainDetailFunctions.indexOf('void sampleDetailSet('),
+      terrainDetailFunctions.indexOf('void applyTerrainDetail(')
+    )
     expect((helper.match(/triplanarArmDetiled\(/g) ?? []).length).toBe(1)
   })
 })

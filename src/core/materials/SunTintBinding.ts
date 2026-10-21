@@ -28,8 +28,8 @@ export interface SunTintTarget {
  * Общая проводка закатного тинта: LUT пропускания и геометрия оболочки берутся
  * из AtmosphereRegistry по actorId дочерней атмосферы КАЖДЫЙ видимый кадр —
  * порядок создания узлов сцены (тело раньше атмосферы или наоборот) тогда не
- * важен, а снятие узла само гасит эффект. Рекомпил программы только при смене
- * записи (сравнение по ссылке) — на кадрах без изменений вызов пустой.
+ * важен, а pending/снятие узла гасит эффект. Новые поколения и LUT обновляют
+ * юниформы; рекомпил нужен только при включении/выключении дефайнов.
  *
  * Радиусы идут из ПОДОГНАННОГО конфига записи (тот же, из которого считались
  * LUT, см. terrainFloorAdjust) — сырая строка БД дала бы другой bottomRadius и
@@ -40,8 +40,9 @@ export interface SunTintTarget {
  * никогда не диспозит.
  */
 export class SunTintBinding {
-  /** Запись реестра, по которой сейчас настроены юниформы; сравнение по ссылке решает, нужен ли рекомпил. */
+  /** Поколение и ссылки LUT обновляются независимо от переключения дефайнов. */
   private entry: AtmosphereEntry | undefined
+  private generation: number | undefined
 
   /**
    * `atmosphereActorId` undefined — у тела нет дочерней атмосферы, тинт ему не
@@ -63,11 +64,20 @@ export class SunTintBinding {
 
   public sync(): void {
     const rawEntry = this.atmosphereActorId !== undefined ? this.registry?.get(this.atmosphereActorId) : undefined
-    const entry = this.datumRadiusKm > 0 ? rawEntry : undefined
+    const entry = this.datumRadiusKm > 0 && rawEntry?.ready ? rawEntry : undefined
 
-    if (entry === this.entry) return
+    if (
+      entry === this.entry &&
+      entry?.generation === this.generation &&
+      (!entry ||
+        (this.material.uniforms.uAtmoTransmittance.value === entry.lut.transmittance &&
+          this.material.uniforms.uAtmoIrradiance.value === entry.lut.irradiance))
+    )
+      return
 
+    const toggled = !!entry !== !!this.entry
     this.entry = entry
+    this.generation = entry?.generation
 
     if (entry) {
       this.material.uniforms.uAtmoTransmittance.value = entry.lut.transmittance
@@ -76,7 +86,7 @@ export class SunTintBinding {
       this.material.uniforms.uAtmoTopRadius.value = entry.config.topRadius
       this.material.uniforms.uAtmoSunAngularRadius.value = entry.config.sunAngularRadius
       this.material.uniforms.uAtmoDatumRadius.value = this.datumRadiusKm
-      this.material.defines = { ...this.material.defines, USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' }
+      if (toggled) this.material.defines = { ...this.material.defines, USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' }
     } else {
       this.material.uniforms.uAtmoTransmittance.value = null
       this.material.uniforms.uAtmoIrradiance.value = null
@@ -90,7 +100,7 @@ export class SunTintBinding {
       this.material.defines = defines
     }
 
-    this.material.needsUpdate = true
+    if (toggled) this.material.needsUpdate = true
   }
 
   /**
@@ -101,6 +111,7 @@ export class SunTintBinding {
    */
   public reset(): void {
     this.entry = undefined
+    this.generation = undefined
     this.material.uniforms.uAtmoTransmittance.value = null
     this.material.uniforms.uAtmoIrradiance.value = null
   }

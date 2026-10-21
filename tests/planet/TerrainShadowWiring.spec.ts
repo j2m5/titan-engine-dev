@@ -7,7 +7,11 @@ import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { disposeTerrainShadowMaps, installTerrainShadowBits, terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
+import {
+  disposeTerrainShadowMaps,
+  installTerrainShadowBits,
+  terrainShadowMapFor
+} from '@/core/terrain/terrainShadowMap'
 import { buildShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
@@ -26,7 +30,9 @@ vi.mock('@/core/terrain/terrainLightParams', async (importOriginal) => {
     resolveTerrainLightParams: (data: Parameters<typeof actual.resolveTerrainLightParams>[0], context: string) => {
       const params = actual.resolveTerrainLightParams(data, context)
 
-      return shadowOverride.strength === undefined ? params : { ...params, terrainShadowStrength: shadowOverride.strength }
+      return shadowOverride.strength === undefined
+        ? params
+        : { ...params, terrainShadowStrength: shadowOverride.strength }
     }
   }
 })
@@ -87,22 +93,26 @@ describe('TerrainShaderTemplate: тень рельефа', () => {
     expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion * eclipse;')
     expect(frag).toContain('float terrainShadow = 1.0;')
     // марш не платится в амбиенте
-    expect(frag).toContain('if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);')
+    expect(frag).toContain(
+      'if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);'
+    )
   })
 
-  it('sunLocal объявлен до тени облаков и до марша', () => {
+  it('sunLocal объявлен до марша', () => {
     const sun = frag.indexOf('vec3 sunLocal = -normalize(vLocalLightDirection);')
     expect(sun).toBeGreaterThan(-1)
-    expect(sun).toBeLessThan(frag.indexOf('#ifdef USE_CLOUD_SHADOW'))
     expect(sun).toBeLessThan(frag.indexOf('terrainShadowMarch(dirLocal, sunLocal)'))
   })
 
   it('блики гасятся тенью: специальный (сфера), мокрой кромки и льда (рельеф)', () => {
     const sphere = SphereSurfaceShaderTemplate.fragmentShader
-    for (const source of [frag, sphere]) expect(source).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;')
+    for (const source of [frag, sphere])
+      expect(source).toContain(
+        '* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * sceneCloudSunVisibility * eclipse;'
+      )
     // мокрая кромка и лёд (USE_TERRAIN_GLINT) у рельефа, specular-блик у сферы — один множитель тени
-    expect(frag.split('* ringShadowFactor * terrainShadow * eclipse;').length - 1).toBe(2)
-    expect(sphere.split('* ringShadowFactor * terrainShadow * eclipse;').length - 1).toBe(1)
+    expect(frag.split('* ringShadowFactor * terrainShadow * sceneCloudSunVisibility * eclipse;').length - 1).toBe(2)
+    expect(sphere.split('* ringShadowFactor * terrainShadow * sceneCloudSunVisibility * eclipse;').length - 1).toBe(1)
   })
 })
 
@@ -153,7 +163,9 @@ describe('TerrainMaterial: гейт тени рельефа', () => {
 
   it('TerrainSphere запрашивает карту тени у строителя: синхронный ставит её в конструкторе', () => {
     const map = heightFieldStorage.get(MOON_HEIGHT_PATH)!
-    const sphere = new TerrainSphere(moon(), new TerrainHeightField(map, 1737.4), { domElement: { height: 1080 } } as unknown as WebGLRenderer)
+    const sphere = new TerrainSphere(moon(), new TerrainHeightField(map, 1737.4), {
+      domElement: { height: 1080 }
+    } as unknown as WebGLRenderer)
     const material = sphere.material
     expect(terrainShadowMapFor(map).ready).toBe(true)
     material.updateMaterial()
