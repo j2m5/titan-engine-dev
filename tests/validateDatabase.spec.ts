@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
 import { shippedSnapshot } from './helpers/shippedSnapshot'
+import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
 
 /**
  * Минимальный валидный снимок: один анкор-актор (barycenter) без обязательных связей.
@@ -77,6 +78,22 @@ describe('validateDatabase — rendering data boundary', () => {
   })
 })
 
+describe('validateDatabase — resource color space', () => {
+  it.each(['sRGB', 'unknown', null, 0, false])('rejects unsupported color space %j', (colorSpace) => {
+    const db = baseSnapshot()
+    db.resources.push({ id: 1, resourceType: 'diffuse', lifecycle: 'streamable', path: 'image.webp', colorSpace: colorSpace as never })
+    expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
+      collection: 'resources', entity: 1, message: expect.stringContaining('colorSpace')
+    }))
+  })
+
+  it.each([undefined, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace])('accepts color space %j', (colorSpace) => {
+    const db = baseSnapshot()
+    db.resources.push({ id: 1, resourceType: 'diffuse', lifecycle: 'streamable', path: 'image.webp', colorSpace })
+    expect(validateDatabase(db).errors).toEqual([])
+  })
+})
+
 describe('validateDatabase — форма данных атмосфер', () => {
   /** Валидный слой плотности и валидная строка атмосферы для мутаций */
   const layer = () => ({ width: 0, expTerm: 1, expScale: -0.125, linearTerm: 0, constantTerm: 0 })
@@ -101,7 +118,7 @@ describe('validateDatabase — форма данных атмосфер', () => 
     } as Record<string, unknown>
   })
 
-  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number | string = 2): DatabaseSnapshot {
+  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number | 'atmosphere' = 2): DatabaseSnapshot {
     const db = baseSnapshot()
     db.categories.push({ id: 5, alias: 'atmosphere', name: 'Atmosphere' })
     db.actors.push({ ...planet(11, 10), categoryId })
@@ -109,7 +126,7 @@ describe('validateDatabase — форма данных атмосфер', () => 
     return db
   }
 
-  it.each([5, 'atmosphere'])('checks missing irradiance using atmosphere category %s', (categoryId) => {
+  it.each([5, 'atmosphere'] as const)('checks missing irradiance using atmosphere category %s', (categoryId) => {
     const row = atmosphereRow()
     expect(validateDatabase(snapshotWith(row, categoryId)).errors).toEqual([])
     delete row.data.solarIrradiance
@@ -118,7 +135,7 @@ describe('validateDatabase — форма данных атмосфер', () => 
     }))
   })
 
-  it.each([5, 'atmosphere'])('rejects empty atmosphere data for category %s', (categoryId) => {
+  it.each([5, 'atmosphere'] as const)('rejects empty atmosphere data for category %s', (categoryId) => {
     const row = { ...atmosphereRow(), data: {} }
     const result = validateDatabase(snapshotWith(row, categoryId))
     for (const field of ['solarIrradiance', 'rayleighDensity', 'sunAngularRadius', 'miePhaseFunctionG', 'muSMin']) {

@@ -136,16 +136,20 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
         )
       }
 
-      case 'select-enum':
+      case 'select-enum': {
+        // Empty strings can be real enum values (NoColorSpace); keep omission separate.
+        let placeholderValue = ''
+        while (field.options.some((option) => option.value === placeholderValue)) placeholderValue += '_'
         return (
           <TitanSelect
             key={field.key}
             label={field.label}
-            value={value === null || value === undefined ? '' : String(value)}
+            value={value === null || value === undefined ? placeholderValue : String(value)}
             placeholder={field.nullable || field.optional ? '— none —' : undefined}
+            placeholderValue={placeholderValue}
             options={field.options}
             onChange={(v) => {
-              if (v === '') return update(field.key, field.optional ? undefined : null)
+              if (v === placeholderValue) return update(field.key, field.optional ? undefined : null)
               // enum-значение может быть числом (direction 1/-1) или строкой (resourceType)
               const num = Number(v)
               update(field.key, Number.isNaN(num) || v.trim() === '' ? v : num)
@@ -153,6 +157,7 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             style={fullStyle}
           />
         )
+      }
 
       case 'json': {
         // @ts-expect-error draft[spec.table] access lacks type narrowing

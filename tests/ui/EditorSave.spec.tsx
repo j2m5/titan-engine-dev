@@ -225,7 +225,7 @@ it.each(['{ invalid', '1', 'true', '"x"', '0', 'false', '""', '[]', 'null'])(
 })
 
 it('blocks saving an atmosphere without irradiance, then exports a config usable by the renderer', async () => {
-  const initial = renderingDataTemplates.find((template) => template.value === 'atmosphere')!.data
+  const initial = renderingDataTemplates.find((template) => template.value === 'atmosphere')!.data as Record<string, unknown>
   const database = new Map<string, unknown[]>([
     ['categories', [{ id: 1, alias: 'atmosphere', name: 'Atmosphere' }]],
     ['actors', [{ id: 1, categoryId: 1, parentId: null, name: 'Sky', color: '#ffffff', description: '' }]],

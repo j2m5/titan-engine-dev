@@ -11,6 +11,7 @@ const TitanSelect: FC<TitanSelectProps> = ({
   options,
   label,
   placeholder,
+  placeholderValue = '',
   invalid = false,
   disabled = false,
   style = {},
@@ -25,7 +26,7 @@ const TitanSelect: FC<TitanSelectProps> = ({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       >
-        {placeholder !== undefined && <option value="">{placeholder}</option>}
+        {placeholder !== undefined && <option value={placeholderValue}>{placeholder}</option>}
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}

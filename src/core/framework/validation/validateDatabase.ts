@@ -11,6 +11,7 @@ import {
 } from '@/core/models/types'
 import { NEBULA_SHAPE_IDS } from '@/core/renderables/Nebula/NebulaParams'
 import { ringMoonletProblems } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
+import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
 
 /**
  * Валидатор целостности данных приложения.
@@ -956,6 +957,16 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // --- 6a. Обязательные числа: null/NaN/Infinity — ошибка (см. REQUIRED_NUMBERS) ---
   checkRequiredNumbers(db, issues)
   checkOrbitDomain(db, issues)
+
+  for (const resource of db.resources) {
+    const value = resource.colorSpace
+    if (value !== undefined && value !== NoColorSpace && value !== SRGBColorSpace && value !== LinearSRGBColorSpace) {
+      issues.push({
+        level: 'error', collection: 'resources', entity: resource.id,
+        message: `resources#${resource.id} colorSpace must be omitted, "", "srgb" or "srgb-linear"`
+      })
+    }
+  }
 
   for (const rotation of db.rotationObjects) {
     if (rotation.direction !== undefined && rotation.direction !== 1 && rotation.direction !== -1) {
