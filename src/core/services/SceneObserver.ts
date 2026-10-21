@@ -4,14 +4,10 @@ import { AstroControls } from '@/core/libs/AstroControls'
 import { Object3D, Scene, Vector3 } from 'three'
 
 export type ObservableRecord = {
+  actorId: number
   name: string
   distance: number
   position: Vector3
-}
-
-export type SceneObserverRecord = {
-  name: string
-  data: ObservableRecord
 }
 
 /**
@@ -45,14 +41,14 @@ class SceneObserver extends EventEmitter<{
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null
 
-  public data: Map<string, ObservableRecord> = new Map()
+  public data: Map<number, ObservableRecord> = new Map()
   public objects: Object3D[] = []
 
   private vector: Vector3 = new Vector3()
   /** Накопленное с прошлого периодического пересчёта время, мс. */
   private sinceRecompute: number = 0
-  /** Имя тела, отданного контролам как цель орбиты в последний раз. */
-  private targetName: string | null = null
+  /** ID тела, отданного контролам как цель орбиты в последний раз. */
+  private targetActorId: number | null = null
 
   private readonly onObservableChange = (event: { data: Vector3 }): void => {
     this.emit('change', event.data)
@@ -74,10 +70,10 @@ class SceneObserver extends EventEmitter<{
     if (!closest) return
 
     const held: ObservableRecord | undefined =
-      this.observable.isOrbiting && this.targetName !== null ? this.data.get(this.targetName) : undefined
+      this.observable.isOrbiting && this.targetActorId !== null ? this.data.get(this.targetActorId) : undefined
     const target: ObservableRecord = held ?? closest
 
-    this.targetName = target.name
+    this.targetActorId = target.actorId
     this.observable.setTarget(target.position)
     this.emit('ClosestChange', closest)
   }
@@ -137,16 +133,16 @@ class SceneObserver extends EventEmitter<{
     this.onChange()
   }
 
-  public getData(name: string): ObservableRecord | undefined {
-    return this.data.get(name)
+  public getData(actorId: number): ObservableRecord | undefined {
+    return this.data.get(actorId)
   }
 
-  public add({ name, data }: SceneObserverRecord): void {
-    this.data.set(name, data)
+  public add(record: ObservableRecord): void {
+    this.data.set(record.actorId, record)
   }
 
-  public remove(name: string): void {
-    this.data.delete(name)
+  public remove(actorId: number): void {
+    this.data.delete(actorId)
   }
 
   /**
@@ -190,7 +186,7 @@ class SceneObserver extends EventEmitter<{
     this.data.clear()
     this.objects = []
     this._scene = null
-    this.targetName = null
+    this.targetActorId = null
     // Новый сценарий начинает отсчёт периодического пересчёта с нуля, а не с
     // хвоста, накопленного до разборки — иначе первый тик после запуска мог
     // бы выстрелить раньше настоящих 500 мс.
@@ -209,7 +205,8 @@ class SceneObserver extends EventEmitter<{
 
   private defineDataRecords(): void {
     this.objects.forEach((object: Object3D): void => {
-      this.add(this.makeRecord(object))
+      const record = this.makeRecord(object)
+      if (record) this.add(record)
     })
   }
 
@@ -248,14 +245,15 @@ class SceneObserver extends EventEmitter<{
     return result
   }
 
-  private makeRecord(object: Object3D): SceneObserverRecord {
+  private makeRecord(object: Object3D): ObservableRecord | null {
+    const actorId = object.model?.getAttribute('id')
+    if (typeof actorId !== 'number' || !Number.isFinite(actorId)) return null
+
     return {
+      actorId,
       name: object.model?.getAttribute('name', 'unknown') ?? 'unknown',
-      data: {
-        name: object.model?.getAttribute('name', 'unknown') ?? 'unknown',
-        distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector.clone())),
-        position: object.getWorldPosition(this.vector.clone())
-      }
+      distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector.clone())),
+      position: object.getWorldPosition(this.vector.clone())
     }
   }
 }

@@ -132,7 +132,7 @@ function record(r: Rig, key: string, position: Vector3, name = key): void {
   object.position.copy(position)
   r.scene.add(object)
   r.objects.set(key, object)
-  r.records.set(key, { name, position, distance: position.distanceTo(r.renderCamera.position) })
+  r.records.set(key, { actorId: object.model.getAttribute('id')!, name, position, distance: position.distanceTo(r.renderCamera.position) })
 }
 
 /** Завершить полёт: позвать complete у шага пути (второй шаг таймлайна) */

@@ -1,3 +1,4 @@
+import { Actor } from '@/core/models/Actor'
 import { describe, it, expect, vi } from 'vitest'
 import { Mesh, Scene, Texture } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
@@ -12,7 +13,7 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
 /** Собирает наблюдателя с подконтрольным SceneObserver и щедрым бюджетом. */
 function makeObserver(budgetBytes: number = textureBytes(8192, 4096) * 8) {
   const handlers: Record<string, (event: ObservableRecord) => Promise<void>> = {}
-  const data: Map<string, ObservableRecord> = new Map()
+  const data: Map<number, ObservableRecord> = new Map()
 
   const sceneObserver = {
     subscribe: vi.fn((event: string, handler: (e: ObservableRecord) => Promise<void>): void => {
@@ -65,6 +66,8 @@ describe('ResourceObserver: стриминг', () => {
 
     const mesh = new Mesh()
     mesh.name = 'Earth'
+
+    mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
     const material = { resetMaterial: (): void => void order.push('reset'), updateMaterial: vi.fn() }
     Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
     scene.add(mesh)
@@ -96,6 +99,8 @@ describe('ResourceObserver: стриминг', () => {
 
     const mesh = new Mesh()
     mesh.name = 'Moon'
+
+    mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
     const material = {
       resetMaterial: vi.fn(),
       updateMaterial: (): void => void (seenAtUpdate = resourceStorage.getTexture(PATH))
@@ -126,6 +131,8 @@ describe('ResourceObserver: стриминг', () => {
     for (const name of ['Earth', 'Mars']) {
       const mesh = new Mesh()
       mesh.name = name
+
+      mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
       const material = { resetMaterial: (): void => void resets.push(name), updateMaterial: vi.fn() }
       Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
       scene.add(mesh)
@@ -167,6 +174,8 @@ describe('ResourceObserver: стриминг', () => {
 
     const mesh = new Mesh()
     mesh.name = 'Earth'
+
+    mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
     Object.defineProperty(mesh, 'renderable', { value: null, writable: true })
     scene.add(mesh)
 
@@ -197,6 +206,8 @@ describe('ResourceObserver: стриминг', () => {
     for (const name of ['Earth', 'Mars']) {
       const mesh = new Mesh()
       mesh.name = name
+
+      mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
       const material = { resetMaterial: (): void => void resets.push(name), updateMaterial: vi.fn() }
       Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
       scene.add(mesh)
@@ -206,16 +217,11 @@ describe('ResourceObserver: стриминг', () => {
     texture.name = SHARED
     resourceStorage.addTexture(texture)
 
-    // `_map` (actorId → имя) заполняется реальным `collectCandidates` в
-    // проде — здесь подставляется вручную тем же приёмом, что и `pathActors`,
-    // иначе `withActorMaterial` не найдёт Mars по одному только id.
+    // Текущих владельцев пути задаём напрямую; материалы находятся по ID моделей.
     const internals = observer as unknown as {
       pathActors: Map<string, Set<number>>
-      _map: Map<number, { getAttribute: (key: string) => string }>
     }
     internals.pathActors.set(SHARED, new Set([1, 2]))
-    internals._map.set(1, { getAttribute: () => 'Earth' })
-    internals._map.set(2, { getAttribute: () => 'Mars' })
 
     observer.evictPath({ actorId: 1, name: 'Earth', path: SHARED, typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
@@ -241,6 +247,8 @@ describe('ResourceObserver: дочерний материал-подписчик
 
     const mesh = new Mesh()
     mesh.name = 'Earth'
+
+    mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
     const primaryMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     const waterMaterial = {
       resetMaterial: vi.fn(),
@@ -271,6 +279,8 @@ describe('ResourceObserver: дочерний материал-подписчик
 
     const mesh = new Mesh()
     mesh.name = 'Earth'
+
+    mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
     const primaryMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     const waterMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     // патч рельефа — ребёнок renderable с ТЕМ ЖЕ материалом, что primary (как
@@ -299,6 +309,8 @@ describe('ResourceObserver: дочерний материал-подписчик
 
     const mesh = new Mesh()
     mesh.name = 'Earth'
+
+    mesh.model = new Actor({ id: mesh.name === 'Moon' ? 19 : mesh.name === 'Mars' ? 2 : 1, name: mesh.name })
     const primaryMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     const waterMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     Object.defineProperty(mesh, 'renderable', {

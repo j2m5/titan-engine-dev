@@ -25,11 +25,11 @@ const MIN_DISTANCE: number = 1e-9
  *
  * Апгрейд узла делается опросом, а не колбэком завершения загрузки: реестр
  * не обещает промис, а пересчёт и так идёт дважды в секунду. Обе операции
- * фабрики идемпотентны, так что лишний вызов стоит поиска по имени и
+ * фабрики идемпотентны, так что лишний вызов стоит поиска по ID и
  * instanceof.
  */
 export class HeightFieldGate {
-  private readonly nodeCache: Map<string, DynamicNode> = new Map()
+  private readonly nodeCache: Map<number, DynamicNode> = new Map()
 
   public constructor(
     private sceneObserver: SceneObserver,
@@ -60,7 +60,7 @@ export class HeightFieldGate {
     this.renderer.domElement.removeEventListener?.('webglcontextrestored', this.onContextRestored)
   }
 
-  /** Сброс кеша узлов при разборке сценария — иначе выброшенные узлы (и их пулы патчей) живут в куче до следующего поиска того же имени. */
+  /** Сброс кеша узлов при разборке сценария — иначе выброшенные узлы и их пулы патчей остаются в куче. */
   public clearNodeCache(): void {
     this.nodeCache.clear()
   }
@@ -85,7 +85,7 @@ export class HeightFieldGate {
       // уникальны (у планеты и её атмосферы одна строка name), и Actor.first
       // по имени вернул бы для Земли атмосферный слой без physicalObject.
       // node.model — тот самый актор, из которого узел и построен.
-      const node: DynamicNode | undefined = this.findNode(record.name)
+      const node: DynamicNode | undefined = this.findNode(record.actorId)
 
       if (!node) continue
 
@@ -217,24 +217,24 @@ export class HeightFieldGate {
   }
 
   /**
-   * Узел тела по имени. getObjectByName — полный обход сцены, а гейт зовёт его
-   * на каждое тело дважды в секунду; результат кешируется по имени. Кеш
-   * валиден, пока узел висит в этой сцене (смена сценария пересобирает
-   * дерево — отвязанный узел отбрасывается и ищется заново). getObjectByName
-   * идёт в глубину от корня, поэтому DynamicNode планеты находится раньше
-   * своих детей; instanceof отсекает одноимённые атмосферу и уровни LOD.
+   * Узел тела по ID актора. Кеш валиден, пока узел висит в этой сцене.
+   * instanceof отсекает поверхности и уровни LOD той же модели; ID
+   * отличает одноимённые тела и не меняется при переименовании.
    */
-  private findNode(name: string): DynamicNode | undefined {
-    const cached = this.nodeCache.get(name)
+  private findNode(actorId: number): DynamicNode | undefined {
+    const cached = this.nodeCache.get(actorId)
 
     if (cached && this.isAttached(cached)) return cached
 
-    this.nodeCache.delete(name)
-    const found = this.scene.getObjectByName(name)
+    this.nodeCache.delete(actorId)
+    let found: DynamicNode | undefined
+    this.scene.traverse((object) => {
+      if (!found && object instanceof DynamicNode && object.model.getAttribute('id') === actorId) found = object
+    })
 
-    if (!(found instanceof DynamicNode)) return undefined
+    if (!found) return undefined
 
-    this.nodeCache.set(name, found)
+    this.nodeCache.set(actorId, found)
 
     return found
   }

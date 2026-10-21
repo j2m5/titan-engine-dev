@@ -1,5 +1,6 @@
+import { observedActor, observedRecord as record } from './observedActor'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { Mesh, Scene, Texture, Vector3 } from 'three'
+import { Mesh, Scene, Texture } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -25,7 +26,7 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
  * подменить эти вызовы нечем без искажения самого проверяемого механизма.
  * `distance`/`position` в `SceneObserver.data` подконтрольны тесту напрямую.
  *
- * `collectCandidates` резолвит имя через `this._map`
+ * `collectCandidates` резолвит ID через `this._map`
  * (наполняется `setMap`), а не запросом `Actor.where({ name })` — значит
  * КАЖДЫЙ тест обязан выставить `observer.scenario` ДО первого `ClosestChange`,
  * иначе `_map` пуст и ни один кандидат не резолвится. Mercury/Ceres/Moon —
@@ -38,9 +39,6 @@ const HORUSET_SYSTEM = Scenarios.find((s) => s.rootId === 86)!
 
 const SIZE_8K: number = textureBytes(8192, 4096)
 
-function record(name: string, distance: number): ObservableRecord {
-  return { name, distance, position: new Vector3() }
-}
 
 function makeTexture(): Texture {
   const texture: Texture = new Texture()
@@ -85,11 +83,11 @@ function makeObserver(
 ): {
   observer: ResourceObserver
   handlers: Record<string, (event: ObservableRecord) => Promise<void>>
-  data: Map<string, ObservableRecord>
+  data: Map<number, ObservableRecord>
   scene: Scene
 } {
   const handlers: Record<string, (event: ObservableRecord) => Promise<void>> = {}
-  const data: Map<string, ObservableRecord> = new Map()
+  const data: Map<number, ObservableRecord> = new Map()
 
   const sceneObserver = {
     subscribe: vi.fn((event: string, handler: (e: ObservableRecord) => Promise<void>): void => {
@@ -128,10 +126,12 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     observer.scenario = SOLAR_SYSTEM
     const mesh = new Mesh()
     mesh.name = 'Saturn'
+
+    mesh.model = observedActor(mesh.name)
     const material = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
     Object.defineProperty(mesh, 'renderable', { value: { material } })
     scene.add(mesh)
-    data.set('Saturn', record('Saturn', 300))
+    data.set(observedActor('Saturn').getAttribute('id')!, record('Saturn', 300))
     await handlers.ClosestChange(record('Saturn', 300))
     const state = streamingState(observer)
     expect(state.attempted.size).toBe(0)
@@ -151,12 +151,12 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       pending.push({ signal, request, resolve })
     }))
     observer.scenario = HORUSET_SYSTEM
-    data.set('Korriban I', record('Korriban I', 100))
-    data.set('Korriban II', record('Korriban II', 100))
+    data.set(observedActor('Korriban I').getAttribute('id')!, record('Korriban I', 100))
+    data.set(observedActor('Korriban II').getAttribute('id')!, record('Korriban II', 100))
     const first = handlers.ClosestChange(record('Korriban I', 100))
     const shared = pending.find((load) => load.request.paths[0] === 'terrain/rocky_trail_diff.webp')!
     expect(shared).toBeDefined()
-    data.delete('Korriban I')
+    data.delete(observedActor('Korriban I').getAttribute('id')!)
     const second = handlers.ClosestChange(record('Korriban II', 100))
     expect(shared.signal?.aborted).toBe(false)
     expect(pending.filter((load) => load.request.paths[0] === shared.request.paths[0])).toHaveLength(1)
@@ -172,14 +172,14 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       pending.push({ request, signal, resolve, reject })
     }))
     observer.scenario = SOLAR_SYSTEM
-    data.set('Mercury', record('Mercury', 0.01))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 0.01))
     const first = handlers.ClosestChange(record('Mercury', 0.01))
     expect(pending.length).toBeGreaterThan(0)
     data.clear()
     await handlers.ClosestChange(record('Mercury', 1000))
     expect(pending.every((load) => load.signal?.aborted)).toBe(true)
     const old = [...pending]
-    data.set('Mercury', record('Mercury', 0.01))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 0.01))
     const second = handlers.ClosestChange(record('Mercury', 0.01))
     const current = pending.slice(old.length)
     expect(current.length).toBe(old.length)
@@ -230,12 +230,14 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const material = new SphereSurfaceMaterial(actor)
     const mesh = new Mesh()
     mesh.name = 'Uranus'
+
+    mesh.model = observedActor(mesh.name)
     Object.defineProperty(mesh, 'renderable', { value: { material } })
     scene.add(mesh)
     const actorId = actor.getAttribute('id')!
     // A direct caller can have a material in the scene without an actor in the scenario map.
     if (mode === 'direct') observer.scenario = null
-    if (mode !== 'direct') data.set('Uranus', record('Uranus', 300))
+    if (mode !== 'direct') data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 300))
     const pending = mode === 'direct'
       ? (observer as unknown as { loadPath: (candidate: { actorId: number; name: string; path: string; typeRank: number; actorPriority: number }) => Promise<void> }).loadPath({ actorId, name: 'Uranus', path: 'planets/uranus/uranus.png', typeRank: 0, actorPriority: 1 })
       : handlers.ClosestChange(record('Uranus', 300))
@@ -274,16 +276,18 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       const material = new TerrainMaterial(actor)
       const mesh = new Mesh()
       mesh.name = name
+
+      mesh.model = observedActor(mesh.name)
       Object.defineProperty(mesh, 'renderable', { value: { material } })
       scene.add(mesh)
-      data.set(name, record(name, 100))
+      data.set(observedActor(name).getAttribute('id')!, record(name, 100))
       return material
     })
     await handlers.ClosestChange(record('Korriban I', 100))
     const path = 'terrain/rocky_trail_diff.webp'
     const texture = resourceStorage.getTexture(path)!
     for (const material of materials) expect(material.uniforms.uDetailDiffMap.value).toBe(texture)
-    data.delete('Korriban I')
+    data.delete(observedActor('Korriban I').getAttribute('id')!)
     await handlers.ClosestChange(record('Korriban II', 100))
     vi.advanceTimersByTime(11_000)
     await handlers.ClosestChange(record('Korriban II', 100))
@@ -326,7 +330,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     await handlers['ClosestChange'](record('Mercury', 300))
     const printsAfterFirst = debug.mock.calls.length
@@ -349,7 +353,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     // Цикл 1: провал, актор уходит в attempted.
     await handlers['ClosestChange'](record('Mercury', 300))
@@ -384,8 +388,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Меркурий (радиус 2440 км) втрое дальше Цереры (469.7 км), но угловой
     // размер всё равно больше: 2440/300 ≈ 8.13 против 469.7/100 ≈ 4.70.
-    data.set('Mercury', record('Mercury', 300))
-    data.set('Ceres', record('Ceres', 100))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
+    data.set(observedActor('Ceres').getAttribute('id')!, record('Ceres', 100))
 
     await handlers['ClosestChange'](record('Mercury', 300))
 
@@ -413,8 +417,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 2, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Mercury', record('Mercury', 300))
-    data.set('Ceres', record('Ceres', 100))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
+    data.set(observedActor('Ceres').getAttribute('id')!, record('Ceres', 100))
 
     await handlers['ClosestChange'](record('Mercury', 300))
 
@@ -438,7 +442,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Earth', record('Earth', 300))
+    data.set(observedActor('Earth').getAttribute('id')!, record('Earth', 300))
     await handlers['ClosestChange'](record('Earth', 300))
 
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_clouds.jpg' }), expect.any(AbortSignal))
@@ -478,7 +482,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictPath')
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
 
@@ -524,7 +528,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const korribanISlope = 'planets/StarWars/korriban/i/korriban1_slope.webp'
     const korribanIISlope = 'planets/StarWars/korriban/i/korriban2_slope.webp'
 
-    data.set('Korriban I', record('Korriban I', 100))
+    data.set(observedActor('Korriban I').getAttribute('id')!, record('Korriban I', 100))
     await handlers['ClosestChange'](record('Korriban I', 100))
 
     expect(load).toHaveBeenCalledTimes(5) // своя slope + 4 detail (без диффуза — процедурное тело)
@@ -532,7 +536,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Korriban II входит в зону. Detail уже в реестре — повторного
     // сетевого запроса по нему быть не должно, но своя slope-карта — новый путь.
-    data.set('Korriban II', record('Korriban II', 120))
+    data.set(observedActor('Korriban II').getAttribute('id')!, record('Korriban II', 120))
     await handlers['ClosestChange'](record('Korriban II', 120))
 
     expect(load).toHaveBeenCalledTimes(6)
@@ -585,14 +589,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     for (const name of ['Korriban I', 'Korriban II', 'Korriban III']) {
       const mesh = new Mesh()
       mesh.name = name
+
+      mesh.model = observedActor(mesh.name)
       const updateMaterial = vi.fn()
       owners[name] = updateMaterial
       Object.defineProperty(mesh, 'renderable', { value: { material: { resetMaterial: vi.fn(), updateMaterial } }, writable: true })
       scene.add(mesh)
     }
 
-    data.set('Korriban I', record('Korriban I', 100))
-    data.set('Korriban II', record('Korriban II', 100))
+    data.set(observedActor('Korriban I').getAttribute('id')!, record('Korriban I', 100))
+    data.set(observedActor('Korriban II').getAttribute('id')!, record('Korriban II', 100))
 
     await handlers['ClosestChange'](record('Korriban I', 100))
 
@@ -606,7 +612,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // бюджетное решение, а не защиту свежей загрузки.
     vi.advanceTimersByTime(11_000)
 
-    data.set('Korriban III', record('Korriban III', 100))
+    data.set(observedActor('Korriban III').getAttribute('id')!, record('Korriban III', 100))
     await handlers['ClosestChange'](record('Korriban III', 100))
 
     // Бюджет по-прежнему на 6 путей, а не на 7 — раньше (баг) loaded.size
@@ -649,8 +655,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Оба актора — candidates уже в ПЕРВОМ пересчёте, ни один ещё не
     // загружен: decision.load отдаёт их ОБОИХ разом.
-    data.set('Korriban I', record('Korriban I', 100))
-    data.set('Korriban II', record('Korriban II', 120))
+    data.set(observedActor('Korriban I').getAttribute('id')!, record('Korriban I', 100))
+    data.set(observedActor('Korriban II').getAttribute('id')!, record('Korriban II', 120))
 
     await handlers['ClosestChange'](record('Korriban I', 100))
 
@@ -707,7 +713,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Korriban I заявляет общий путь первым — становится владельцем брони.
     // Это и есть будущий "устаревший владелец".
-    data.set('Korriban I', record('Korriban I', 100))
+    data.set(observedActor('Korriban I').getAttribute('id')!, record('Korriban I', 100))
     const stale: Promise<void> = handlers['ClosestChange'](record('Korriban I', 100))
 
     expect(resolvers).toHaveLength(1)
@@ -725,12 +731,12 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // больше не кандидат (покинул зону/данные наблюдателя) — это делает
     // `data.delete`, а не сброс сценария.
     observer.scenario = HORUSET_SYSTEM
-    data.delete('Korriban I')
+    data.delete(observedActor('Korriban I').getAttribute('id')!)
 
     // Korriban II заявляет ТОТ ЖЕ путь уже в новой эпохе — свежая, живая
     // бронь (pathLoads был очищен, так что это НОВЫЙ владелец, не сосед по
     // старому промису).
-    data.set('Korriban II', record('Korriban II', 120))
+    data.set(observedActor('Korriban II').getAttribute('id')!, record('Korriban II', 120))
     const live: Promise<void> = handlers['ClosestChange'](record('Korriban II', 120))
 
     expect(resolvers).toHaveLength(2)
@@ -789,7 +795,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const MERCURY_ACTOR_ID = 5
     const MERCURY_DIFFUSE = 'planets/mercury/mercury.jpg'
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     // Цикл 1 (эпоха E1): диффуз Меркурия держится открытым — это и есть
     // "устаревший" вызов.
@@ -862,7 +868,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictPath')
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
     // Диффуз held, slope резолвится сразу — оба floor-пути дозапускаются конкурентно.
@@ -872,7 +878,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // меркуриевых ~8.13. Бюджет впритык теперь достаётся ей, Меркурий
     // выпадает из reserved. Но он ещё грузится ВПЕРВЫЕ — loadedAt не
     // выставлен, только inFlight его защищает.
-    data.set('Moon', record('Moon', 10))
+    data.set(observedActor('Moon').getAttribute('id')!, record('Moon', 10))
     await handlers['ClosestChange'](record('Moon', 10))
 
     expect(evictSpy).not.toHaveBeenCalled()
@@ -901,7 +907,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictPath')
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     // Цикл 1: диффуз и slope — пара floor, грузятся безусловно и занимают
     // весь бюджет (и сверх него); bump и detail не помещаются (не floor) и
@@ -944,7 +950,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Saturn', record('Saturn', 300))
+    data.set(observedActor('Saturn').getAttribute('id')!, record('Saturn', 300))
     await handlers['ClosestChange'](record('Saturn', 300))
 
     // Реальный путь ПЛАНЕТЫ — не resident-текстура кольца (её вообще не
@@ -971,10 +977,12 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const mesh = new Mesh()
     mesh.name = 'Mercury'
+
+    mesh.model = observedActor(mesh.name)
     Object.defineProperty(mesh, 'renderable', { value: null, writable: true })
     scene.add(mesh)
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
   })
@@ -1003,6 +1011,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const mesh = new Mesh()
     mesh.name = 'Mercury'
+
+    mesh.model = observedActor(mesh.name)
     const material = {
       resetMaterial: vi.fn(),
       updateMaterial: (): void => {
@@ -1012,7 +1022,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
     scene.add(mesh)
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
 
@@ -1039,12 +1049,12 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Mercury', record('Mercury', 2000))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 2000))
     await handlers['ClosestChange'](record('Mercury', 2000))
 
     expect(load).not.toHaveBeenCalled()
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
     await handlers['ClosestChange'](record('Mercury', 300))
 
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }), expect.any(AbortSignal))
@@ -1072,8 +1082,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const MOON_DETAIL_NORMAL2 = 'terrain/moon_01_nor.webp'
     const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
 
-    data.set('Moon', record('Moon', 10)) // близко — топ-приоритет, floor
-    data.set('Uranus', record('Uranus', 10000)) // далеко — субпиксельно
+    data.set(observedActor('Moon').getAttribute('id')!, record('Moon', 10)) // близко — топ-приоритет, floor
+    data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 10000)) // далеко — субпиксельно
 
     await handlers['ClosestChange'](record('Moon', 10))
 
@@ -1101,7 +1111,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
 
-    data.set('Mercury', record('Mercury', 300))
+    data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     // Цикл 1: всё проваливается, пути уходят в attempted.
     await handlers['ClosestChange'](record('Mercury', 300))
@@ -1140,7 +1150,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
 
-    data.set('Uranus', record('Uranus', 300)) // близко — обычный кандидат, грузится
+    data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 300)) // близко — обычный кандидат, грузится
     await handlers['ClosestChange'](record('Uranus', 300))
 
     const state = streamingState(observer)
@@ -1153,7 +1163,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // же гистерезис, что у бюджетного вытеснения — поэтому время двигается
     // явно, иначе свежая загрузка была бы просто пропущена гвардом.
     vi.advanceTimersByTime(11_000)
-    data.set('Uranus', record('Uranus', 10000))
+    data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 10000))
     await handlers['ClosestChange'](record('Uranus', 10000))
 
     expect(state.loaded.has(URANUS_DIFFUSE)).toBe(false)
@@ -1177,10 +1187,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     observer.scenario = SOLAR_SYSTEM
     const path = 'planets/uranus/uranus.png'
     const state = streamingState(observer)
-    data.set('Uranus', record('Uranus', 300))
+    data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 300))
     const loading = handlers.ClosestChange(record('Uranus', 300))
     expect(state.inFlight.has(path)).toBe(true)
-    data.set('Uranus', record('Uranus', 10000))
+    data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 10000))
     await handlers.ClosestChange(record('Uranus', 10000))
     expect(signal?.aborted).toBe(true)
     expect(state.loaded.has(path)).toBe(false)
@@ -1212,13 +1222,13 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
     const state = streamingState(observer)
 
-    data.set('Uranus', record('Uranus', 300))
+    data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 300))
     await handlers['ClosestChange'](record('Uranus', 300))
     expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
 
     // Уран падает под порог СРАЗУ после загрузки — путь свежий (loadedAt
     // только что выставлен), орфан-чистка обязана его пропустить.
-    data.set('Uranus', record('Uranus', 10000))
+    data.set(observedActor('Uranus').getAttribute('id')!, record('Uranus', 10000))
     await handlers['ClosestChange'](record('Uranus', 10000))
 
     expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)

@@ -20,7 +20,7 @@ abstract class DistanceBasedCSS2DObject extends CSS2DObject {
   }
 
   public updateObject(_ctx: UpdateContext): void {
-    const record: ObservableRecord | undefined = this.observer.data.get(this.model.getAttribute('name', ''))
+    const record: ObservableRecord | undefined = this.observer.getData(this.model.getAttribute('id')!)
 
     if (!record) return
 

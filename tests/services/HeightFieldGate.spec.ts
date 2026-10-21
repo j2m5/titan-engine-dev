@@ -54,10 +54,8 @@ function makeRenderer(height: number): WebGLRenderer {
 
 /**
  * Тело стенда — либо актор (узел зовётся его именем в БД), либо пара
- * «актор + имя узла». Вторая форма нужна тестам общей карты высот: гейт
- * различает тела ТОЛЬКО по имени узла в сцене, а путь карты берёт из
- * `node.model` — два узла над одним актором дают ровно тот же стык, что два
- * разных тела с одинаковым height-ресурсом, без фикстуры в БД.
+ * «актор + имя узла». Для общей карты используются разные ID акторов
+ * с одинаковым height-ресурсом, без изменения глобальной БД.
  */
 type StandBody = Actor | { actor: Actor; name: string }
 
@@ -108,8 +106,10 @@ function observeAt(
   viewportHeight: number = NOMINAL_HEIGHT
 ): void {
   const name: string = bodyName(body)
+  const actorId = bodyActor(body).getAttribute('id')!
 
-  observer.data.set(name, {
+  observer.data.set(actorId, {
+    actorId,
     name,
     distance: distanceForPixels(bodyActor(body), pixels, viewportHeight),
     position: undefined as never
@@ -204,15 +204,15 @@ describe('HeightFieldGate: запрос и освобождение карт п�
 
     observeAt(observer, moon, config('terrain.heightMapLoadPixels') * 2)
     gate.dispose()
-    observer.emit('ClosestChange', { name: 'x', distance: 1, position: undefined as never })
+    observer.emit('ClosestChange', { actorId: MOON_ID, name: 'x', distance: 1, position: undefined as never })
 
     expect(request).not.toHaveBeenCalled()
   })
 
-  it('узел ищется в сцене один раз, а не на каждом пересчёте (кеш по имени)', () => {
+  it('узел ищется в сцене один раз, а не на каждом пересчёте (кеш по ID)', () => {
     const moon: Actor = Actor.find(MOON_ID)!
     const { gate, observer } = makeStand([moon])
-    const lookup = vi.spyOn(Scene.prototype, 'getObjectByName')
+    const lookup = vi.spyOn(Scene.prototype, 'traverse')
 
     observeAt(observer, moon, 1)
     gate.recompute()
@@ -227,7 +227,7 @@ describe('HeightFieldGate: запрос и освобождение карт п�
     const { gate, observer } = makeStand([moon])
     observeAt(observer, moon, 1)
     gate.recompute()
-    const lookup = vi.spyOn(Scene.prototype, 'getObjectByName')
+    const lookup = vi.spyOn(Scene.prototype, 'traverse')
 
     gate.clearNodeCache()
     gate.recompute()
@@ -244,7 +244,7 @@ describe('HeightFieldGate: запрос и освобождение карт п�
     const scene = (gate as unknown as { scene: Scene }).scene
     const node = scene.getObjectByName(bodyName(moon)) as DynamicNode
     scene.remove(node)
-    const lookup = vi.spyOn(Scene.prototype, 'getObjectByName')
+    const lookup = vi.spyOn(Scene.prototype, 'traverse')
     gate.recompute()
 
     expect(lookup).toHaveBeenCalledTimes(1)
@@ -288,17 +288,18 @@ describe('HeightFieldGate: пересбор снимка наблюдения п
  * карта легальна по дизайну сразу в двух местах: политика схлопывает дубли
  * пути по максимуму приоритета, а terrainHeightFieldFor кэширует поле по паре
  * «карта + радиус» именно ради вымышленных лун разных радиусов на одной
- * карте. В БД такой пары сегодня нет — стенд воспроизводит стык двумя узлами
- * над одним актором (см. StandBody).
+ * карте. Стенд назначает двум разным акторам общий набор ресурсов.
  */
 describe('HeightFieldGate: общая карта высот у нескольких тел', () => {
-  /** Два узла сцены над одним актором: один путь карты, разные имена. */
+  /** Разные акторы разделяют путь карты; глобальная БД не меняется. */
   function sharedBodies(): { actor: Actor; name: string }[] {
     const moon: Actor = Actor.find(MOON_ID)!
+    const callisto = Actor.find(23)!.clone()
+    Object.defineProperty(callisto, 'resources', { get: () => moon.resources })
 
     return [
       { actor: moon, name: 'ОбщаяКартаПервое' },
-      { actor: moon, name: 'ОбщаяКартаВторое' }
+      { actor: callisto, name: 'ОбщаяКартаВторое' }
     ]
   }
 
