@@ -11,6 +11,7 @@ import {
 } from 'postprocessing'
 import type { AtmosphereEffect } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import { captureAtmosphereFrame } from './effects/atmosphere/atmosphereFrame'
+import { atmosphereSkyVisibility, skyAtmosphereUniforms } from '@/core/sky/atmosphereSkyVisibility'
 import { createSceneEndpointPasses } from './sceneEndpointPasses'
 import type { LensFrontSorter } from './passes/LensFrontSorter'
 import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
@@ -40,10 +41,11 @@ import type { Settings } from '@/core/ports/Settings'
  * radius — вес mix(резкий уровень, размытый нижний), 0..1; выше 1 это
  * экстраполяция с отрицательным вкладом. intensity — сила.
  * Ручки связаны: вклад самого широкого мипа равен radius^(levels − 1).
- * Шесть уровней оставляют мягкую кромку без почти постоянной засветки кадра
- * от самых грубых мипов. Малая intensity сохраняет детали крупных источников.
- * Настройки общие для всех звёзд, дисков ЧД и остальных HDR-источников;
- * порог не участвует в настройке ореола — это часть bloom-guard.
+ *
+ * Сдержанное фотографичное свечение: ограничиваем охват мипов, чтобы яркий
+ * источник сохранял мягкую кромку, а гало не засвечивало весь кадр.
+ * Порог остаётся частью bloom-guard. Настройка общая для звёзд, диска ЧД,
+ * туманностей и глинта океана.
  *
  * ADD корректно добавляет рассеянный свет в HDR. SCREEN при dst > 1 и
  * слабом bloom мог ЗАТЕМНЯТЬ поверхность: src - min(dst * src, 1) < 0.
@@ -51,12 +53,12 @@ import type { Settings } from '@/core/ports/Settings'
  */
 export const BLOOM_OPTIONS = {
   radius: 0.8,
-  levels: 6,
+  levels: 7,
   blendFunction: BlendFunction.ADD,
   mipmapBlur: true,
   luminanceThreshold: 1,
   luminanceSmoothing: 0.0025,
-  intensity: 0.3
+  intensity: 0.6
 } as const
 
 // A/B-сравнение кривой: заменить mode на ToneMappingMode.ACES_FILMIC
@@ -115,8 +117,8 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
   })
 
   const chromaticAberrationEffect: ChromaticAberrationEffect = new ChromaticAberrationEffect({
-    blendFunction: BlendFunction.SCREEN,
-    offset: new Vector2(0.0005, 0.0005),
+    // Нейтральная оптика: звёзды и контуры сохраняют совпадающие цветовые каналы.
+    offset: new Vector2(0, 0),
     radialModulation: true,
     modulationOffset: 0.4
   })
@@ -297,37 +299,41 @@ class Postprocessing {
     this.scene.updateMatrixWorld(true)
     this.camera.updateMatrixWorld(true)
     const snapshot = captureAtmosphereFrame(this.camera, this.atmosphereRegistry, ++this.serial)
-    this.atmosphere?.setFrame(snapshot)
-    this.atmosphere?.setCloudOverlay(null)
-    const lensActive = this.lensRegistry.entries().some((entry) => {
-      let visible = true
-      entry.object.traverseAncestors((parent) => {
-        if (!parent.visible) visible = false
-      })
-      return visible && entry.object.visible
-    })
-    const plan = this.cloudRuntime?.beginFrame(
-      this.camera,
-      this.renderer.getDrawingBufferSize(new Vector2()),
-      this.serial,
-      delta ?? 0,
-      snapshot,
-      lensActive,
-      readAtmosphereDebugView()
-    )
-    const blendReady = plan ? this.blend.prepare(this.renderer, this.composer.inputBuffer) : false
-    if (!plan) this.composition?.cancelPreparation()
-    const near = plan
-      ? blendReady
-        ? this.composition?.prepare(plan, snapshot)
-        : this.cloudRuntime?.deferVolume(plan)
-      : null
-    for (const pass of this.prefix) pass.enabled = !near || near.weight < 1
-    this.blend.setNear(near?.texture ?? null, near?.weight ?? 0)
+    const skyVisibility = skyAtmosphereUniforms.uSkyAtmosphereVisibility
+    const previousVisibility = skyVisibility.value
+    skyVisibility.value = atmosphereSkyVisibility(snapshot)
     try {
+      this.atmosphere?.setFrame(snapshot)
+      this.atmosphere?.setCloudOverlay(null)
+      const lensActive = this.lensRegistry.entries().some((entry) => {
+        let visible = true
+        entry.object.traverseAncestors((parent) => {
+          if (!parent.visible) visible = false
+        })
+        return visible && entry.object.visible
+      })
+      const plan = this.cloudRuntime?.beginFrame(
+        this.camera,
+        this.renderer.getDrawingBufferSize(new Vector2()),
+        this.serial,
+        delta ?? 0,
+        snapshot,
+        lensActive,
+        readAtmosphereDebugView()
+      )
+      const blendReady = plan ? this.blend.prepare(this.renderer, this.composer.inputBuffer) : false
+      if (!plan) this.composition?.cancelPreparation()
+      const near = plan
+        ? blendReady
+          ? this.composition?.prepare(plan, snapshot)
+          : this.cloudRuntime?.deferVolume(plan)
+        : null
+      for (const pass of this.prefix) pass.enabled = !near || near.weight < 1
+      this.blend.setNear(near?.texture ?? null, near?.weight ?? 0)
       this.composer.render(delta)
       this.cloudRuntime?.recordPasses({ farRenders: !near || near.weight < 1 ? 1 : 0, finalRenders: 1 })
     } finally {
+      skyVisibility.value = previousVisibility
       this.blend.setNear(null, 0)
       this.atmosphere?.setFrame(null)
       this.lensFront?.restore()
