@@ -21,12 +21,8 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
-    /**
-     * Дефолтный глоб vitest захватывает копии тестов внутри git-worktree'ев
-     * (`.claude/worktrees/<имя>/tests/**`): алиас `@` там резолвится в
-     * КОРНЕВОЙ src, тесты копий получают чужие модули (дубли классов three,
-     * задвоенные синглтоны) и падают артефактно, а счётчик прогона удваивается.
-     */
+    // Только тесты проекта: копии в worktree/scratch используют чужой корневой @ alias.
+    include: ['tests/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**'],
     /**
      * `.env` не отслеживается git, поэтому значения оттуда у каждого свои, и
