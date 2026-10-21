@@ -1,4 +1,5 @@
 import { LOD, Object3D, WebGLRenderer } from 'three'
+import { ViewLod } from '@/core/renderables/utils/ViewLod'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
@@ -544,7 +545,7 @@ class RenderableFactory {
     )
 
     const node = new StaticNode(actor)
-    const lod = new LOD()
+    const lod = new ViewLod()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
     const registration = this.asteroidImpostors ? AsteroidRingSystem.registerImpostors(actor, {}, this.asteroidImpostors, true) : null

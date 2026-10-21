@@ -1,6 +1,7 @@
-import { LOD, PerspectiveCamera, WebGLRenderer } from 'three'
+import { PerspectiveCamera, WebGLRenderer } from 'three'
 import { distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { ViewLod } from './ViewLod'
 
 /**
  * LOD по видимому размеру: диск вблизи, билборд-импостор вдали. Дистанцию
@@ -12,7 +13,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
  * impostorPixels — видимый размер билборда: у диска и билборда он обязан
  * совпасть, иначе на переключении будет скачок размера.
  */
-class ApparentSizeLod extends LOD {
+class ApparentSizeLod extends ViewLod {
   public constructor(
     private readonly radiusKm: number,
     private readonly renderer: WebGLRenderer,
@@ -30,15 +31,12 @@ class ApparentSizeLod extends LOD {
     )
   }
 
-  public updateView(camera: PerspectiveCamera): void {
+  public override updateView(camera: PerspectiveCamera): void {
     // Уровень 1 — билборд: addLevel сортирует по дистанции, диск стоит на нуле
     if (this.levels.length < 2) return
 
     this.levels[1].distance = this.switchDistance(camera.fov)
-    // Lens splitting and descendant view updates run before Three's main render.
-    camera.updateWorldMatrix(true, false)
-    this.updateWorldMatrix(true, false)
-    this.update(camera)
+    super.updateView(camera)
   }
 }
 

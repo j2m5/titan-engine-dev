@@ -1040,8 +1040,7 @@ class AsteroidRingSystem extends Group {
 
   /** Camera-dependent work runs after follow/collision and world transforms. */
   public updateView(camera: PerspectiveCamera): void {
-
-    // Проверить видимость parent'а
+    // Include the streamer's own visibility (the belt toggles it directly).
     if (!this.isEffectivelyVisible()) {
       if (!this.wasDeactivated) {
         this.cascades.deactivateAll()
@@ -1401,6 +1400,7 @@ class AsteroidRingSystem extends Group {
    * Проверка, видна ли система (учитывает LOD-переключения родителя).
    */
   private isEffectivelyVisible(): boolean {
+    if (!this.visible) return false
     let obj: Object3D | null = this.parent
     while (obj) {
       if (obj.visible === false) return false

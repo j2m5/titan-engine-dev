@@ -54,6 +54,7 @@ function frameAt(belt: AsteroidBelt, x: number, y: number = 0): void {
   camera.updateMatrixWorld(true)
 
   belt.updateObject({ delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext)
+  belt.updateView(camera)
 }
 
 // Тор 40..60 а.е., тонкий (0.1 а.е.) — высотный избыток легко перекрывает
