@@ -29,6 +29,26 @@ function planet(id: number, parentId: number) {
   return { id, categoryId: 2, parentId, name: `P${id}`, description: '', color: '#fff' }
 }
 
+describe('validateDatabase — rendering data boundary', () => {
+  it.each([1, true, 'x', 0, false, '', [], null, undefined])('rejects non-object data %j without throwing', (data) => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: data as never })
+
+    const result = validateDatabase(db)
+
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      collection: 'renderingObjects', entity: 1, message: expect.stringMatching(/data.*object/i)
+    }))
+  })
+
+  it('accepts objects containing nested arrays and null values', () => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: { values: [1, 2], optional: null } })
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+})
+
 describe('validateDatabase — форма данных атмосфер', () => {
   /** Валидный слой плотности и валидная строка атмосферы для мутаций */
   const layer = () => ({ width: 0, expTerm: 1, expScale: -0.125, linearTerm: 0, constantTerm: 0 })

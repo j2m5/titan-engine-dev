@@ -196,7 +196,8 @@ describe('JSON field and editor save integration', () => {
   })
 })
 
-it('the real editor modal disables Save for invalid JSON, including after switching tables', () => {
+it.each(['{ invalid', '1', 'true', '"x"', '0', 'false', '""', '[]', 'null'])(
+  'the real editor modal blocks invalid JSON %s and recovers after correction', (invalid) => {
   act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
   const switchTo = (title: string): void => {
     const tab = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
@@ -209,13 +210,13 @@ it('the real editor modal disables Save for invalid JSON, including after switch
   switchTo('Rendering')
   act(() => container.querySelector<HTMLElement>('.titan-list-item')!.click())
   const original = container.querySelector('textarea')!.value
-  act(() => inputJson('{ invalid'))
+  act(() => inputJson(invalid))
   expect(saveButton().disabled).toBe(true)
   expect(container.textContent).toContain('Invalid input — cannot save')
   switchTo('Actors')
   expect(saveButton().disabled).toBe(true)
   switchTo('Rendering')
-  expect(container.querySelector('textarea')!.value).toBe('{ invalid')
+  expect(container.querySelector('textarea')!.value).toBe(invalid)
   act(() => inputJson(original))
   expect(saveButton().disabled).toBe(false)
 })

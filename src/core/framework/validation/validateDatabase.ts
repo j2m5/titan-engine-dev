@@ -978,21 +978,31 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
     }
   }
 
+  // Reject invalid input before specialized validators inspect object properties.
+  const renderingObjects = db.renderingObjects.filter((row) => {
+    if (row.data !== null && typeof row.data === 'object' && !Array.isArray(row.data)) return true
+    issues.push({
+      level: 'error', collection: 'renderingObjects', entity: row.id,
+      message: `renderingObjects#${row.id} data must be a non-null JSON object`
+    })
+    return false
+  })
+
   // --- 6c. Форма данных атмосфер (битая структура роняет LUT-генератор в рантайме) ---
-  checkAtmosphereShapes(db.renderingObjects, issues)
+  checkAtmosphereShapes(renderingObjects, issues)
 
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
-  checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
+  checkAtmosphereAnchoring(renderingObjects, db.actors, db.physicalObjects, issues)
 
   // --- 6g. Протяжённость атмосферы: оболочка против шкалы высот ---
-  checkAtmosphereExtent(db.renderingObjects, issues)
+  checkAtmosphereExtent(renderingObjects, issues)
 
   // --- 6f. Форма конфига туманностей ---
-  checkNebulaShapes(db.renderingObjects, aliasByActor, issues)
+  checkNebulaShapes(renderingObjects, aliasByActor, issues)
 
   // --- 6h. Форма конфига пояса астероидов ---
-  checkAsteroidBeltShapes(db.renderingObjects, aliasByActor, issues)
-  checkRingMoonlets(db.renderingObjects, aliasByActor, issues)
+  checkAsteroidBeltShapes(renderingObjects, aliasByActor, issues)
+  checkRingMoonlets(renderingObjects, aliasByActor, issues)
 
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)
