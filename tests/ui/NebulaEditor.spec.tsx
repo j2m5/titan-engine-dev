@@ -4,6 +4,7 @@ import { TablePanel } from '@/ui/editor/TablePanel'
 import { useEditorDraft, type UseEditorDraft } from '@/ui/editor/useEditorDraft'
 import { renderingObjectsSpec } from '@/ui/editor/forms/namedSpecs'
 import type { GeneratedFile } from '@/core/framework/generation/generateDatabaseFiles'
+import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
 
 const { saveSpy } = vi.hoisted(() => ({ saveSpy: vi.fn() }))
 vi.mock('@/ui/editor/saveDatabaseFiles', () => ({ saveDatabaseFiles: saveSpy }))
@@ -194,6 +195,31 @@ it('validates authored JSON controls synchronously and preserves unknown sibling
   edit('Temporal blend', '0.8')
   expect(editor.hasFieldErrors).toBe(false)
   expect(data().quality).toEqual({ temporalBlend: 0.8, custom: 7 })
+})
+
+it.each([
+  { lobes: {} }, { lobes: [null] }, { cavities: 42 }, { cavities: [[]] },
+  { palette: { stops: {} } }, { palette: { stops: [{ t: 0 }] } }
+])('blocks malformed nested JSON before Save and accepts repaired partial entries: %j', async (patch) => {
+  const save = editor.save
+  const invalid = JSON.stringify({ size: 300, ...patch })
+  await act(async () => { input(container.querySelector('textarea')!, invalid); await save() })
+  expect(saveSpy).not.toHaveBeenCalled()
+  expect(editor.validation.errors.length).toBeGreaterThan(0)
+  expect(container.querySelector('textarea')!.value).toBe(invalid)
+
+  const repaired = {
+    size: 300, lobes: [{}], cavities: [{ center: [0, -0.2, 0], strength: 0 }],
+    palette: { stops: [{ t: 0, color: '#112233' }] }
+  }
+  await act(async () => { input(container.querySelector('textarea')!, JSON.stringify(repaired)); await save() })
+  expect(saveSpy).toHaveBeenCalledTimes(1)
+  expect(editor.validation.errors).toEqual([])
+  const params = nebulaParamsFromData(data())
+  expect(params.lobes[0].center.toArray()).toEqual([0, 0, 0])
+  expect(params.lobes[0]).toMatchObject({ radius: 0.3, weight: 1, seed: 0 })
+  expect(params.cavities[0].center.toArray()).toEqual([0, -0.2, 0])
+  expect(params.cavities[0]).toMatchObject({ radius: 0.3, strength: 0 })
 })
 
 it('turns an optional light point on and off without losing other light parameters', () => {

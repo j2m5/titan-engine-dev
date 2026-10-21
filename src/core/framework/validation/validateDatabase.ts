@@ -444,9 +444,10 @@ function isPositiveTriple(value: unknown): boolean {
   )
 }
 
-/** Сужение свободного JSON до объекта: null и примитивы дают undefined */
+/** Сужение свободного JSON до объекта: null, массивы и примитивы дают undefined */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>) : undefined
 }
 
 /**
@@ -497,24 +498,53 @@ function checkNebulaShapes(
 
     const palette = asRecord(data.palette)
     const dust = asRecord(data.dust)
+    if (data.palette !== undefined && !palette) bad('palette', 'must be an object')
+
+    const checkEntries = (
+      field: string, value: unknown, check: (entry: Record<string, unknown>, path: string) => void
+    ): void => {
+      if (value === undefined) return
+      if (!Array.isArray(value)) {
+        bad(field, 'must be an array')
+        return
+      }
+      value.forEach((entry: unknown, index: number) => {
+        const path = `${field}[${index}]`
+        const record = asRecord(entry)
+        if (!record) bad(path, 'must be an object')
+        else check(record, path)
+      })
+    }
+
+    for (const field of ['lobes', 'cavities']) {
+      checkEntries(field, data[field], (entry, path) => {
+        if (entry.center !== undefined && (!Array.isArray(entry.center) || entry.center.length !== 3 ||
+          !entry.center.every((n: unknown) => typeof n === 'number' && Number.isFinite(n)))) {
+          bad(`${path}.center`, 'must be a triple of finite numbers')
+        }
+        const numbers = field === 'lobes' ? ['radius', 'weight', 'seed'] : ['radius', 'strength']
+        for (const key of numbers) {
+          if (entry[key] !== undefined && (typeof entry[key] !== 'number' || !Number.isFinite(entry[key]))) {
+            bad(`${path}.${key}`, 'must be a finite number')
+          }
+        }
+      })
+    }
 
     const colors: Array<[string, unknown]> = [
       ['palette.secondary', palette?.secondary],
       ['dust.color', dust?.color]
     ]
 
-    const stops = palette?.stops
-    if (Array.isArray(stops)) {
-      stops.forEach((entry: unknown, index: number) => {
-        const stop = asRecord(entry)
-        colors.push([`palette.stops[${index}].color`, stop?.color])
-
-        const t = stop?.t
-        if (typeof t !== 'number' || !Number.isFinite(t) || t < 0 || t > 1) {
-          bad(`palette.stops[${index}].t`, 'must be a number within [0, 1]')
-        }
-      })
-    }
+    checkEntries('palette.stops', palette?.stops, (stop, path) => {
+      if (typeof stop.color !== 'string' || !HEX_COLOR.test(stop.color)) {
+        bad(`${path}.color`, 'must be a "#rrggbb" hex color string')
+      }
+      const t = stop.t
+      if (typeof t !== 'number' || !Number.isFinite(t) || t < 0 || t > 1) {
+        bad(`${path}.t`, 'must be a number within [0, 1]')
+      }
+    })
 
     for (const [field, value] of colors) {
       if (value !== undefined && (typeof value !== 'string' || !HEX_COLOR.test(value))) {
