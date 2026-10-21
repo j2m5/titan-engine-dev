@@ -35,6 +35,10 @@ class ApparentSizeLod extends LOD {
     if (this.levels.length < 2) return
 
     this.levels[1].distance = this.switchDistance(camera.fov)
+    // Lens splitting and descendant view updates run before Three's main render.
+    camera.updateWorldMatrix(true, false)
+    this.updateWorldMatrix(true, false)
+    this.update(camera)
   }
 }
 
