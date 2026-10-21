@@ -155,8 +155,7 @@ function checkPositioning(db: DatabaseSnapshot, aliasByActor: Map<number, string
     }
 
     // Точка Лагранжа считается по орбите РОДИТЕЛЯ: без неё узел стоит в нуле.
-    // null — очищенное поле редактора, то же, что отсутствие
-    if (placement.lagrange != null) {
+    if (placement.lagrange !== undefined) {
       const actor = db.actors.find((a) => a.id === placement.actorId)
       const parentHasOrbit = actor?.parentId != null && db.orbits.some((o) => o.actorId === actor.parentId)
       if (placement.lagrange !== 4 && placement.lagrange !== 5) {
@@ -928,6 +927,15 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // --- 6a. Обязательные числа: null/NaN/Infinity — ошибка (см. REQUIRED_NUMBERS) ---
   checkRequiredNumbers(db, issues)
   checkOrbitDomain(db, issues)
+
+  for (const rotation of db.rotationObjects) {
+    if (rotation.direction !== undefined && rotation.direction !== 1 && rotation.direction !== -1) {
+      issues.push({
+        level: 'error', collection: 'rotationObjects', entity: rotation.id,
+        message: `rotationObjects#${rotation.id} direction must be 1 or -1, got ${rotation.direction}`
+      })
+    }
+  }
 
   // --- 6b. Физически невозможные значения (warning) ---
   for (const phys of db.physicalObjects) {

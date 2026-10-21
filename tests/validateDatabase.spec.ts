@@ -29,6 +29,34 @@ function planet(id: number, parentId: number) {
   return { id, categoryId: 2, parentId, name: `P${id}`, description: '', color: '#fff' }
 }
 
+describe('validateDatabase — optional enums', () => {
+  it.each([null, 0, 2, '1', true])('rejects invalid direction %j', (direction) => {
+    const db = baseSnapshot()
+    db.rotationObjects.push({ id: 1, actorId: 10, meridianAngle: 0, ascendingNode: 0,
+      inclination: 0, period: 1, direction: direction as never })
+    expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
+      collection: 'rotationObjects', entity: 1, message: expect.stringContaining('direction')
+    }))
+  })
+
+  it.each([undefined, 1, -1])('accepts direction %j', (direction) => {
+    const db = baseSnapshot()
+    db.rotationObjects.push({ id: 1, actorId: 10, meridianAngle: 0, ascendingNode: 0,
+      inclination: 0, period: 1, direction: direction as 1 | -1 | undefined })
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+
+  it.each([null, 0, 6, '4', true])('rejects invalid lagrange %j', (lagrange) => {
+    const db = baseSnapshot()
+    db.categories.push({ id: 4, alias: 'nebula', name: 'Nebula' })
+    db.actors.push({ ...planet(11, 10), categoryId: 4 })
+    db.placements.push({ id: 1, actorId: 11, x: 0, y: 0, z: 0, lagrange: lagrange as never })
+    expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
+      collection: 'placements', entity: 1, message: expect.stringContaining('lagrange')
+    }))
+  })
+})
+
 describe('validateDatabase — rendering data boundary', () => {
   it.each([1, true, 'x', 0, false, '', [], null, undefined])('rejects non-object data %j without throwing', (data) => {
     const db = baseSnapshot()

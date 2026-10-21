@@ -87,7 +87,7 @@ export const rotationObjectsSpec: TableSpec = {
       key: 'direction',
       label: 'Direction',
       kind: 'select-enum',
-      nullable: true,
+      optional: true,
       options: [
         { value: '1', label: 'Prograde (+1)' },
         { value: '-1', label: 'Retrograde (−1)' }
@@ -118,7 +118,7 @@ export const placementsSpec: TableSpec = {
       key: 'lagrange',
       label: 'Lagrange point of parent orbit (empty = XYZ)',
       kind: 'select-enum',
-      nullable: true,
+      optional: true,
       options: [
         { value: '4', label: 'L4 (ahead of the planet)' },
         { value: '5', label: 'L5 (behind the planet)' }

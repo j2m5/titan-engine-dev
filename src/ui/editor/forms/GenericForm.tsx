@@ -142,10 +142,10 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             key={field.key}
             label={field.label}
             value={value === null || value === undefined ? '' : String(value)}
-            placeholder={field.nullable ? '— none —' : undefined}
+            placeholder={field.nullable || field.optional ? '— none —' : undefined}
             options={field.options}
             onChange={(v) => {
-              if (v === '') return update(field.key, null)
+              if (v === '') return update(field.key, field.optional ? undefined : null)
               // enum-значение может быть числом (direction 1/-1) или строкой (resourceType)
               const num = Number(v)
               update(field.key, Number.isNaN(num) || v.trim() === '' ? v : num)

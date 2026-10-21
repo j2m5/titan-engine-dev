@@ -59,7 +59,8 @@ describe('validateDatabase — размещение в точке Лагранж
     expect(lagrangeErrors(snapshot({ x: 1, y: 0, z: 2 }))).toEqual([])
   })
 
-  it('lagrange: null (очищенное поле редактора) — то же, что отсутствие, ошибок нет', () => {
-    expect(lagrangeErrors(snapshot({ lagrange: null }))).toEqual([])
+  it('lagrange: null is invalid; clearing an optional field must omit it', () => {
+    expect(lagrangeErrors(snapshot({ lagrange: null }))).not.toEqual([])
+    expect(lagrangeErrors(snapshot({ lagrange: undefined }))).toEqual([])
   })
 })
