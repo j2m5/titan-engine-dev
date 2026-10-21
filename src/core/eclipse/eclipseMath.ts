@@ -47,6 +47,7 @@ export function eclipseLightCpu(point: Vec3, star: Vec3, starRadius: number, occ
     const vO = sub(o.center, point)
     if (dot(vO, vS) <= 0) continue
     const dO = len(vO)
+    if (dO >= dS) continue
     const aO = Math.asin(Math.min(1, o.radius / dO))
     const v = visibleFraction(aS, aO, diskSeparation(nS, [vO[0] / dO, vO[1] / dO, vO[2] / dO]))
     visible *= v
@@ -83,7 +84,7 @@ export function selectOccluders(
     if (c.actorId === selfActorId) return
     const v = sub(c.center, receiverCenter)
     const d = len(v)
-    if (d <= 1e-9 || dot(v, nS) <= 0) return
+    if (d <= 1e-9 || d >= dS || dot(v, nS) <= 0) return
     const theta = diskSeparation(nS, [v[0] / d, v[1] / d, v[2] / d])
     const reach = Math.asin(Math.min(1, (c.radius + receiverRadius) / d)) + aS
     if (theta >= reach) return

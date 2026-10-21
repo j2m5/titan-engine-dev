@@ -15,6 +15,18 @@ const MIN_DATA: IAsteroidBeltRenderingObject = {
   spacingKm: 60
 }
 
+describe('asteroidBeltParameters: масштабная высота пыли', () => {
+  it.each([0, -1, NaN, Infinity, -Infinity])('неположительная или неконечная доля %s заменяется дефолтом', (dustScaleHeightFraction) => {
+    const p = asteroidBeltParameters(beltActor({ ...MIN_DATA, dustScaleHeightFraction }))
+    expect(p.dustScaleHeightFraction).toBe(1 / 3)
+  })
+
+  it.each([0.01, 1 / 3, 2])('сохраняет положительную конечную долю %s', (dustScaleHeightFraction) => {
+    const p = asteroidBeltParameters(beltActor({ ...MIN_DATA, dustScaleHeightFraction }))
+    expect(p.dustScaleHeightFraction).toBe(dustScaleHeightFraction)
+  })
+})
+
 describe('asteroidBeltParameters: spacingKm', () => {
   it('поле отсутствует — дефолт 1, а не NaN (Math.max(undefined, 1) молча пустил бы пояс)', () => {
     const withoutSpacing: Record<string, unknown> = { ...MIN_DATA }

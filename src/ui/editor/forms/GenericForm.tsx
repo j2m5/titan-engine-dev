@@ -145,7 +145,8 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             placeholder={field.nullable ? '— none —' : undefined}
             options={field.options}
             onChange={(v) => {
-              if (v === '') return update(field.key, null)
+              // Direction and Lagrange point are optional enums, unlike nullable foreign keys.
+              if (v === '') return update(field.key, undefined)
               // enum-значение может быть числом (direction 1/-1) или строкой (resourceType)
               const num = Number(v)
               update(field.key, Number.isNaN(num) || v.trim() === '' ? v : num)

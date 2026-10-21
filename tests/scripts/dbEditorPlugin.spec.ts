@@ -38,7 +38,7 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true })
 })
 
-function post(headers: IncomingHttpHeaders, body: unknown): Promise<{ status: number; body: string }> {
+function post(headers: IncomingHttpHeaders, body: unknown, splitAt?: number): Promise<{ status: number; body: string }> {
   return new Promise((resolve) => {
     const req = Object.assign(new PassThrough(), { method: 'POST', headers })
     const res = {
@@ -50,7 +50,9 @@ function post(headers: IncomingHttpHeaders, body: unknown): Promise<{ status: nu
     }
 
     handler(req, res)
-    req.end(typeof body === 'string' ? body : JSON.stringify(body))
+    const encoded = Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))
+    if (splitAt !== undefined) req.write(encoded.subarray(0, splitAt))
+    req.end(splitAt === undefined ? encoded : encoded.subarray(splitAt))
   })
 }
 
@@ -157,6 +159,16 @@ describe('dbEditorPlugin: batch recovery', () => {
 })
 
 describe('dbEditorPlugin: запись только от своей страницы', () => {
+  it.each(['Земля', '🪐'])('сохраняет UTF-8 при разрыве сетевого чанка внутри символа %s', async (content) => {
+    const body = { files: [{ path: file('actors.ts'), content }] }
+    const splitAt = Buffer.from(JSON.stringify(body)).indexOf(Buffer.from(content)) + 1
+
+    const result = await post(SAME_ORIGIN, body, splitAt)
+
+    expect(result.status).toBe(200)
+    expect(read('actors.ts')).toBe(content)
+  })
+
   it('JSON со своего origin — пишет файлы', async () => {
     const result = await post(SAME_ORIGIN, { files: [{ path: file('actors.ts'), content: 'A' }] })
 

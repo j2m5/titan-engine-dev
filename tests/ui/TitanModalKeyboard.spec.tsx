@@ -122,6 +122,75 @@ describe('TitanModal: Escape', () => {
 })
 
 describe('TitanModal: фокус', () => {
+  it.each([
+    ['a collapsed details panel', <details><summary>Parameters</summary><input /></details>],
+    ['a disabled fieldset', <fieldset disabled><input /></fieldset>],
+    ['a hidden ancestor', <div style={{ display: 'none' }}><button>Hidden</button></div>],
+    ['a control excluded from Tab navigation', <button tabIndex={-1}>Programmatic focus only</button>]
+  ])('wraps Tab from the last reachable control before %s', (_name, inaccessible) => {
+    render(<TitanModal visible title="Parameters" actions={null}>
+      <button id="first">First</button>
+      <button id="last">Last</button>
+      {inaccessible}
+    </TitanModal>)
+    const first = container.querySelector<HTMLButtonElement>('#first')!
+    // A closed details panel still exposes its summary in the Tab order.
+    const last = container.querySelector<HTMLElement>('summary') ?? container.querySelector<HTMLButtonElement>('#last')!
+
+    last.focus()
+    const tab = press('Tab', {}, last)
+
+    expect(tab.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(first)
+    press('Tab', { shiftKey: true }, first)
+    expect(document.activeElement).toBe(last)
+  })
+
+  it('includes the first summary of a closed details panel when entering the dialog', () => {
+    render(<TitanModal visible title="Parameters" actions={null}>
+      <details><summary>Advanced JSON</summary><input /></details>
+      <button>Save</button>
+    </TitanModal>)
+
+    press('Tab')
+
+    expect(document.activeElement).toBe(container.querySelector('summary'))
+  })
+
+  it('recalculates the last Tab stop when a details panel opens', () => {
+    const show = (open: boolean): void => render(<TitanModal visible title="Parameters" actions={null}>
+      <button id="first">First</button>
+      <details open={open}><summary>Advanced JSON</summary><input /></details>
+    </TitanModal>)
+    show(false)
+    const first = container.querySelector<HTMLButtonElement>('#first')!
+    first.focus()
+    press('Tab', { shiftKey: true }, first)
+    expect(document.activeElement).toBe(container.querySelector('summary'))
+
+    show(true)
+    first.focus()
+    press('Tab', { shiftKey: true }, first)
+
+    expect(document.activeElement).toBe(container.querySelector('input'))
+  })
+
+  it('keeps controls in the first legend of a disabled fieldset reachable', () => {
+    render(<TitanModal visible title="Parameters" actions={null}>
+      <button id="first">First</button>
+      <fieldset disabled>
+        <legend><button id="toggle">Enable parameters</button></legend>
+        <input />
+      </fieldset>
+    </TitanModal>)
+    const first = container.querySelector<HTMLButtonElement>('#first')!
+    first.focus()
+
+    press('Tab', { shiftKey: true }, first)
+
+    expect(document.activeElement).toBe(container.querySelector('#toggle'))
+  })
+
   it('does not restore a background modal opener over the active dialog', () => {
     const opener = document.createElement('button')
     document.body.appendChild(opener)

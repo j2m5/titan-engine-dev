@@ -1,5 +1,6 @@
 import { PerspectiveCamera, Scene } from 'three'
 import { Crosshair } from '@/core/renderables/utils/Crosshair'
+import '@/core/framework/TitanThree'
 
 /**
  * Стрелка прицела за кадром показывает, куда повернуть к цели. Камера в начале
@@ -15,7 +16,7 @@ function setup(x: number, y: number, z: number): HTMLElement {
   scene.updateMatrixWorld()
   camera.updateMatrixWorld()
 
-  crosshair.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+  crosshair.updateView(camera)
 
   return (crosshair as unknown as { arrow: HTMLElement }).arrow
 }
@@ -25,6 +26,24 @@ function arrowCenterX(arrow: HTMLElement): number {
 }
 
 describe('Crosshair: стрелка к цели за кадром', () => {
+  it('поздний перенос камеры в текущем кадре прячет стрелку, когда цель вошла в кадр', () => {
+    const camera = new PerspectiveCamera(50, 1, 0.1, 1000)
+    const scene = new Scene()
+    const crosshair = new Crosshair()
+    scene.add(camera, crosshair)
+    crosshair.position.set(100, 0, -10)
+    scene.updateMatrixWorld()
+    crosshair.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+    crosshair.updateView(camera)
+    const arrow = (crosshair as unknown as { arrow: HTMLElement }).arrow
+    expect(arrow.style.display).toBe('block')
+
+    camera.position.x = 100
+    crosshair.updateView(camera)
+
+    expect(arrow.style.display).toBe('none')
+  })
+
   it('цель в кадре — стрелки нет', () => {
     expect(setup(0, 0, -10).style.display).toBe('none')
   })

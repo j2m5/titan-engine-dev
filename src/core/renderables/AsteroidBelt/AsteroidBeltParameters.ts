@@ -88,6 +88,7 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
   const rawMax = data.sizeRangeKm?.[1]
   const sizeMin = typeof rawMin === 'number' && rawMin > 0 ? rawMin : 1
   const sizeMax = typeof rawMax === 'number' && rawMax > sizeMin ? rawMax : sizeMin + 1
+  const dustScaleHeightFraction = data.dustScaleHeightFraction
 
   return {
     innerRadiusKm: innerRadiusAu * AU,
@@ -104,7 +105,11 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustColor: data.dustColor ?? 0x9b968c,
     // Толща по вертикали, не на просвет через ширину (см. IAsteroidBeltRenderingObject)
     dustTauVertical: Math.max(0, data.dustTauVertical ?? 0.06),
-    dustScaleHeightFraction: data.dustScaleHeightFraction ?? 1 / 3,
+    // Калибровка плотности делит на высоту: ноль даёт Infinity (при tau=0 — NaN).
+    dustScaleHeightFraction:
+      typeof dustScaleHeightFraction === 'number' && Number.isFinite(dustScaleHeightFraction) && dustScaleHeightFraction > 0
+        ? dustScaleHeightFraction
+        : 1 / 3,
     dustClumpStrength: Math.min(1, Math.max(0, data.dustClumpStrength ?? 0.7)),
     // Пол ~100 единиц сцены (200 000 км): мельче шум по float32-координатам алиасит
     dustClumpScaleKm: Math.max(1.3e-3, data.dustClumpScaleAu ?? 0.6) * AU,

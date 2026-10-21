@@ -14,6 +14,7 @@ import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
 import { LensRegistry } from '@/core/services/LensRegistry'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
 
 interface BloomMeasurement {
   name: string
@@ -49,6 +50,7 @@ const FIXTURES = [
  * await import('/tests/graphic/stellarBloom.gpu.ts').then(m => m.checkStellarBloom())
  */
 export function checkStellarBloom(): { results: BloomMeasurement[] } {
+  const originalGaiaExposure = gaiaSkyUniforms.uGaiaExposure.value
   const width = 640, height = 360
   const renderer = new WebGLRenderer({ logarithmicDepthBuffer: true })
   renderer.setClearColor(0, 1)
@@ -60,7 +62,7 @@ export function checkStellarBloom(): { results: BloomMeasurement[] } {
   composer.addPass(new RenderPass(scene, camera))
   const holePass = new BlackHolePass(camera, registry)
   composer.addPass(holePass)
-  if (holePass.skyLayer.material.uniforms.uGaiaExposure) holePass.skyLayer.material.uniforms.uGaiaExposure.value = 0
+  if (holePass.skyLayer.material.uniforms.uGaiaExposure) holePass.skyLayer.material.uniforms.uGaiaExposure = { value: 0 }
   const [hdr, ldr] = createEffectPasses(camera)
   const effects = (hdr as unknown as { effects: Effect[] }).effects
   if (!effects.some(effect => effect instanceof BloomEffect)) throw new Error('Production bloom missing')
@@ -97,7 +99,7 @@ export function checkStellarBloom(): { results: BloomMeasurement[] } {
           : fixture.kind === 'white' ? new WhiteDwarf(actor)
           : fixture.kind === 'brown' ? new BrownDwarf(actor)
           : fixture.kind === 'giant' ? new GiantStar(actor) : new Star(actor)
-        if (body.material.uniforms.uGaiaExposure) body.material.uniforms.uGaiaExposure.value = 0
+        if (body.material.uniforms.uGaiaExposure) body.material.uniforms.uGaiaExposure = { value: 0 }
         const shell = body instanceof GiantStar ? new GiantStarShell(body) : null
         if (shell) body.add(shell)
         scene.add(body)
@@ -160,9 +162,13 @@ export function checkStellarBloom(): { results: BloomMeasurement[] } {
         }
       }
     }
+    if (gaiaSkyUniforms.uGaiaExposure.value !== originalGaiaExposure) {
+      throw new Error('Stellar bloom probe changed the shared Gaia exposure')
+    }
     if (failures.length) throw Object.assign(new Error(failures.join('\n')), { results })
     return { results }
   } finally {
+    gaiaSkyUniforms.uGaiaExposure.value = originalGaiaExposure
     hdr.dispose()
     ldr.dispose()
     output.dispose()

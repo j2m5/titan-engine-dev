@@ -647,6 +647,27 @@ function checkRequiredNumbers(db: DatabaseSnapshot, issues: ValidationIssue[]): 
   }
 }
 
+/** JSON.parse допускает 1e400 → Infinity, а генератор записал бы его как null. */
+function checkRenderingNumbers(rows: IRenderingObject[], issues: ValidationIssue[]): void {
+  for (const row of rows) {
+    const visit = (value: unknown, path: string): void => {
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        issues.push({
+          level: 'error',
+          collection: 'renderingObjects',
+          entity: row.id,
+          message: `renderingObjects#${row.id} ${path} must be a finite number, got ${String(value)}`
+        })
+      } else if (Array.isArray(value)) {
+        value.forEach((entry, index) => visit(entry, `${path}[${index}]`))
+      } else if (typeof value === 'object' && value !== null) {
+        for (const [key, entry] of Object.entries(value)) visit(entry, `${path}.${key}`)
+      }
+    }
+    visit(row.data, 'data')
+  }
+}
+
 /** Validate the ellipse/hyperbola domain implemented by KeplerianModel. */
 function checkOrbitDomain(db: DatabaseSnapshot, issues: ValidationIssue[]): void {
   for (const orbit of db.orbits) {
@@ -978,21 +999,37 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
     }
   }
 
+  // JSON.parse принимает также null, массивы и примитивы. Проверяем границу
+  // перед чтением полей: оператор `in` в проверках атмосферы бросает на примитиве.
+  // Исходный черновик не меняем — неверный JSON должен оставаться редактируемым.
+  const renderingRows = db.renderingObjects.filter((row) => {
+    if (typeof row.data === 'object' && row.data !== null && !Array.isArray(row.data)) return true
+
+    issues.push({
+      level: 'error',
+      collection: 'renderingObjects',
+      entity: row.id,
+      message: `renderingObjects#${row.id} (actor ${row.actorId}) data must be a JSON object`
+    })
+    return false
+  })
+  checkRenderingNumbers(renderingRows, issues)
+
   // --- 6c. Форма данных атмосфер (битая структура роняет LUT-генератор в рантайме) ---
-  checkAtmosphereShapes(db.renderingObjects, issues)
+  checkAtmosphereShapes(renderingRows, issues)
 
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
-  checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
+  checkAtmosphereAnchoring(renderingRows, db.actors, db.physicalObjects, issues)
 
   // --- 6g. Протяжённость атмосферы: оболочка против шкалы высот ---
-  checkAtmosphereExtent(db.renderingObjects, issues)
+  checkAtmosphereExtent(renderingRows, issues)
 
   // --- 6f. Форма конфига туманностей ---
-  checkNebulaShapes(db.renderingObjects, aliasByActor, issues)
+  checkNebulaShapes(renderingRows, aliasByActor, issues)
 
   // --- 6h. Форма конфига пояса астероидов ---
-  checkAsteroidBeltShapes(db.renderingObjects, aliasByActor, issues)
-  checkRingMoonlets(db.renderingObjects, aliasByActor, issues)
+  checkAsteroidBeltShapes(renderingRows, aliasByActor, issues)
+  checkRingMoonlets(renderingRows, aliasByActor, issues)
 
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)

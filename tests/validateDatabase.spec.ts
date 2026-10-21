@@ -29,6 +29,46 @@ function planet(id: number, parentId: number) {
   return { id, categoryId: 2, parentId, name: `P${id}`, description: '', color: '#fff' }
 }
 
+describe('validateDatabase — rendering JSON boundary', () => {
+  it.each([null, true, false, 1, 0, 'text', '', [], [1, 2]].map((data) => ({ data })))(
+    'reports non-object rendering data $data without throwing', ({ data }) => {
+      const db = baseSnapshot()
+      // Valid JSON can come from the editor without satisfying the TS model.
+      db.renderingObjects.push({ id: 1, actorId: 10, data: data as never })
+
+      const result = validateDatabase(db)
+
+      expect(result.ok).toBe(false)
+      expect(result.errors).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'renderingObjects', entity: 1, message: expect.stringMatching(/data.*object/i) })
+      ]))
+    }
+  )
+
+  it('accepts an object containing nested arrays, booleans and null', () => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: { values: [0, false, null, { value: 'text' }] } })
+
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+
+  it.each([
+    { text: '{"emission":1e400}', path: 'data.emission' },
+    { text: '{"surface":{"layers":[{"strength":-1e400}]}}', path: 'data.surface.layers[0].strength' }
+  ])('rejects overflowing JSON numbers at $path', ({ text, path }) => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: JSON.parse(text) })
+
+    const result = validateDatabase(db)
+
+    expect(result.ok).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'renderingObjects', entity: 1,
+        message: expect.stringContaining(`${path} must be a finite number`) })
+    ]))
+  })
+})
+
 describe('validateDatabase — форма данных атмосфер', () => {
   /** Валидный слой плотности и валидная строка атмосферы для мутаций */
   const layer = () => ({ width: 0, expTerm: 1, expScale: -0.125, linearTerm: 0, constantTerm: 0 })

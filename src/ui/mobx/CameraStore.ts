@@ -42,7 +42,7 @@ class CameraStore {
   public get formatSpeed(): { speed: number; unit: string } {
     if (this.speed < LightSpeed) {
       return { speed: this.speed, unit: 'km/s' }
-    } else if (this.speed > LightSpeed && this.speed < AU) {
+    } else if (this.speed >= LightSpeed && this.speed < AU) {
       return { speed: this.speed / LightSpeed, unit: 'c' }
     } else {
       return { speed: this.speed / AU, unit: 'au/s' }

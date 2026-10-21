@@ -24,6 +24,7 @@ function wi16(buf: Buffer, value: number, offset: number, le: boolean): void {
 function buildTiff(opts: {
   le: boolean
   rows: number[][]
+  imageHeight?: number
   rowsPerStrip?: number
   compression?: number
   bitsPerSample?: number
@@ -65,7 +66,7 @@ function buildTiff(opts: {
   const fields: Field[] = []
 
   fields.push({ tag: 256, type: 3, values: [width] })
-  fields.push({ tag: 257, type: 3, values: [height] })
+  fields.push({ tag: 257, type: 3, values: [opts.imageHeight ?? height] })
   fields.push({ tag: 258, type: 3, values: [bitsPerSample] })
   fields.push({ tag: 259, type: 3, values: [compression] })
 
@@ -178,6 +179,12 @@ function buildTiff(opts: {
 }
 
 describe('readGeoTiffInt16: strip-based signed int16 GeoTIFF', () => {
+  it.each([true, false])('отвергает недостающие страйпы, не подставляя нулевые высоты (LE=%s)', (le) => {
+    const tiff = buildTiff({ le, rows: [[100, 200]], rowsPerStrip: 1, imageHeight: 2 })
+
+    expect(() => readGeoTiffInt16(tiff)).toThrow(/страйп/i)
+  })
+
   it('LE, один страйп — значения совпадают, scale/offset/nodata дефолтные', () => {
     const tiff = buildTiff({ le: true, rows: [[-100, 200], [300, -400]] })
     const result = readGeoTiffInt16(tiff)

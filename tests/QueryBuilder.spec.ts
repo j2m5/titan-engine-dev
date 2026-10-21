@@ -174,6 +174,58 @@ describe('QueryBuilder — paginate согласован с фильтрами',
     expect(result.currentPage).toBe(2)
     expect(result.data.pluck('id')).toEqual([3, 4])
   })
+
+  it('переходит по страницам одного запроса, сохраняя total и исходную выборку', () => {
+    const query = User.query().orderBy('id')
+    const first = query.paginate(1, 2)
+    const second = query.paginate(2, 2)
+    const third = query.paginate(3, 2)
+
+    expect([first.total, second.total, third.total]).toEqual([5, 5, 5])
+    expect([first.currentPage, second.currentPage, third.currentPage]).toEqual([1, 2, 3])
+    expect([first.data.pluck('id'), second.data.pluck('id'), third.data.pluck('id')])
+      .toEqual([[1, 2], [3, 4], [5]])
+    expect(query.get().pluck('id')).toEqual([1, 2, 3, 4, 5])
+  })
+
+  it('разбивает на страницы ту же ограниченную выборку, по которой считает total', () => {
+    const query = User.query().orderBy('id').offset(1).limit(3)
+    const result = query.paginate(2, 2)
+
+    expect(result.total).toBe(3)
+    expect(result.lastPage).toBe(2)
+    expect(result.data.pluck('id')).toEqual([4])
+    expect(query.get().pluck('id')).toEqual([2, 3, 4])
+  })
+
+  it('пустая выборка остаётся на первой пустой странице', () => {
+    const result = User.query().where({ id: 999 }).paginate(1, 2)
+
+    expect(result.total).toBe(0)
+    expect(result.currentPage).toBe(1)
+    expect(result.lastPage).toBe(1)
+    expect(result.data.isEmpty()).toBe(true)
+  })
+})
+
+describe('QueryBuilder — чтение не меняет границы запроса', () => {
+  it.each(['first', 'exists'] as const)('%s сохраняет offset и limit для следующих чтений', (method) => {
+    const query = User.query().orderBy('id').offset(1).limit(3)
+
+    const result = query[method]()
+
+    if (typeof result === 'boolean') expect(result).toBe(true)
+    else expect(result?.getAttribute('id')).toBe(2)
+    expect(query.count()).toBe(3)
+    expect(query.get().pluck('id')).toEqual([2, 3, 4])
+  })
+
+  it.each(['first', 'exists'] as const)('%s учитывает явно заданный limit(0)', (method) => {
+    const query = User.query().limit(0)
+
+    expect(query[method]()).toBe(method === 'first' ? null : false)
+    expect(query.get().isEmpty()).toBe(true)
+  })
 })
 
 describe('QueryBuilder — глобальные скоупы', () => {

@@ -1,6 +1,5 @@
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
-import { Vector2, Vector3 } from 'three'
-import { UpdateContext } from '@/core/UpdateContext'
+import { PerspectiveCamera, Vector2, Vector3 } from 'three'
 
 class Crosshair extends CSS2DObject {
   private arrow: HTMLElement
@@ -46,9 +45,11 @@ class Crosshair extends CSS2DObject {
     })
   }
 
-  public updateObject(ctx: UpdateContext): void {
-    const view = this.getWorldPosition(this.pos).applyMatrix4(ctx.camera.matrixWorldInverse)
-    const ndc = this.ndc.copy(view).applyMatrix4(ctx.camera.projectionMatrix)
+  public updateView(camera: PerspectiveCamera): void {
+    // Стрелка и CSS2D-прицел видят одну камеру после слежения и коллизий.
+    camera.updateWorldMatrix(true, false)
+    const view = this.getWorldPosition(this.pos).applyMatrix4(camera.matrixWorldInverse)
+    const ndc = this.ndc.copy(view).applyMatrix4(camera.projectionMatrix)
     // Окно по z — то же, по которому CSS2DRenderer показывает сам прицел: за far
     // прицел скрыт, и стрелка остаётся единственным указателем
     const inView = ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1

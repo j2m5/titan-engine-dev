@@ -170,6 +170,13 @@ export function readGeoTiffHeader(buffer: Buffer): GeoTiffHeader {
     )
   }
 
+  const expectedStrips = Math.ceil(height / rowsPerStrip)
+  if (stripOffsets.length !== expectedStrips) {
+    throw new Error(
+      `GeoTIFF: страйпы не покрывают изображение (ожидалось ${expectedStrips}, получено ${stripOffsets.length})`
+    )
+  }
+
   const gdalMetadataEntry = entries.get(TAG_GDAL_METADATA)
   const gdalMetadataText = gdalMetadataEntry ? readAscii(gdalMetadataEntry) : undefined
   const scale = (gdalMetadataText !== undefined ? extractGdalItem(gdalMetadataText, 'SCALE') : undefined) ?? 1

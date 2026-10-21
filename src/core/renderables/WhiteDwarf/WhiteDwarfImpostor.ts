@@ -2,6 +2,7 @@ import {
   BufferGeometry,
   Mesh,
   NormalBlending,
+  PerspectiveCamera,
   PlaneGeometry,
   ShaderMaterial,
   UniformsUtils,
@@ -10,7 +11,6 @@ import {
 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { frameHeightAt, WHITE_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
-import { UpdateContext } from '@/core/UpdateContext'
 import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostorShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostorShaderTemplate'
 
@@ -68,8 +68,8 @@ class WhiteDwarfImpostor extends Mesh {
     }
   }
 
-  public updateObject(ctx: UpdateContext): void {
-    const cameraPosition: Vector3 = ctx.camera.getWorldPosition(this.cameraPosition)
+  public updateView(camera: PerspectiveCamera): void {
+    const cameraPosition: Vector3 = camera.getWorldPosition(this.cameraPosition)
 
     this.lookAt(cameraPosition)
 
@@ -77,7 +77,7 @@ class WhiteDwarfImpostor extends Mesh {
     // Ту же величину меряет LOD.update, выбирая между диском и билбордом
     const distance: number = this.getWorldPosition(this.worldPosition).distanceTo(cameraPosition)
     const viewportHeight: number = this.renderer.domElement.height
-    const worldSize: number = (WHITE_DWARF_IMPOSTOR_PIXELS / viewportHeight) * frameHeightAt(distance, ctx.camera.fov)
+    const worldSize: number = (WHITE_DWARF_IMPOSTOR_PIXELS / viewportHeight) * frameHeightAt(distance, camera.fov)
 
     this.scale.setScalar(worldSize)
   }

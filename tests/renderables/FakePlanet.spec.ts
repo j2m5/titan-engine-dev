@@ -5,6 +5,7 @@ import { IMPOSTOR_MAX_CHANNEL, impostorColorFromActor, lambertPhase, lommelSeeli
 import { config } from '@/core/framework/config'
 import { Actor } from '@/core/models/Actor'
 import { UpdateContext } from '@/core/UpdateContext'
+import '@/core/framework/TitanThree'
 
 // По умолчанию — тело с атмосферой: прежняя ламбертова фаза, прежние ожидания тестов ниже
 function stubActor(color?: string, opts: { atmosphere?: boolean; data?: Record<string, unknown> } = {}): Actor {
@@ -35,6 +36,20 @@ function planetAt10(color?: string, opts: { atmosphere?: boolean; data?: Record<
 }
 
 describe('FakePlanet: цвет тела и фаза', () => {
+  it('поздний перенос камеры меняет фазу точки в текущем кадре', () => {
+    const sprite = planetAt10('#6495ed')
+    const ctx = contextAt(20)
+    sprite.updateObject(ctx)
+    sprite.updateView?.(ctx.camera)
+    expect(sprite.material.color.g / sprite.baseColor.g).toBeCloseTo(config('planetImpostor.phaseFloor'), 9)
+
+    // Камера после follow/коллизии оказалась между звездой и телом: полная фаза.
+    ctx.camera.position.x = 5
+    sprite.updateView?.(ctx.camera)
+
+    expect(sprite.material.color.g / sprite.baseColor.g).toBeCloseTo(1, 9)
+  })
+
   it('материал прежний: аддитив, без масштабирования по дистанции, без записи глубины', () => {
     const sprite = planetAt10('#6495ed')
     expect(sprite.material.blending).toBe(AdditiveBlending)
@@ -49,7 +64,7 @@ describe('FakePlanet: цвет тела и фаза', () => {
 
   it('камера между звездой и телом (α = 0) — полный базовый цвет', () => {
     const sprite = planetAt10('#6495ed')
-    sprite.updateObject(contextAt(5))
+    sprite.updateView(contextAt(5).camera)
     const c = sprite.material.color
     expect(c.r).toBeCloseTo(sprite.baseColor.r, 9)
     expect(c.g).toBeCloseTo(sprite.baseColor.g, 9)
@@ -58,7 +73,7 @@ describe('FakePlanet: цвет тела и фаза', () => {
 
   it('камера за телом (α = π) — базовый цвет × пол фазы', () => {
     const sprite = planetAt10('#6495ed')
-    sprite.updateObject(contextAt(20))
+    sprite.updateView(contextAt(20).camera)
     const expected = sprite.baseColor.clone().multiplyScalar(config('planetImpostor.phaseFloor'))
     expect(sprite.material.color.r).toBeCloseTo(expected.r, 9)
     expect(sprite.material.color.b).toBeCloseTo(expected.b, 9)
@@ -66,8 +81,8 @@ describe('FakePlanet: цвет тела и фаза', () => {
 
   it('квадратура — 1/π базового, повторный вызов не накапливает множитель', () => {
     const sprite = planetAt10('#6495ed')
-    sprite.updateObject(contextAt(10, 7))
-    sprite.updateObject(contextAt(10, 7))
+    sprite.updateView(contextAt(10, 7).camera)
+    sprite.updateView(contextAt(10, 7).camera)
     expect(sprite.material.color.g).toBeCloseTo(sprite.baseColor.g / Math.PI, 9)
   })
 
@@ -80,7 +95,7 @@ describe('FakePlanet: цвет тела и фаза', () => {
 describe('FakePlanet: фаза реголита у безатмосферного тела', () => {
   it('квадратура — фаза Ломмеля–Зелигера (ярче ламберта)', () => {
     const sprite = planetAt10('#a8a6a6', { atmosphere: false })
-    sprite.updateObject(contextAt(10, 7))
+    sprite.updateView(contextAt(10, 7).camera)
     const g = sprite.material.color.g / sprite.baseColor.g
     // остаток всплеска в квадратуре ≈ 1.7e-8 — допуск 6 знаков
     expect(g).toBeCloseTo(lommelSeeligerPhase(Math.PI / 2), 6)
@@ -89,7 +104,7 @@ describe('FakePlanet: фаза реголита у безатмосферног�
 
   it('противостояние — всплеск, но ни один канал не выше 0.99, оттенок сохранён', () => {
     const sprite = planetAt10('#c9cfd2', { atmosphere: false, data: { oppositionSurge: 3 } })
-    sprite.updateObject(contextAt(5))
+    sprite.updateView(contextAt(5).camera)
     const c = sprite.material.color
     expect(Math.max(c.r, c.g, c.b)).toBeCloseTo(IMPOSTOR_MAX_CHANNEL, 12)
     expect(c.r / c.b).toBeCloseTo(sprite.baseColor.r / sprite.baseColor.b, 9)
@@ -97,7 +112,7 @@ describe('FakePlanet: фаза реголита у безатмосферног�
 
   it('тело с атмосферой, но с regolithMix в данных — закон и всплеск включаются', () => {
     const sprite = planetAt10('#a8a6a6', { atmosphere: true, data: { regolithMix: 1 } })
-    sprite.updateObject(contextAt(10, 7))
+    sprite.updateView(contextAt(10, 7).camera)
     expect(sprite.material.color.g / sprite.baseColor.g).toBeCloseTo(lommelSeeligerPhase(Math.PI / 2), 6)
   })
 })

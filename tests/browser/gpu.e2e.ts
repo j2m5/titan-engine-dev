@@ -1,6 +1,8 @@
 import { test, runProbe } from './probe'
 
 const probes: { title: string; path: string; name: string; args?: unknown[] }[] = [
+  { title: 'lens flare filter symmetry', path: 'graphic/downsampleThreshold', name: 'checkDownsampleThreshold' },
+  { title: 'eclipse distance order', path: 'eclipse/distance', name: 'checkEclipseDistance' },
   { title: 'water ocean surface', path: 'water/oceanView', name: 'checkOceanView' },
   { title: 'nebula seed', path: 'nebula/rendering', name: 'checkNebulaSeed' },
   { title: 'nebula world precision', path: 'nebula/rendering', name: 'checkNebulaWorldPrecision' },

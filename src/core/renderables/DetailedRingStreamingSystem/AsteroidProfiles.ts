@@ -137,5 +137,5 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
  * пояса (AsteroidBelt); ледяная примесь пояса подставляет свой fallback.
  */
 export function asteroidProfileNameOf(name: string, fallback: AsteroidProfileName = 'stony'): AsteroidProfileName {
-  return name in ASTEROID_PROFILES ? (name as AsteroidProfileName) : fallback
+  return Object.prototype.hasOwnProperty.call(ASTEROID_PROFILES, name) ? (name as AsteroidProfileName) : fallback
 }

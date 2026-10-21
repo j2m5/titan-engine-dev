@@ -3,9 +3,10 @@ import {
   CLEARANCE_GRID_BASE_SEGMENTS,
   CLEARANCE_MARGIN_METERS,
   TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS,
-  TERRAIN_SAG_MODEL_VERSION
+  TERRAIN_SAG_MODEL_VERSION,
+  terrainBlockTexels
 } from './TerrainHeightField'
-import { TERRAIN_PATCH_SEGMENTS } from './cubeSphere'
+import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS } from './cubeSphere'
 import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
 
 /**
@@ -194,6 +195,27 @@ export function terrainAuxMismatch(aux: TerrainAuxData, map: HeightMapData): str
     if (aux.calibration[key] !== expectedCalibration[key]) {
       return `калибровка не сходится (${key}: ${aux.calibration[key]} против ${expectedCalibration[key]})`
     }
+  }
+
+  // Калибровка описывает формулы, но не гарантирует форму тела контейнера:
+  // укороченные массивы с тем же отпечатком иначе дают undefined/NaN в поле.
+  const block = terrainBlockTexels(map.width)
+  const blocksX = Math.ceil(map.width / block)
+  const blocksY = Math.ceil(map.height / block)
+  if (aux.blocksX !== blocksX || aux.blocksY !== blocksY || aux.clearanceGrid.length !== blocksX * blocksY) {
+    return `форма сетки клиренса не сходится (ожидалось ${blocksX}×${blocksY})`
+  }
+  if (aux.levelErrorMeters.length !== TERRAIN_MODEL_LEVEL + 1) {
+    return `число уровней ошибок не сходится (ожидалось ${TERRAIN_MODEL_LEVEL + 1})`
+  }
+
+  // Тот же критерий константного поля, что у TerrainHeightField.computeAux.
+  const constantField = map.minMeters === map.maxMeters
+  const pyramidCount = CUBE_FACES * (4 ** (TERRAIN_MODEL_LEVEL + 1) - 4 ** TERRAIN_QUADTREE_MIN_LEVEL) / 3
+  const pyramidMatches = (pyramid: Float32Array | null): boolean =>
+    constantField ? pyramid === null : pyramid !== null && pyramid.length === pyramidCount
+  if (!pyramidMatches(aux.nodeMaxHeightMetersPyramid) || !pyramidMatches(aux.nodeErrorMetersPyramid)) {
+    return `форма пирамид узлов не сходится (ожидалось ${constantField ? 'null' : pyramidCount})`
   }
 
   return null

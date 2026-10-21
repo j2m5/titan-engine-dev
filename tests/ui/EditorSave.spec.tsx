@@ -81,6 +81,42 @@ describe('Редактор данных: сохранение', () => {
   })
 })
 
+it.each([
+  { table: 'Rotation', field: 'Direction', key: 'direction', selected: '1', file: 'rotationObjects.ts' },
+  { table: 'Placements', field: 'Lagrange point of parent orbit (empty = XYZ)', key: 'lagrange', selected: '4', file: 'placements.ts' }
+])('clearing optional $key omits it from generated database rows', async ({ table, field, key, selected, file }) => {
+  saveSpy.mockResolvedValue({ ok: true, written: [] })
+  act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
+  const tab = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
+    .find((button) => button.textContent?.startsWith(table))!
+  act(() => tab.click())
+  act(() => container.querySelector<HTMLButtonElement>('.titan-editor-row')!.click())
+  const select = Array.from(container.querySelectorAll('label'))
+    .find((label) => label.querySelector('.titan-field-label')?.textContent === field)!
+    .querySelector('select')!
+  expect(select.value).toBe(selected)
+
+  act(() => {
+    select.value = ''
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  const saveButton = Array.from(container.querySelectorAll('button'))
+    .find((button) => button.textContent === 'Save to generated')!
+  expect(select.value).toBe('')
+  expect(saveButton.disabled).toBe(false)
+  await act(async () => saveButton.click())
+
+  const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+  const content = files.find((entry) => entry.path.endsWith(`/${file}`))!.content
+  const editedRow = content.split('\n').find((line) => /^ {2}\{ id: 1,/.test(line))!
+  expect(editedRow).toBeDefined()
+  expect(editedRow).not.toContain(`${key}:`)
+  // Clearing optional enums must not erase required nullable foreign keys.
+  const actorContent = files.find((entry) => entry.path.endsWith('/actors.ts'))!.content
+  expect(actorContent).toContain('parentId: null')
+})
+
 const JSON_DATABASE = new Map<string, unknown[]>([
   ['categories', [
     { id: 1, name: 'First', data: { seed: 1 } },
@@ -219,3 +255,26 @@ it('the real editor modal disables Save for invalid JSON, including after switch
   act(() => inputJson(original))
   expect(saveButton().disabled).toBe(false)
 })
+
+it.each(['1', 'true', '"text"', '[]', 'null', '{"emission":1e400}', '{"nested":[-1e400]}'])(
+  'the real editor keeps invalid rendering data %s editable and blocks saving it', async (text) => {
+    act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
+    const rendering = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
+      .find((button) => button.textContent?.startsWith('Rendering'))!
+    act(() => rendering.click())
+    act(() => container.querySelector<HTMLElement>('.titan-list-item')!.click())
+    const original = container.querySelector('textarea')!.value
+    const saveButton = (): HTMLButtonElement => Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save to generated')!
+
+    act(() => inputJson(text))
+
+    expect(container.querySelector('textarea')!.value).toBe(text)
+    expect(saveButton().disabled).toBe(true)
+    await act(async () => saveButton().click())
+    expect(saveSpy).not.toHaveBeenCalled()
+
+    act(() => inputJson(original))
+    expect(saveButton().disabled).toBe(false)
+  }
+)

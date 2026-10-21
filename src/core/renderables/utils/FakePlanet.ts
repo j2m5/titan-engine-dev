@@ -1,10 +1,9 @@
-import { AdditiveBlending, Color, Sprite, SpriteMaterial, Texture, Vector3 } from 'three'
+import { AdditiveBlending, Color, PerspectiveCamera, Sprite, SpriteMaterial, Texture, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { config } from '@/core/framework/config'
 import { IMPOSTOR_MAX_CHANNEL, impostorColorFromActor, impostorPhaseAngle, regolithPhase } from '@/core/renderables/utils/planetImpostorMath'
 import { regolithParamsOf, type RegolithParams } from '@/core/terrain/regolithParams'
-import type { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Точка планеты дальше порога LOD: цвет тела из Actor.color и фаза по углу
@@ -56,9 +55,9 @@ class FakePlanet extends Sprite {
     this.scale.multiplyScalar(this.scaleFactor)
   }
 
-  public updateObject(ctx: UpdateContext): void {
+  public updateView(camera: PerspectiveCamera): void {
     this.getWorldPosition(this.bodyWorld)
-    ctx.camera.getWorldPosition(this.cameraWorld)
+    camera.getWorldPosition(this.cameraWorld)
 
     const alpha = impostorPhaseAngle(this.bodyWorld, this.cameraWorld)
     const { regolithMix, oppositionSurge } = this.regolith

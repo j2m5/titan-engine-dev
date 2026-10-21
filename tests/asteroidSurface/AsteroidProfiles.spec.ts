@@ -1,4 +1,11 @@
-import { ASTEROID_PROFILES, type AsteroidProfileName, type AsteroidProfile } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
+import { ASTEROID_PROFILES, asteroidProfileNameOf, type AsteroidProfileName, type AsteroidProfile } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
+
+describe('asteroidProfileNameOf: неизвестные имена из JSON', () => {
+  it.each(['constructor', 'toString', '__proto__'])('унаследованное имя %s использует заданный fallback', (name) => {
+    expect(asteroidProfileNameOf(name)).toBe('stony')
+    expect(asteroidProfileNameOf(name, 'icy')).toBe('icy')
+  })
+})
 
 const REQUIRED_KEYS: (keyof AsteroidProfile)[] = [
   'baseColor', 'colorJitter', 'tintStrength', 'mariaStrength',

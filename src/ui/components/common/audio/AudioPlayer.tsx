@@ -24,6 +24,11 @@ import { audioPlayerStore } from '@/ui/mobx/AudioPlayerStore'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 import { hasNextTrack, trackLabel } from '@/ui/components/common/audio/trackHelpers'
 
+const startPlayback = (audio: HTMLAudioElement): void => {
+  // Autoplay policies and interrupted requests can reject; media events own UI state.
+  void audio.play().catch(() => {})
+}
+
 const AudioPlayer = observer((props: AudioPlayerProps) => {
   const { currentTrack, trackIndex, trackCount, onPlay, onNext, onPrev } = props
 
@@ -45,6 +50,8 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false)
   const [loop, setLoop] = useState(false)
   const [shownTrackIndex, setShownTrackIndex] = useState(trackIndex)
+  const trackSrc = currentTrack?.src
+  const [shownTrackSrc, setShownTrackSrc] = useState(trackSrc)
 
   /**
    * Смена трека: плеер больше не пересоздаётся целиком (key живёт на <audio>),
@@ -52,8 +59,9 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
    * трека сбрасывается здесь. Правка состояния в рендере — штатный приём React
    * на смену пропса (тот же, что в TitanToast): кадра со старым прогрессом нет.
    */
-  if (trackIndex !== shownTrackIndex) {
+  if (trackIndex !== shownTrackIndex || trackSrc !== shownTrackSrc) {
     setShownTrackIndex(trackIndex)
+    setShownTrackSrc(trackSrc)
     setDuration(0)
     setCurrentProgress(0)
     setBuffered(0)
@@ -64,16 +72,20 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   }
 
   useEffect(() => {
-    audioRef.current?.pause()
+    const audio = audioRef.current
+    if (!audio) return
+
+    audio.pause()
 
     const timeout = setTimeout(() => {
-      audioRef.current?.play()
+      startPlayback(audio)
     }, 50)
 
     return (): void => {
       clearTimeout(timeout)
+      audio.pause()
     }
-  }, [trackIndex])
+  }, [trackIndex, trackSrc])
 
   const handlePlay = (index: number): void => {
     onPlay(index)
@@ -104,10 +116,8 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   const togglePlayPause = (): void => {
     if (isPlaying) {
       audioRef.current?.pause()
-      setIsPlaying(false)
     } else {
-      audioRef.current?.play()
-      setIsPlaying(true)
+      if (audioRef.current) startPlayback(audioRef.current)
     }
   }
 
@@ -136,7 +146,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   const handleAddTrack = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const files: FileList | null = event.target.files
     const allowedTypes: string[] = ['audio/mpeg', 'audio/wav', 'audio/ogg']
-    if (files) {
+    if (files?.length) {
       const file: File = files[0]
 
       if (!allowedTypes.includes(file.type)) {

@@ -58,6 +58,10 @@ describe('eclipseLightCpu', () => {
   it('тело позади точки относительно звезды — 1', () => {
     expect(eclipseLightCpu([0, 0, 0], star, R, [{ center: [100, 0, 0], radius: 50 }])).toEqual([1, 1, 1])
   })
+  it('тело за звездой не затмевает её и не добавляет подсветку умбры', () => {
+    const behind = { center: [-300000, 0, 0] as Vec3, radius: 3000, umbra: { tint: [1, 0.1, 0] as Vec3, glow: 0.2 } }
+    expect(eclipseLightCpu([0, 0, 0], star, R, [behind])).toEqual([1, 1, 1])
+  })
   it('умбра с атмосферой подсвечивается её цветом и силой', () => {
     const planet = { center: [-100, 0, 0] as Vec3, radius: 10, umbra: { tint: [1, 0.1, 0] as Vec3, glow: 0.02 } }
     const c = eclipseLightCpu([0, 0, 0], star, R, [planet])
@@ -86,6 +90,13 @@ describe('selectOccluders', () => {
     const sel = selectOccluders(earth, 3.19, 349, cands, 7)
     expect(sel.length).toBe(MAX_OCCLUDERS)
     expect(sel).not.toContain(8)
+  })
+  it('соосные тела за звездой не занимают места MAX_OCCLUDERS перед реальной луной', () => {
+    const cands = Array.from({ length: MAX_OCCLUDERS }, (_, i) => ({
+      center: [-75000 - i * 1000, 0, 0] as Vec3, radius: 3000, actorId: 100 + i
+    }))
+    cands.push({ center: [74800, 0, 0], radius: 0.87, actorId: 19 })
+    expect(selectOccluders(earth, 3.19, 349, cands, 7)).toEqual([MAX_OCCLUDERS])
   })
 })
 
