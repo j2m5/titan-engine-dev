@@ -1,0 +1,1259 @@
+{
+  "startedAt": "2026-10-21T13:19:21.605Z",
+  "finishedAt": "2026-10-21T13:29:06.003Z",
+  "outcome": "completed",
+  "failure": null,
+  "options": {
+    "rounds": 6,
+    "dwellMs": 10000,
+    "scenarioIds": [
+      1,
+      2,
+      13
+    ],
+    "assetSource": {
+      "driver": "s3",
+      "url": "https://storage.yandexcloud.net",
+      "bucket": "textures"
+    },
+    "mode": "Vite development, real configured assets, 1280x720 DPR1; actual GPU recorded in each row"
+  },
+  "totalRequests": 1481,
+  "successfulAssetResponses": 861,
+  "notes": [
+    "Warmup rows are excluded from summary.",
+    "Frame intervals include GPU and main-thread work; no hardware-independent FPS threshold.",
+    "Renderer counts are live objects, not VRAM bytes. JS heap is sampled after explicit GC.",
+    "Gaia and renderer session caches may remain between scenarios. Inspect per-scenario rows before inferring a leak."
+  ],
+  "summary": {
+    "menuCanvases": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "createdWebGLContexts": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuGeometries": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuTextures": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuPrograms": {
+      "first": 0,
+      "last": 0,
+      "min": 0,
+      "max": 0
+    },
+    "heapBytesAfterGC": {
+      "first": 58587592,
+      "last": 55491876,
+      "min": 53974028,
+      "max": 59821320
+    }
+  },
+  "byScenario": [
+    {
+      "id": 1,
+      "name": "Solar system",
+      "samples": 6,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 58587592,
+        "last": 59821320,
+        "min": 58587592,
+        "max": 59821320
+      },
+      "requests": {
+        "first": 133,
+        "last": 20,
+        "min": 20,
+        "max": 133
+      }
+    },
+    {
+      "id": 2,
+      "name": "Sagittarius A* system",
+      "samples": 6,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 53974028,
+        "last": 55041804,
+        "min": 53974028,
+        "max": 55041804
+      },
+      "requests": {
+        "first": 20,
+        "last": 20,
+        "min": 20,
+        "max": 20
+      }
+    },
+    {
+      "id": 13,
+      "name": "Alkaid system",
+      "samples": 6,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 54579020,
+        "last": 55491876,
+        "min": 54579020,
+        "max": 55491876
+      },
+      "requests": {
+        "first": 20,
+        "last": 20,
+        "min": 20,
+        "max": 20
+      }
+    }
+  ],
+  "rows": [
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 35705.800000071526
+      },
+      "frames": {
+        "count": 549,
+        "p50": 16.69999999999709,
+        "p95": 33.400000000001455,
+        "p99": 33.5,
+        "max": 33.599999999998545,
+        "elapsedMs": 10054.099999904633
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 79,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 25226,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 25694,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 56986356,
+      "requests": 170
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 9820.199999928474
+      },
+      "frames": {
+        "count": 266,
+        "p50": 33.400000000001455,
+        "p95": 50.19999999999709,
+        "p99": 83.40000000000146,
+        "max": 83.40000000000146,
+        "elapsedMs": 10045.5
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 37990,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 38030,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 52527148,
+      "requests": 138
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 72292.39999997616
+      },
+      "frames": {
+        "count": 36,
+        "p50": 283.69999999998254,
+        "p95": 583.8999999999942,
+        "p99": 584,
+        "max": 584,
+        "elapsedMs": 11084.600000023842
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 42848,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 42942,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 53900896,
+      "requests": 187
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 28749
+      },
+      "frames": {
+        "count": 494,
+        "p50": 16.70000000001164,
+        "p95": 33.40000000002328,
+        "p99": 33.60000000000582,
+        "max": 50,
+        "elapsedMs": 10040.200000047684
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 66116,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 66404,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 58587592,
+      "requests": 133
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 7949.599999904633
+      },
+      "frames": {
+        "count": 227,
+        "p50": 49.90000000002328,
+        "p95": 50.20000000001164,
+        "p99": 50.59999999997672,
+        "max": 66.70000000001164,
+        "elapsedMs": 10070.800000071526
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 77060,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 77100,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 53974028,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 7531.200000047684
+      },
+      "frames": {
+        "count": 35,
+        "p50": 283.5999999999767,
+        "p95": 601,
+        "p99": 683.7000000000116,
+        "max": 683.7000000000116,
+        "elapsedMs": 10803.300000071526
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 81871,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 81965,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54579020,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 21963.700000047684
+      },
+      "frames": {
+        "count": 545,
+        "p50": 16.70000000001164,
+        "p95": 33.30000000001746,
+        "p99": 50,
+        "max": 66.69999999995343,
+        "elapsedMs": 10044.600000023842
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 106975,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 107443,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 58866616,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 4159.199999928474
+      },
+      "frames": {
+        "count": 228,
+        "p50": 50,
+        "p95": 50.100000000034925,
+        "p99": 50.40000000002328,
+        "max": 83.39999999996508,
+        "elapsedMs": 10081.100000023842
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 118179,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 118219,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54110784,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 6550.300000071526
+      },
+      "frames": {
+        "count": 35,
+        "p50": 300.29999999998836,
+        "p95": 383.70000000001164,
+        "p99": 584.3999999999651,
+        "max": 584.3999999999651,
+        "elapsedMs": 10819.600000023842
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 122990,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 122990,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54920840,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 22726.399999976158
+      },
+      "frames": {
+        "count": 544,
+        "p50": 16.70000000001164,
+        "p95": 33.399999999965075,
+        "p99": 50,
+        "max": 66.69999999995343,
+        "elapsedMs": 10044.600000023842
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 147964,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 148180,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59459236,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 4059.100000023842
+      },
+      "frames": {
+        "count": 216,
+        "p50": 50,
+        "p95": 50.20000000001164,
+        "p99": 66.79999999998836,
+        "max": 83.5,
+        "elapsedMs": 10059.300000071526
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 158436,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 158476,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54673868,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 7800.299999952316
+      },
+      "frames": {
+        "count": 35,
+        "p50": 283.79999999998836,
+        "p95": 367.19999999995343,
+        "p99": 600.5,
+        "max": 600.5,
+        "elapsedMs": 10810.799999952316
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 163247,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 163247,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55149600,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 4,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 21862.399999976158
+      },
+      "frames": {
+        "count": 540,
+        "p50": 16.70000000001164,
+        "p95": 33.399999999965075,
+        "p99": 33.5,
+        "max": 50,
+        "elapsedMs": 10028.699999928474
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 188149,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 188617,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59603060,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 4,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 4230.100000023842
+      },
+      "frames": {
+        "count": 229,
+        "p50": 50,
+        "p95": 50.199999999953434,
+        "p99": 50.5,
+        "max": 83.40000000002328,
+        "elapsedMs": 10068.299999952316
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 199393,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 199433,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54790312,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 4,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 7782.600000023842
+      },
+      "frames": {
+        "count": 34,
+        "p50": 283.69999999995343,
+        "p95": 600.9000000000233,
+        "p99": 1084,
+        "max": 1084,
+        "elapsedMs": 10784.800000071526
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 204110,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 204251,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55285380,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 5,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 25880.399999976158
+      },
+      "frames": {
+        "count": 504,
+        "p50": 16.70000000001164,
+        "p95": 33.40000000002328,
+        "p99": 50,
+        "max": 66.79999999998836,
+        "elapsedMs": 10037.899999976158
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 227857,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 228253,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59685872,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 5,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 5202.899999976158
+      },
+      "frames": {
+        "count": 228,
+        "p50": 50,
+        "p95": 50.199999999953434,
+        "p99": 50.29999999998836,
+        "max": 100.09999999997672,
+        "elapsedMs": 10088.800000071526
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 238989,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 239029,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54889192,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 5,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 9892.599999904633
+      },
+      "frames": {
+        "count": 35,
+        "p50": 300.19999999995343,
+        "p95": 601,
+        "p99": 784.2000000000116,
+        "max": 784.2000000000116,
+        "elapsedMs": 10930.700000047684
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 243800,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 243894,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55350452,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 6,
+      "scenario": {
+        "id": 1,
+        "name": "Solar system",
+        "startupMs": 23115
+      },
+      "frames": {
+        "count": 539,
+        "p50": 16.699999999953434,
+        "p95": 33.40000000002328,
+        "p99": 50,
+        "max": 50.199999999953434,
+        "elapsedMs": 10036.100000023842
+      },
+      "active": {
+        "geometries": 33,
+        "textures": 80,
+        "programs": 35,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 268688,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 269012,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 59821320,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 6,
+      "scenario": {
+        "id": 2,
+        "name": "Sagittarius A* system",
+        "startupMs": 4652.700000047684
+      },
+      "frames": {
+        "count": 216,
+        "p50": 50,
+        "p95": 66.69999999995343,
+        "p99": 102.59999999997672,
+        "max": 133.40000000002328,
+        "elapsedMs": 10055.200000047684
+      },
+      "active": {
+        "geometries": 12,
+        "textures": 62,
+        "programs": 36,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 279308,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 279348,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55041804,
+      "requests": 20
+    },
+    {
+      "phase": "measured",
+      "round": 6,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 7676.899999976158
+      },
+      "frames": {
+        "count": 35,
+        "p50": 283.5999999999767,
+        "p95": 634,
+        "p99": 684.0999999999767,
+        "max": 684.0999999999767,
+        "elapsedMs": 10778.700000047684
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 284119,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 1,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 284166,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55491876,
+      "requests": 20
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "THREE.WebGLProgram: Program Info Log: (569,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (350,1): warning X4000: use of potentially uninitialized variable (f_sampleBackground)",
+    "[LeakDetector] прирост с прошлой разборки: геометрий +0, текстур +1",
+    "THREE.WebGLProgram: Program Info Log: (570,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (579,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (587,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)"
+  ],
+  "assetFailures": []
+}

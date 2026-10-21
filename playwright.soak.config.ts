@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
-// This opt-in run needs the owner's real resource archive. CI uses playwright.config.ts instead.
+// This opt-in run uses the application's configured asset source (local or S3).
+// CI uses playwright.config.ts with controlled resources instead.
 export default defineConfig({
   testDir: './tests/browser',
   testMatch: '**/*.soak.ts',
@@ -29,9 +30,6 @@ export default defineConfig({
     env: {
       VITE_SHOW_STATS_PANEL: 'false',
       VITE_APP_NAME: 'Titan Engine (scenario benchmark)',
-      VITE_FS_DRIVER: 'local',
-      VITE_FILE_BUCKET: 'textures',
-      VITE_S3_URL: '',
       VITE_SKY_SOURCE: 'gaia'
     }
   }

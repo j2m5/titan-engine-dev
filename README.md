@@ -143,11 +143,24 @@ It queues three synthetic 1024² near-shadow tiles, releases the scenario, and c
 
 ### Sustained scenario measurements
 
-With the real resource archive mapped as described above, run:
+The benchmark uses the application's asset settings from Vite `.env` files and process environment overrides. For local mode, map the real resource archive as described above, then run:
 
 ```sh
 npm run benchmark:browser
 ```
+
+Cloud assets do not require a local archive. For the public Yandex Cloud bucket, run:
+
+```powershell
+$env:TITAN_BROWSER_CHANNEL = 'chrome'
+$env:VITE_FS_DRIVER = 's3'
+$env:VITE_S3_URL = 'https://storage.yandexcloud.net'
+$env:VITE_FILE_BUCKET = 'textures'
+npm run benchmark:browser
+Remove-Item Env:TITAN_BROWSER_CHANNEL, Env:VITE_FS_DRIVER, Env:VITE_S3_URL, Env:VITE_FILE_BUCKET
+```
+
+The report records the actual browser-side storage configuration and successful asset responses. Cloud runs include real network/cache behavior; they are not directly comparable with local-archive startup timings.
 
 This starts a separate local server on port 8093 and uses the browser's native GPU at 1280×720, DPR 1. It warms Solar system, Sagittarius A* and Alkaid once, then repeats six rounds with a ten-second camera orbit per scenario (18 measured scenario runs). This is an opt-in development-build measurement; it is not part of deployment CI. Missing assets or browser errors fail it instead of recording placeholder scenes as successful measurements.
 

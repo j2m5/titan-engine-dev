@@ -25,11 +25,17 @@ function positiveInteger(name: string, fallback: number) {
 }
 
 test('repeated real scenarios, moving camera and teardown measurements', async ({ page }, testInfo) => {
-  const options = { rounds: 0, dwellMs: 0, scenarioIds: [] as number[], mode: 'Vite development, real local assets, 1280x720 DPR1; actual GPU recorded in each row' }
+  const options = {
+    rounds: 0, dwellMs: 0, scenarioIds: [] as number[],
+    assetSource: null as ReturnType<Probe['assetSource']> | null,
+    mode: 'Vite development, real configured assets, 1280x720 DPR1; actual GPU recorded in each row'
+  }
   const errors: string[] = []
   const warnings: string[] = []
   const assetFailures: string[] = []
   let totalRequests = 0
+  let assetPrefix: string | undefined
+  let successfulAssetResponses = 0
   page.on('request', () => { totalRequests++ })
   page.on('pageerror', error => errors.push(error.stack ?? error.message))
   page.on('console', message => {
@@ -38,6 +44,7 @@ test('repeated real scenarios, moving camera and teardown measurements', async (
   })
   page.on('response', response => {
     if (response.status() >= 400) assetFailures.push(`${response.status()} ${response.url()}`)
+    if (assetPrefix && response.url().startsWith(assetPrefix) && response.ok()) successfulAssetResponses++
   })
   page.on('requestfailed', request => {
     if (!/ERR_ABORTED/.test(request.failure()?.errorText ?? '')) {
@@ -57,7 +64,6 @@ test('repeated real scenarios, moving camera and teardown measurements', async (
     if (!scenarioIds.length || scenarioIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
       throw new Error('TITAN_SOAK_SCENARIOS must contain comma-separated positive scenario IDs')
     }
-    expect(existsSync(resolve('public/images/textures')), 'Real owner-provided textures are required; see README').toBe(true)
     cdp = await page.context().newCDPSession(page)
     await cdp.send('Performance.enable')
     await page.addInitScript(() => {
@@ -76,6 +82,18 @@ test('repeated real scenarios, moving camera and teardown measurements', async (
     })
     await page.goto('/')
     await expect(page.getByRole('button', { name: /^Run / }).first()).toBeVisible()
+    options.assetSource = await page.evaluate(async path => {
+      const probe = await import(/* @vite-ignore */ path) as Probe
+      return probe.assetSource()
+    }, probePath)
+    const source = options.assetSource
+    expect(['local', 's3'], 'A configured asset driver is required').toContain(source.driver)
+    assetPrefix = new URL(`${source.url}/${source.bucket ?? ''}/`, page.url()).href
+    console.log(`Asset source: ${source.driver}, ${assetPrefix}`)
+    if (source.driver === 'local') {
+      const archive = resolve('public', source.url.replace(/^\/+/, ''), source.bucket ?? '')
+      expect(existsSync(archive), 'The configured local asset archive is required; use VITE_FS_DRIVER=s3 for cloud assets').toBe(true)
+    }
     for (let round = 0; round <= rounds; round++) {
       for (const id of scenarioIds) {
         const requestsBefore = totalRequests
@@ -127,7 +145,7 @@ test('repeated real scenarios, moving camera and teardown measurements', async (
     const measured = rows.filter(row => row.phase === 'measured')
     const trend = (values: number[]) => ({ first: values[0] ?? null, last: values.at(-1) ?? null, min: values.length ? Math.min(...values) : null, max: values.length ? Math.max(...values) : null })
     const report = {
-      startedAt, finishedAt: new Date().toISOString(), outcome, failure, options, totalRequests,
+      startedAt, finishedAt: new Date().toISOString(), outcome, failure, options, totalRequests, successfulAssetResponses,
       notes: ['Warmup rows are excluded from summary.', 'Frame intervals include GPU and main-thread work; no hardware-independent FPS threshold.', 'Renderer counts are live objects, not VRAM bytes. JS heap is sampled after explicit GC.', 'Gaia and renderer session caches may remain between scenarios. Inspect per-scenario rows before inferring a leak.'],
       summary: {
         menuCanvases: trend(measured.map(row => row.menu.canvases)),

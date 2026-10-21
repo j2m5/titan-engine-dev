@@ -1,10 +1,16 @@
 import { Scenarios } from '@/config/scenarios'
+import { config } from '@/core/framework/config'
 import { Tokens } from '@/core/providers/tokens'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { getInitializedSimulationRuntime } from '@/ui/runtime/simulationRuntime'
 import type { WebGLRenderer } from 'three'
 
 let firstRenderer: WebGLRenderer | null = null
+
+export function assetSource() {
+  const driver = config('driver')
+  return { driver, ...(driver === 's3' ? config('disks.s3') : config('disks.local')) }
+}
 
 function runtime() {
   const value = getInitializedSimulationRuntime()
