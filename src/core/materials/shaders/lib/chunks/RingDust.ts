@@ -221,19 +221,22 @@ const ringDustClosedFormGlsl = `
                    + ringDustMaskAtT(o, d, t0 + L * 0.375)
                    + ringDustMaskAtT(o, d, t0 + L * 0.625)
                    + ringDustMaskAtT(o, d, t0 + L * 0.875));
+    } else {
+      // Keep both texture-sampling returns in explicit branches. ANGLE/D3D11
+      // reports X4000 on the function return with an early return + fallthrough.
+      float ya = abs(o.y + d.y * t0);
+      float yb = abs(o.y + d.y * t1);
+      // Масса концентрируется у конца с меньшим |y|
+      float tNear = ya <= yb ? t0 : t1;
+      float dirSign = ya <= yb ? 1.0 : -1.0;
+      float safeH = max(uDustScaleHeight, 1e-6);
+      float lambda = safeH / absDy;
+      float A = max(1.0 - exp(-L / lambda), 1e-6);
+      vec4 dist = -lambda * log(vec4(1.0) - vec4(0.125, 0.375, 0.625, 0.875) * A);
+      vec4 tq = vec4(tNear) + dirSign * min(dist, vec4(L));
+      return 0.25 * (ringDustMaskAtT(o, d, tq.x) + ringDustMaskAtT(o, d, tq.y)
+                   + ringDustMaskAtT(o, d, tq.z) + ringDustMaskAtT(o, d, tq.w));
     }
-    float ya = abs(o.y + d.y * t0);
-    float yb = abs(o.y + d.y * t1);
-    // Масса концентрируется у конца с меньшим |y|
-    float tNear = ya <= yb ? t0 : t1;
-    float dirSign = ya <= yb ? 1.0 : -1.0;
-    float safeH = max(uDustScaleHeight, 1e-6);
-    float lambda = safeH / absDy;
-    float A = max(1.0 - exp(-L / lambda), 1e-6);
-    vec4 dist = -lambda * log(vec4(1.0) - vec4(0.125, 0.375, 0.625, 0.875) * A);
-    vec4 tq = vec4(tNear) + dirSign * min(dist, vec4(L));
-    return 0.25 * (ringDustMaskAtT(o, d, tq.x) + ringDustMaskAtT(o, d, tq.y)
-                 + ringDustMaskAtT(o, d, tq.z) + ringDustMaskAtT(o, d, tq.w));
   }
 
   // Вклад одного радиального интервала: разрез по пересечению средней плоскости,

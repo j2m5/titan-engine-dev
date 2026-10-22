@@ -1,6 +1,7 @@
 import { test, runProbe } from './probe'
 
 const probes: { title: string; path: string; name: string; args?: unknown[] }[] = [
+  { title: 'ring dust analytic program', path: 'ringDust/analyticProgram', name: 'checkRingDustAnalyticProgram' },
   { title: 'asteroid near visibility', path: 'asteroidBelt/nearVisibility', name: 'checkNearVisibility' },
   { title: 'water ocean surface', path: 'water/oceanView', name: 'checkOceanView' },
   { title: 'nebula seed', path: 'nebula/rendering', name: 'checkNebulaSeed' },
