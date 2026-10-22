@@ -2325,7 +2325,13 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
     vec3 dir = pos / max(R, 1e-6);
 
     vec3 domain = dir * uShapeFreq + vec3(seed * 17.13, seed * 5.71, seed * 9.37);
-    vec4 nv = fbmGrad(domain);
+    // LOD detail weight can make amp exactly zero. Keep the position/normal
+    // reconstruction below, but skip both noise octaves that contribute nothing.
+    // No epsilon: tiny and negative nonzero amplitudes retain their deformation.
+    vec4 nv = vec4(0.0);
+    if (amp != 0.0) {
+      nv = fbmGrad(domain);
+    }
 
     displacedPos = dir * (R * (1.0 + amp * nv.x));
 
