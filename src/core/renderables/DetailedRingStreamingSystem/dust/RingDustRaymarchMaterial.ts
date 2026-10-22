@@ -4,6 +4,7 @@ import {
   BackSide,
   Color,
   CustomBlending,
+  DataTexture,
   OneFactor,
   OneMinusSrcAlphaFactor,
   ShaderChunk,
@@ -13,7 +14,7 @@ import {
 } from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
-import { noiseFunctions } from '@/core/materials/shaders/lib/chunks/Noise'
+import { createDustClumpGradientTexture, dustClumpNoiseFunctions } from './DustClumpNoise'
 import type { Actor } from '@/core/models/Actor'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
@@ -112,6 +113,8 @@ interface RingDustRaymarchOptions {
 }
 
 class RingDustRaymarchMaterial extends ShaderMaterial {
+  private clumpGradients: DataTexture | undefined
+
   /**
    * `model` — актор кольца (тот же вход, что у камней; резолвер сам
    * поднимается к корню дерева); `undefined` — тинт выключен.
@@ -126,7 +129,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
       ? `
         uniform float uDustClumpStrength;
         uniform float uDustClumpScale;
-        ${noiseFunctions}`
+        ${dustClumpNoiseFunctions}`
       : ''
     const clumpContribChunk = options.clumps
       ? `
@@ -142,7 +145,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
                 // в десятки тысяч units аргумент шума порядка сотни. Масштабы
                 // ниже ~100 units начнут алиасить
                 vec3 clumpP = p / uDustClumpScale;
-                float clumpNoise = snoise(clumpP) + 0.5 * snoise(clumpP * 2.0);
+                float clumpNoise = dustClumpNoise(clumpP) + 0.5 * dustClumpNoise(clumpP * 2.0);
                 float n = clumpNoise * 0.5 + 0.5;
                 contrib *= mix(1.0 - clumpGain, 1.0 + clumpGain, n);
               }
@@ -245,6 +248,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         ...(options.arcs && { DUST_ARCS: '1' })
       },
       uniforms: {
+        ...(options.clumps && { uDustClumpGradients: { value: createDustClumpGradientTexture() } }),
         uDustColor: { value: new Color(0x9b968c) },
         // Цвет света звезды (lightTint) — per-instance объект, не общий модульный Uniform
         uLightColor: { value: new Color(1, 1, 1).copy(lightTint.color) },
@@ -458,6 +462,23 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           }
         : { blending: AdditiveBlending })
     })
+    this.clumpGradients = this.uniforms.uDustClumpGradients?.value
+  }
+
+  public override copy(source: this): this {
+    if (source === this) return this
+    this.clumpGradients?.dispose()
+    super.copy(source)
+    // ShaderMaterial.copy clones texture uniforms; own that clone, not source's.
+    this.clumpGradients = this.uniforms.uDustClumpGradients?.value
+    return this
+  }
+
+  public override dispose(): void {
+    this.clumpGradients?.dispose()
+    // Like ShaderMaterial itself, the texture can be uploaded again after
+    // disposal. Retain ownership so a subsequent dispose still releases it.
+    super.dispose()
   }
 }
 

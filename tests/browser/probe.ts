@@ -33,7 +33,10 @@ export const test = base.extend<{ probePage: Page }>({
       await runTest(page)
     } finally {
       const expectedRestorationWarning = (entry: ConsoleEntry): boolean =>
-        testInfo.title === 'bitmap context restoration' && entry.type === 'warning' &&
+        // Three retains disposal listeners for pre-loss WebGL objects. Both
+        // restoration probes verify pixels/resources, then classify only this
+        // known cleanup warning (never shader, upload, or allocation failures).
+        ['bitmap context restoration', 'dust clump lookup'].includes(testInfo.title) && entry.type === 'warning' &&
         /^WebGL: INVALID_OPERATION: (?:delete|deleteVertexArray): object does not belong to this context$/.test(entry.text)
       const warningClassifications = consoleEntries.filter(entry => entry.type === 'warning').map(entry => ({
         text: entry.text,

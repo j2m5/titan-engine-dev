@@ -1,0 +1,3517 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-22T12:06:42.209Z",
+  "baselineCommit": "012c56a2",
+  "scope": "Reduce repeated simplex-gradient construction in clumpy belt dust; preserve the spatial noise, raymarch integration, depth clipping and optics.",
+  "implementation": {
+    "texture": "289x289 RGBA32F, nearest, repeat S/T, no mipmaps. Texel(x,y)=gradient(permute(permute(y)+x)). CPU float-rounded gradients; GPU retains z permutation and unchanged simplex kernel.",
+    "ownership": "One texture per clumpy RingDustRaymarchMaterial; none for unclumped rings. Copy adopts the uniform clone, dispose releases the uploaded texture and retains ownership for subsequent reuse.",
+    "memory": "1,336,336 bytes of texel data on GPU plus a retained CPU array of the same size per material. No 3D field approximation or GPU baking.",
+    "preservation": "Both octaves, clump strength/scale, march steps, jitter, depth clipping and other lighting/opacity calculations unchanged. Shared Noise.ts and CPU terrain noise unchanged."
+  },
+  "method": {
+    "gpu": "AMD Radeon Graphics / ANGLE D3D11, native Chrome 155, 1280x720 DPR 1",
+    "assets": "Real Alkaid and W26 resources from Yandex S3, Vite dev server",
+    "frozenInputs": "Stop engine; capture actual dust uniforms, camera and world transform; preserve profile textures; copy scene depth to a private Float render target.",
+    "reference": "Original RingDustRaymarchMaterial.ts extracted from commit 012c56a2. Enable the same clump/phase/arcs/light/extinction options and use the actual volume defines and uniforms for both programs.",
+    "rendering": "Actual dust proxy, NoBlending RGBA32F output; six warmups and 32 native GPU elapsed queries per variant. Baseline and production repeated in the same capture.",
+    "image": "All raw HDR RGBA components compared before blending/postprocessing, relative L1=sum(abs(error))/sum(abs(reference)); alpha coverage also checked.",
+    "limits": "Two frozen views, one native GPU. These are isolated dust draw timings, not total frame times or production build performance. Screenshots inspected as a sanity check, not proof of image identity."
+  },
+  "conclusions": {
+    "comparisons": [
+      {
+        "actorId": 135,
+        "scenario": "Alkaid system",
+        "variants": {
+          "baseline": {
+            "p50Ms": 20.74548,
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 851339
+            }
+          },
+          "productionLookup": {
+            "p50Ms": 14.47972,
+            "image": {
+              "maxError": 0.0000019073486328125,
+              "relativeError": 2.5773016879845727e-8,
+              "different": 557228,
+              "alphaPixels": 851339
+            }
+          },
+          "baselineRepeat": {
+            "p50Ms": 20.74488,
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 851339
+            }
+          },
+          "productionRepeat": {
+            "p50Ms": 14.48032,
+            "image": {
+              "maxError": 0.0000019073486328125,
+              "relativeError": 2.5773016879845727e-8,
+              "different": 557228,
+              "alphaPixels": 851339
+            }
+          }
+        },
+        "creation": {
+          "count": 12,
+          "p50": 2.4000000953674316,
+          "p95": 4.199999928474426,
+          "max": 4.199999928474426
+        },
+        "lookupBytes": 1336336,
+        "dustTimeReduction": 0.30203012897267256
+      },
+      {
+        "actorId": 127,
+        "scenario": "Westerlund 1-26 system",
+        "variants": {
+          "baseline": {
+            "p50Ms": 20.77428,
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 849779
+            }
+          },
+          "productionLookup": {
+            "p50Ms": 14.48396,
+            "image": {
+              "maxError": 0.0000011920928955078125,
+              "relativeError": 2.4478417287604938e-8,
+              "different": 486432,
+              "alphaPixels": 849779
+            }
+          },
+          "baselineRepeat": {
+            "p50Ms": 20.77624,
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 849779
+            }
+          },
+          "productionRepeat": {
+            "p50Ms": 14.48316,
+            "image": {
+              "maxError": 0.0000011920928955078125,
+              "relativeError": 2.4478417287604938e-8,
+              "different": 486432,
+              "alphaPixels": 849779
+            }
+          }
+        },
+        "creation": {
+          "count": 12,
+          "p50": 2.3000000715255737,
+          "p95": 3.200000047683716,
+          "max": 3.200000047683716
+        },
+        "lookupBytes": 1336336,
+        "dustTimeReduction": 0.30279364675935827
+      }
+    ],
+    "choice": "Compact repeat lookup selected. Padded 290x578 table was about 0.4ms faster but used twice the memory. Explicit GLSL wrapping of compact indices was about 0.9ms slower. All layout candidates had the same small float-rounding HDR differences in the measured views.",
+    "remaining": "Audit item 16 stays open: expensive visible geometry/motion and remaining volume costs need further profiling."
+  },
+  "cloudComparison": {
+    "startedAt": "2026-10-22T11:51:55.588Z",
+    "rows": [
+      {
+        "selected": {
+          "id": 13,
+          "name": "Alkaid system",
+          "startupMs": 30512.200000047684
+        },
+        "view": {
+          "actorId": 135,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "name": "Frostwake Belt"
+        },
+        "actorId": 135,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 56,
+          "textures": 86,
+          "programs": 46,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 5841,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 25165824,
+          "belts": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L4:139/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L5:140/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132",
+              "info": {
+                "totalSectors": 8051,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/AsteroidRingSystem:135",
+              "info": {
+                "totalSectors": 515323743685709,
+                "activeSectors": 410,
+                "sectorsByLod": {
+                  "l0": 20,
+                  "near": 56,
+                  "l1": 334
+                },
+                "instances": {
+                  "l0": 2160,
+                  "near": 6048,
+                  "l1": 36048,
+                  "total": 44256
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 2160,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6048,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 36048,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "orientation": [
+            1.445911537725195e-17,
+            0.984807753012208,
+            8.200171816676385e-17,
+            -0.1736481776669304
+          ],
+          "volumes": [
+            {
+              "id": 80,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132/RingDustVolume",
+              "visible": true,
+              "position": [
+                640459.3553171739,
+                -28147.928579971533,
+                1216755.4327917588
+              ],
+              "scale": [
+                1,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 84,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                1374130.7628708382,
+                -19360.711969141772,
+                53517.14014173066
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 92,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                -733671.4075536643,
+                -8787.216610829768,
+                1163238.2926500284
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 126,
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            },
+            {
+              "id": 131,
+              "label": "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                14245543.098148145,
+                14245543.098148145,
+                14245543.098148145
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            }
+          ]
+        },
+        "uniforms": {
+          "uDustClumpGradients": {
+            "texture": true,
+            "width": 289,
+            "height": 289,
+            "minFilter": 1003,
+            "generateMipmaps": false
+          },
+          "uDustColor": [
+            0.2746773120495699,
+            0.3813260114221238,
+            0.45641102317066595
+          ],
+          "uLightColor": [
+            0.5635589645320949,
+            0.6842152894177911,
+            1
+          ],
+          "uDustDensity": 0.00004005256708287535,
+          "uDustScaleHeight": 749.0156607921051,
+          "uDustRingInner": 1874413.5655458085,
+          "uDustRingOuter": 2549202.4491422996,
+          "uDustCamRingPos": [
+            2211808.007344054,
+            -7.275957614183426e-12,
+            -1.1641532182693481e-10
+          ],
+          "uDustLightDirRing": [
+            -1,
+            3.289597284223787e-18,
+            5.263355654758059e-17
+          ],
+          "uDustAnglePower": 0.000001,
+          "uDustNearFade": 1124.648139327485,
+          "uDustMaxSteps": 16,
+          "uDustPlanetRadius": 0,
+          "uDustRadialMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustRadialMapScale": 1.4702841537848605,
+          "uDustAngularMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustAngularMapScale": 1.361981868902452,
+          "uRingBandMap": null,
+          "uRingBandEnabled": 0,
+          "uBandMeanColor": [
+            1,
+            1,
+            1
+          ],
+          "uBandTintStrength": 1,
+          "uLayerHalfThickness": 1,
+          "uLayerShadowStrength": 0.25,
+          "uDustDebugMode": 0,
+          "uDustClumpStrength": 0.7,
+          "uDustClumpScale": 26241.78991764132,
+          "uDustPhaseG": 0.55,
+          "uDustPhaseStrength": 1,
+          "uDustColorForward": [
+            0.4793201830913402,
+            0.6583748172725346,
+            0.7912979403281551
+          ],
+          "uDustExtinction": 1,
+          "uSceneDepth": {
+            "texture": true,
+            "width": 1280,
+            "height": 720,
+            "minFilter": 1003,
+            "generateMipmaps": false
+          },
+          "uResolution": [
+            1280,
+            720
+          ],
+          "uLogFarFactor": 28.481864063402057,
+          "uSceneDepthEnabled": 1
+        },
+        "defines": {
+          "USE_LIGHT_TINT": "1",
+          "DUST_LIGHT_AT_ORIGIN": "1",
+          "DUST_CLUMPS": "1",
+          "DUST_PHASE_HG": "1",
+          "DUST_ARCS": "1"
+        },
+        "rows": [
+          {
+            "name": "baseline",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 851339
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.74548,
+              "p95": 20.791,
+              "max": 20.79192
+            },
+            "samples": [
+              20.79192,
+              20.7438,
+              20.74412,
+              20.74492,
+              20.74432,
+              20.74752,
+              20.74624,
+              20.74552,
+              20.74508,
+              20.7444,
+              20.74536,
+              20.78624,
+              20.74576,
+              20.74596,
+              20.746,
+              20.74564,
+              20.74588,
+              20.74472,
+              20.74456,
+              20.744,
+              20.74628,
+              20.74548,
+              20.791,
+              20.77536,
+              20.74436,
+              20.74508,
+              20.7442,
+              20.74596,
+              20.744,
+              20.74612,
+              20.74588,
+              20.7452
+            ]
+          },
+          {
+            "name": "productionLookup",
+            "image": {
+              "maxError": 0.0000019073486328125,
+              "relativeError": 2.5773016879845727e-8,
+              "different": 557228,
+              "alphaPixels": 851339
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.47972,
+              "p95": 14.54888,
+              "max": 14.55032
+            },
+            "samples": [
+              14.49024,
+              14.55032,
+              14.48112,
+              14.48896,
+              14.47416,
+              14.48204,
+              14.48372,
+              14.47864,
+              14.47852,
+              14.47892,
+              14.54888,
+              14.47728,
+              14.48252,
+              14.48,
+              14.47208,
+              14.48324,
+              14.47392,
+              14.47428,
+              14.48024,
+              14.4786,
+              14.48868,
+              14.47672,
+              14.47484,
+              14.4844,
+              14.47788,
+              14.48244,
+              14.47832,
+              14.4752,
+              14.47972,
+              14.47128,
+              14.48208,
+              14.53168
+            ]
+          },
+          {
+            "name": "baselineRepeat",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 851339
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.74488,
+              "p95": 20.79224,
+              "max": 20.80388
+            },
+            "samples": [
+              20.74652,
+              20.80388,
+              20.74548,
+              20.74464,
+              20.74508,
+              20.74548,
+              20.74384,
+              20.7462,
+              20.7452,
+              20.78816,
+              20.74408,
+              20.74424,
+              20.74532,
+              20.74464,
+              20.74616,
+              20.74324,
+              20.7438,
+              20.75028,
+              20.74488,
+              20.74452,
+              20.74428,
+              20.7456,
+              20.74568,
+              20.7426,
+              20.7434,
+              20.74468,
+              20.7436,
+              20.74604,
+              20.75052,
+              20.744,
+              20.79224,
+              20.74468
+            ]
+          },
+          {
+            "name": "productionRepeat",
+            "image": {
+              "maxError": 0.0000019073486328125,
+              "relativeError": 2.5773016879845727e-8,
+              "different": 557228,
+              "alphaPixels": 851339
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.48032,
+              "p95": 14.536,
+              "max": 14.56048
+            },
+            "samples": [
+              14.48368,
+              14.536,
+              14.48408,
+              14.474,
+              14.49492,
+              14.53096,
+              14.4886,
+              14.481,
+              14.47956,
+              14.48884,
+              14.47836,
+              14.476,
+              14.48032,
+              14.47508,
+              14.49816,
+              14.52228,
+              14.47848,
+              14.47356,
+              14.48016,
+              14.47784,
+              14.47728,
+              14.479,
+              14.48052,
+              14.47424,
+              14.47592,
+              14.4776,
+              14.56048,
+              14.48172,
+              14.48336,
+              14.48116,
+              14.48048,
+              14.48028
+            ]
+          }
+        ],
+        "creationMs": [
+          3.600000023841858,
+          4.199999928474426,
+          2.899999976158142,
+          2.899999976158142,
+          2.5,
+          2.700000047683716,
+          2.399999976158142,
+          2.200000047683716,
+          2.1999999284744263,
+          2.200000047683716,
+          2.299999952316284,
+          2.4000000953674316
+        ],
+        "creation": {
+          "count": 12,
+          "p50": 2.4000000953674316,
+          "p95": 4.199999928474426,
+          "max": 4.199999928474426
+        },
+        "lookupBytes": 1336336,
+        "diagnostics": {
+          "covered": 921600,
+          "discarded": 70261,
+          "averageSteps": 15.935361328125,
+          "clumpsOff": 0,
+          "minAlpha": 0,
+          "maxAlpha": 0.9998525381088257,
+          "alphaBinEdges": [
+            0.0001,
+            0.001,
+            0.003,
+            0.01,
+            0.03,
+            0.1,
+            0.3,
+            null
+          ],
+          "alphaBins": [
+            70261,
+            0,
+            0,
+            0,
+            13862,
+            499504,
+            220790,
+            117183
+          ]
+        }
+      },
+      {
+        "selected": {
+          "id": 12,
+          "name": "Westerlund 1-26 system",
+          "startupMs": 15893.700000047684
+        },
+        "view": {
+          "actorId": 127,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "name": "Ashfall Belt"
+        },
+        "actorId": 127,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 55,
+          "textures": 79,
+          "programs": 48,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 10481,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 8388608,
+          "belts": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125",
+              "info": {
+                "totalSectors": 13658,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/AsteroidRingSystem:127",
+              "info": {
+                "totalSectors": 1552764576077464,
+                "activeSectors": 406,
+                "sectorsByLod": {
+                  "l0": 24,
+                  "near": 50,
+                  "l1": 332
+                },
+                "instances": {
+                  "l0": 3060,
+                  "near": 6375,
+                  "l1": 42326,
+                  "total": 51761
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 3060,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6375,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 42326,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "orientation": [
+            -1.3585610992439083e-18,
+            0.9914448613738105,
+            1.031929605697032e-17,
+            0.13052619222005157
+          ],
+          "volumes": [
+            {
+              "id": 295,
+              "label": "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                32239913.327387907,
+                32239913.327387907,
+                32239913.327387907
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            },
+            {
+              "id": 388,
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125/RingDustVolume",
+              "visible": true,
+              "position": [
+                -4135011.6084156316,
+                57390.20175230016,
+                3684154.4153770087
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999998
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 406,
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            }
+          ]
+        },
+        "uniforms": {
+          "uDustClumpGradients": {
+            "texture": true,
+            "width": 289,
+            "height": 289,
+            "minFilter": 1003,
+            "generateMipmaps": false
+          },
+          "uDustColor": [
+            0.3277780980458375,
+            0.3049873140591091,
+            0.26225065751888765
+          ],
+          "uLightColor": [
+            1,
+            0.6520829192241906,
+            0.4493324180292856
+          ],
+          "uDustDensity": 0.00002403154024972521,
+          "uDustScaleHeight": 1248.3594346535085,
+          "uDustRingInner": 3149014.7901169583,
+          "uDustRingOuter": 4348639.472066276,
+          "uDustCamRingPos": [
+            3748827.131091618,
+            0,
+            0
+          ],
+          "uDustLightDirRing": [
+            -1,
+            0,
+            0
+          ],
+          "uDustAnglePower": 0.000001,
+          "uDustNearFade": 1874.4135655458085,
+          "uDustMaxSteps": 16,
+          "uDustPlanetRadius": 0,
+          "uDustRadialMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustRadialMapScale": 1.6541413509050165,
+          "uDustAngularMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustAngularMapScale": 1.289696812104208,
+          "uRingBandMap": null,
+          "uRingBandEnabled": 0,
+          "uBandMeanColor": [
+            1,
+            1,
+            1
+          ],
+          "uBandTintStrength": 1,
+          "uLayerHalfThickness": 1,
+          "uLayerShadowStrength": 0.25,
+          "uDustDebugMode": 0,
+          "uDustClumpStrength": 0.7,
+          "uDustClumpScale": 44985.925573099405,
+          "uDustPhaseG": 0.55,
+          "uDustPhaseStrength": 1,
+          "uDustColorForward": [
+            0.5775804404214573,
+            0.3967552307153359,
+            0.2541520943200296
+          ],
+          "uDustExtinction": 1,
+          "uSceneDepth": {
+            "texture": true,
+            "width": 1280,
+            "height": 720,
+            "minFilter": 1003,
+            "generateMipmaps": false
+          },
+          "uResolution": [
+            1280,
+            720
+          ],
+          "uLogFarFactor": 28.481864063402057,
+          "uSceneDepthEnabled": 1
+        },
+        "defines": {
+          "USE_LIGHT_TINT": "1",
+          "DUST_LIGHT_AT_ORIGIN": "1",
+          "DUST_CLUMPS": "1",
+          "DUST_PHASE_HG": "1",
+          "DUST_ARCS": "1"
+        },
+        "rows": [
+          {
+            "name": "baseline",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 849779
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.77428,
+              "p95": 20.84068,
+              "max": 20.8436
+            },
+            "samples": [
+              20.77428,
+              20.84068,
+              20.77468,
+              20.82224,
+              20.81096,
+              20.77444,
+              20.7728,
+              20.77332,
+              20.77352,
+              20.77164,
+              20.77364,
+              20.77356,
+              20.77728,
+              20.7938,
+              20.82308,
+              20.78108,
+              20.77516,
+              20.79712,
+              20.77356,
+              20.77304,
+              20.77208,
+              20.77356,
+              20.77416,
+              20.77704,
+              20.77308,
+              20.8436,
+              20.7758,
+              20.77456,
+              20.77296,
+              20.77144,
+              20.77108,
+              20.77452
+            ]
+          },
+          {
+            "name": "productionLookup",
+            "image": {
+              "maxError": 0.0000011920928955078125,
+              "relativeError": 2.4478417287604938e-8,
+              "different": 486432,
+              "alphaPixels": 849779
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.48396,
+              "p95": 14.556,
+              "max": 14.86001
+            },
+            "samples": [
+              14.48032,
+              14.54028,
+              14.47808,
+              14.49268,
+              14.47644,
+              14.4854,
+              14.48188,
+              14.48112,
+              14.48012,
+              14.556,
+              14.48396,
+              14.48884,
+              14.49108,
+              14.49396,
+              14.4918,
+              14.48468,
+              14.485,
+              14.48372,
+              14.48016,
+              14.48684,
+              14.49548,
+              14.4838,
+              14.47968,
+              14.48396,
+              14.47992,
+              14.4768,
+              14.48192,
+              14.47844,
+              14.48464,
+              14.4806,
+              14.86001,
+              14.49196
+            ]
+          },
+          {
+            "name": "baselineRepeat",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 849779
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.77624,
+              "p95": 20.85428,
+              "max": 20.88224
+            },
+            "samples": [
+              20.77736,
+              20.84336,
+              20.78608,
+              20.77624,
+              20.77796,
+              20.77552,
+              20.852,
+              20.77748,
+              20.7742,
+              20.77204,
+              20.77632,
+              20.77664,
+              20.77216,
+              20.77312,
+              20.78176,
+              20.77588,
+              20.782,
+              20.88224,
+              20.776,
+              20.77968,
+              20.77876,
+              20.7752,
+              20.7718,
+              20.7812,
+              20.77624,
+              20.77488,
+              20.77432,
+              20.7738,
+              20.85428,
+              20.77752,
+              20.77308,
+              20.7726
+            ]
+          },
+          {
+            "name": "productionRepeat",
+            "image": {
+              "maxError": 0.0000011920928955078125,
+              "relativeError": 2.4478417287604938e-8,
+              "different": 486432,
+              "alphaPixels": 849779
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.48316,
+              "p95": 14.55156,
+              "max": 14.5598
+            },
+            "samples": [
+              14.4824,
+              14.55156,
+              14.47744,
+              14.48956,
+              14.48416,
+              14.4854,
+              14.48592,
+              14.4818,
+              14.4796,
+              14.48756,
+              14.48904,
+              14.47548,
+              14.5598,
+              14.48748,
+              14.4828,
+              14.48128,
+              14.48264,
+              14.48108,
+              14.47704,
+              14.48316,
+              14.4816,
+              14.48268,
+              14.48404,
+              14.4774,
+              14.48096,
+              14.48496,
+              14.48748,
+              14.49016,
+              14.48132,
+              14.48912,
+              14.4868,
+              14.484
+            ]
+          }
+        ],
+        "creationMs": [
+          3.200000047683716,
+          2.6999999284744263,
+          2.3000000715255737,
+          2.1999999284744263,
+          2.3000000715255737,
+          2.1999999284744263,
+          2.3000000715255737,
+          2.799999952316284,
+          2.3000000715255737,
+          2.1999999284744263,
+          2.200000047683716,
+          2.1999999284744263
+        ],
+        "creation": {
+          "count": 12,
+          "p50": 2.3000000715255737,
+          "p95": 3.200000047683716,
+          "max": 3.200000047683716
+        },
+        "lookupBytes": 1336336,
+        "diagnostics": {
+          "covered": 921600,
+          "discarded": 71821,
+          "averageSteps": 15.918843315972222,
+          "clumpsOff": 0,
+          "minAlpha": 0,
+          "maxAlpha": 0.99996018409729,
+          "alphaBinEdges": [
+            0.0001,
+            0.001,
+            0.003,
+            0.01,
+            0.03,
+            0.1,
+            0.3,
+            null
+          ],
+          "alphaBins": [
+            71821,
+            0,
+            0,
+            0,
+            0,
+            420730,
+            300397,
+            128652
+          ]
+        }
+      }
+    ],
+    "errors": [],
+    "warnings": [],
+    "assetFailures": [],
+    "outcome": "completed",
+    "finishedAt": "2026-10-22T11:53:07.860Z"
+  },
+  "layoutExperiment": {
+    "startedAt": "2026-10-22T11:34:30.995Z",
+    "rows": [
+      {
+        "selected": {
+          "id": 13,
+          "name": "Alkaid system",
+          "startupMs": 34029
+        },
+        "view": {
+          "actorId": 135,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "name": "Frostwake Belt"
+        },
+        "actorId": 135,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 56,
+          "textures": 85,
+          "programs": 46,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 5712,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 25165824,
+          "belts": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L4:139/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L5:140/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132",
+              "info": {
+                "totalSectors": 8051,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/AsteroidRingSystem:135",
+              "info": {
+                "totalSectors": 515323743685709,
+                "activeSectors": 410,
+                "sectorsByLod": {
+                  "l0": 20,
+                  "near": 56,
+                  "l1": 334
+                },
+                "instances": {
+                  "l0": 2160,
+                  "near": 6048,
+                  "l1": 36048,
+                  "total": 44256
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 2160,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6048,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 36048,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "orientation": [
+            1.445911537725195e-17,
+            0.984807753012208,
+            8.200171816676385e-17,
+            -0.1736481776669304
+          ],
+          "volumes": [
+            {
+              "id": 80,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132/RingDustVolume",
+              "visible": true,
+              "position": [
+                640451.4563340363,
+                -28147.887980531676,
+                1216759.5306890751
+              ],
+              "scale": [
+                1,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 84,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                1374130.3609200506,
+                -19360.849187282703,
+                53526.028783476446
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 92,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                -733678.9045860143,
+                -8787.03879324898,
+                1163233.501905599
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 126,
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            },
+            {
+              "id": 131,
+              "label": "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                14245543.098148145,
+                14245543.098148145,
+                14245543.098148145
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            }
+          ]
+        },
+        "uniforms": {
+          "uDustColor": [
+            0.2746773120495699,
+            0.3813260114221238,
+            0.45641102317066595
+          ],
+          "uLightColor": [
+            0.5635589645320949,
+            0.6842152894177911,
+            1
+          ],
+          "uDustDensity": 0.00004005256708287535,
+          "uDustScaleHeight": 749.0156607921051,
+          "uDustRingInner": 1874413.5655458085,
+          "uDustRingOuter": 2549202.4491422996,
+          "uDustCamRingPos": [
+            2211808.007344054,
+            -7.275957614183426e-12,
+            -1.1641532182693481e-10
+          ],
+          "uDustLightDirRing": [
+            -1,
+            3.289597284223787e-18,
+            5.263355654758059e-17
+          ],
+          "uDustAnglePower": 0.000001,
+          "uDustNearFade": 1124.648139327485,
+          "uDustMaxSteps": 16,
+          "uDustPlanetRadius": 0,
+          "uDustRadialMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustRadialMapScale": 1.4702841537848605,
+          "uDustAngularMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustAngularMapScale": 1.361981868902452,
+          "uRingBandMap": null,
+          "uRingBandEnabled": 0,
+          "uBandMeanColor": [
+            1,
+            1,
+            1
+          ],
+          "uBandTintStrength": 1,
+          "uLayerHalfThickness": 1,
+          "uLayerShadowStrength": 0.25,
+          "uDustDebugMode": 0,
+          "uDustClumpStrength": 0.7,
+          "uDustClumpScale": 26241.78991764132,
+          "uDustPhaseG": 0.55,
+          "uDustPhaseStrength": 1,
+          "uDustColorForward": [
+            0.4793201830913402,
+            0.6583748172725346,
+            0.7912979403281551
+          ],
+          "uDustExtinction": 1,
+          "uSceneDepth": {
+            "texture": true,
+            "width": 1280,
+            "height": 720,
+            "minFilter": 1003,
+            "generateMipmaps": false
+          },
+          "uResolution": [
+            1280,
+            720
+          ],
+          "uLogFarFactor": 28.481864063402057,
+          "uSceneDepthEnabled": 1
+        },
+        "defines": {
+          "USE_LIGHT_TINT": "1",
+          "DUST_LIGHT_AT_ORIGIN": "1",
+          "DUST_CLUMPS": "1",
+          "DUST_PHASE_HG": "1",
+          "DUST_ARCS": "1"
+        },
+        "rows": [
+          {
+            "name": "baseline",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 851531
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.74504,
+              "p95": 20.80884,
+              "max": 20.82296
+            },
+            "samples": [
+              20.7472,
+              20.82296,
+              20.78304,
+              20.74532,
+              20.74564,
+              20.74504,
+              20.74532,
+              20.74552,
+              20.74192,
+              20.7426,
+              20.74508,
+              20.74252,
+              20.80884,
+              20.74608,
+              20.74436,
+              20.74436,
+              20.74556,
+              20.7554,
+              20.74468,
+              20.74916,
+              20.749,
+              20.7448,
+              20.74324,
+              20.746,
+              20.744,
+              20.74472,
+              20.74492,
+              20.74272,
+              20.74288,
+              20.745,
+              20.74576,
+              20.7442
+            ]
+          },
+          {
+            "name": "gradientCPU",
+            "image": {
+              "maxError": 0.0000019073486328125,
+              "relativeError": 2.576272970108651e-8,
+              "different": 557273,
+              "alphaPixels": 851531
+            },
+            "summary": {
+              "count": 32,
+              "p50": 15.34652,
+              "p95": 15.37556,
+              "max": 15.37576
+            },
+            "samples": [
+              15.35024,
+              15.3716,
+              15.36604,
+              15.34848,
+              15.36148,
+              15.36532,
+              15.34208,
+              15.3404,
+              15.34428,
+              15.34312,
+              15.37556,
+              15.34552,
+              15.34084,
+              15.33944,
+              15.34236,
+              15.35304,
+              15.3424,
+              15.34216,
+              15.3466,
+              15.34652,
+              15.34452,
+              15.37576,
+              15.37288,
+              15.34708,
+              15.35032,
+              15.344,
+              15.36576,
+              15.34956,
+              15.34336,
+              15.35092,
+              15.33896,
+              15.33964
+            ]
+          },
+          {
+            "name": "gradientRepeat",
+            "image": {
+              "maxError": 0.0000019073486328125,
+              "relativeError": 2.576272970108651e-8,
+              "different": 557273,
+              "alphaPixels": 851531
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.48248,
+              "p95": 14.54792,
+              "max": 14.74796
+            },
+            "samples": [
+              14.74796,
+              14.54792,
+              14.47776,
+              14.48484,
+              14.4794,
+              14.47284,
+              14.48904,
+              14.48572,
+              14.48096,
+              14.4992,
+              14.53576,
+              14.488,
+              14.48376,
+              14.4844,
+              14.483,
+              14.48316,
+              14.47684,
+              14.48824,
+              14.48788,
+              14.48348,
+              14.4766,
+              14.47388,
+              14.46964,
+              14.48564,
+              14.475,
+              14.48248,
+              14.47132,
+              14.48228,
+              14.47368,
+              14.47508,
+              14.48176,
+              14.48032
+            ]
+          },
+          {
+            "name": "gradientFull",
+            "image": {
+              "maxError": 0.0000019073486328125,
+              "relativeError": 2.576272970108651e-8,
+              "different": 557273,
+              "alphaPixels": 851531
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.07868,
+              "p95": 16.66216,
+              "max": 16.86092
+            },
+            "samples": [
+              16.66216,
+              16.86092,
+              15.1156,
+              14.07204,
+              14.0856,
+              14.08028,
+              14.07836,
+              14.07192,
+              14.07228,
+              14.08512,
+              14.07868,
+              14.08132,
+              14.85112,
+              14.07836,
+              14.07512,
+              14.078,
+              14.07104,
+              14.10208,
+              14.0812,
+              14.07416,
+              14.07472,
+              14.0878,
+              14.07184,
+              14.07348,
+              14.07596,
+              14.09496,
+              14.07116,
+              14.07592,
+              14.081,
+              14.10184,
+              14.15124,
+              14.08068
+            ]
+          },
+          {
+            "name": "baselineRepeat",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 851531
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.74464,
+              "p95": 20.78964,
+              "max": 20.91296
+            },
+            "samples": [
+              20.91296,
+              20.78964,
+              20.74684,
+              20.74468,
+              20.744,
+              20.74464,
+              20.7482,
+              20.7446,
+              20.74616,
+              20.74404,
+              20.7454,
+              20.74372,
+              20.78588,
+              20.74368,
+              20.74516,
+              20.74256,
+              20.74432,
+              20.7444,
+              20.7436,
+              20.744,
+              20.74396,
+              20.74528,
+              20.74372,
+              20.74524,
+              20.74476,
+              20.74668,
+              20.74768,
+              20.74496,
+              20.74456,
+              20.74324,
+              20.7456,
+              20.74368
+            ]
+          }
+        ],
+        "generationMs": 3.3000000715255737,
+        "diagnostics": {
+          "covered": 921600,
+          "discarded": 70069,
+          "averageSteps": 15.935262586805555,
+          "clumpsOff": 0,
+          "minAlpha": 0,
+          "maxAlpha": 0.9998525381088257,
+          "alphaBinEdges": [
+            0.0001,
+            0.001,
+            0.003,
+            0.01,
+            0.03,
+            0.1,
+            0.3,
+            null
+          ],
+          "alphaBins": [
+            70069,
+            0,
+            0,
+            0,
+            13838,
+            499607,
+            220858,
+            117228
+          ]
+        }
+      },
+      {
+        "selected": {
+          "id": 12,
+          "name": "Westerlund 1-26 system",
+          "startupMs": 13018
+        },
+        "view": {
+          "actorId": 127,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "name": "Ashfall Belt"
+        },
+        "actorId": 127,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 55,
+          "textures": 78,
+          "programs": 48,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 9890,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 8388608,
+          "belts": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125",
+              "info": {
+                "totalSectors": 13658,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/AsteroidRingSystem:127",
+              "info": {
+                "totalSectors": 1552764576077464,
+                "activeSectors": 406,
+                "sectorsByLod": {
+                  "l0": 24,
+                  "near": 50,
+                  "l1": 332
+                },
+                "instances": {
+                  "l0": 3060,
+                  "near": 6375,
+                  "l1": 42326,
+                  "total": 51761
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 3060,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6375,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 42326,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "orientation": [
+            -1.3585610992439083e-18,
+            0.9914448613738105,
+            1.031929605697032e-17,
+            0.13052619222005157
+          ],
+          "volumes": [
+            {
+              "id": 297,
+              "label": "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                32239913.327387907,
+                32239913.327387907,
+                32239913.327387907
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            },
+            {
+              "id": 390,
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125/RingDustVolume",
+              "visible": true,
+              "position": [
+                -4135016.688573136,
+                57390.186070244104,
+                3684148.1978087407
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999998
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 408,
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            }
+          ]
+        },
+        "uniforms": {
+          "uDustColor": [
+            0.3277780980458375,
+            0.3049873140591091,
+            0.26225065751888765
+          ],
+          "uLightColor": [
+            1,
+            0.6520829192241906,
+            0.4493324180292856
+          ],
+          "uDustDensity": 0.00002403154024972521,
+          "uDustScaleHeight": 1248.3594346535085,
+          "uDustRingInner": 3149014.7901169583,
+          "uDustRingOuter": 4348639.472066276,
+          "uDustCamRingPos": [
+            3748827.131091618,
+            0,
+            0
+          ],
+          "uDustLightDirRing": [
+            -1,
+            0,
+            0
+          ],
+          "uDustAnglePower": 0.000001,
+          "uDustNearFade": 1874.4135655458085,
+          "uDustMaxSteps": 16,
+          "uDustPlanetRadius": 0,
+          "uDustRadialMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustRadialMapScale": 1.6541413509050165,
+          "uDustAngularMap": {
+            "texture": true,
+            "width": 1024,
+            "height": 1,
+            "minFilter": 1006,
+            "generateMipmaps": false
+          },
+          "uDustAngularMapScale": 1.289696812104208,
+          "uRingBandMap": null,
+          "uRingBandEnabled": 0,
+          "uBandMeanColor": [
+            1,
+            1,
+            1
+          ],
+          "uBandTintStrength": 1,
+          "uLayerHalfThickness": 1,
+          "uLayerShadowStrength": 0.25,
+          "uDustDebugMode": 0,
+          "uDustClumpStrength": 0.7,
+          "uDustClumpScale": 44985.925573099405,
+          "uDustPhaseG": 0.55,
+          "uDustPhaseStrength": 1,
+          "uDustColorForward": [
+            0.5775804404214573,
+            0.3967552307153359,
+            0.2541520943200296
+          ],
+          "uDustExtinction": 1,
+          "uSceneDepth": {
+            "texture": true,
+            "width": 1280,
+            "height": 720,
+            "minFilter": 1003,
+            "generateMipmaps": false
+          },
+          "uResolution": [
+            1280,
+            720
+          ],
+          "uLogFarFactor": 28.481864063402057,
+          "uSceneDepthEnabled": 1
+        },
+        "defines": {
+          "USE_LIGHT_TINT": "1",
+          "DUST_LIGHT_AT_ORIGIN": "1",
+          "DUST_CLUMPS": "1",
+          "DUST_PHASE_HG": "1",
+          "DUST_ARCS": "1"
+        },
+        "rows": [
+          {
+            "name": "baseline",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 849835
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.77328,
+              "p95": 20.78644,
+              "max": 20.79896
+            },
+            "samples": [
+              20.78644,
+              20.7746,
+              20.77288,
+              20.77328,
+              20.77536,
+              20.77048,
+              20.77152,
+              20.77436,
+              20.774,
+              20.77328,
+              20.77176,
+              20.79896,
+              20.7738,
+              20.77692,
+              20.773,
+              20.77508,
+              20.77396,
+              20.77724,
+              20.7736,
+              20.77236,
+              20.77208,
+              20.77152,
+              20.77432,
+              20.77276,
+              20.77208,
+              20.77308,
+              20.77088,
+              20.77176,
+              20.77236,
+              20.77344,
+              20.77956,
+              20.784
+            ]
+          },
+          {
+            "name": "gradientCPU",
+            "image": {
+              "maxError": 0.0000011920928955078125,
+              "relativeError": 2.4483108811386723e-8,
+              "different": 486541,
+              "alphaPixels": 849835
+            },
+            "summary": {
+              "count": 32,
+              "p50": 15.35628,
+              "p95": 15.3986,
+              "max": 15.41416
+            },
+            "samples": [
+              15.3986,
+              15.39844,
+              15.3958,
+              15.41416,
+              15.36356,
+              15.37128,
+              15.3608,
+              15.35444,
+              15.35456,
+              15.34724,
+              15.36144,
+              15.348,
+              15.36076,
+              15.35536,
+              15.3616,
+              15.35456,
+              15.36192,
+              15.35224,
+              15.39244,
+              15.3544,
+              15.35052,
+              15.3594,
+              15.357,
+              15.3536,
+              15.35,
+              15.35708,
+              15.3526,
+              15.35628,
+              15.35092,
+              15.37872,
+              15.34888,
+              15.34904
+            ]
+          },
+          {
+            "name": "gradientRepeat",
+            "image": {
+              "maxError": 0.0000011920928955078125,
+              "relativeError": 2.4483108811386723e-8,
+              "different": 486541,
+              "alphaPixels": 849835
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.48308,
+              "p95": 14.5116,
+              "max": 14.51728
+            },
+            "samples": [
+              14.48308,
+              14.51032,
+              14.49668,
+              14.47968,
+              14.484,
+              14.47544,
+              14.4832,
+              14.51728,
+              14.49104,
+              14.47776,
+              14.48304,
+              14.49824,
+              14.47756,
+              14.47492,
+              14.47696,
+              14.48032,
+              14.49204,
+              14.48144,
+              14.47812,
+              14.48904,
+              14.48344,
+              14.47792,
+              14.48036,
+              14.48188,
+              14.4836,
+              14.48916,
+              14.4848,
+              14.47528,
+              14.49252,
+              14.5116,
+              14.48124,
+              14.48388
+            ]
+          },
+          {
+            "name": "gradientFull",
+            "image": {
+              "maxError": 0.0000011920928955078125,
+              "relativeError": 2.4483108811386723e-8,
+              "different": 486541,
+              "alphaPixels": 849835
+            },
+            "summary": {
+              "count": 32,
+              "p50": 14.08064,
+              "p95": 17.18316,
+              "max": 17.39872
+            },
+            "samples": [
+              17.39872,
+              16.4658,
+              17.0038,
+              17.18316,
+              14.90592,
+              14.0776,
+              14.08476,
+              14.07476,
+              14.10972,
+              14.076,
+              14.08052,
+              14.09688,
+              14.08424,
+              14.08072,
+              14.07576,
+              14.07888,
+              14.07852,
+              14.0736,
+              14.0814,
+              14.0858,
+              14.07664,
+              14.07784,
+              14.0726,
+              14.08092,
+              14.08016,
+              14.07472,
+              14.08064,
+              14.0812,
+              14.0828,
+              14.98209,
+              14.076,
+              14.07664
+            ]
+          },
+          {
+            "name": "baselineRepeat",
+            "image": {
+              "maxError": 0,
+              "relativeError": 0,
+              "different": 0,
+              "alphaPixels": 849835
+            },
+            "summary": {
+              "count": 32,
+              "p50": 20.774,
+              "p95": 20.81288,
+              "max": 23.20112
+            },
+            "samples": [
+              23.20112,
+              20.81288,
+              20.77628,
+              20.77424,
+              20.77464,
+              20.7744,
+              20.79752,
+              20.77544,
+              20.77368,
+              20.77388,
+              20.774,
+              20.77204,
+              20.77172,
+              20.77312,
+              20.77452,
+              20.77452,
+              20.77336,
+              20.77484,
+              20.77516,
+              20.772,
+              20.77204,
+              20.77264,
+              20.77252,
+              20.77276,
+              20.77464,
+              20.77784,
+              20.77232,
+              20.77172,
+              20.79432,
+              20.76972,
+              20.77288,
+              20.77444
+            ]
+          }
+        ],
+        "generationMs": 3,
+        "diagnostics": {
+          "covered": 921600,
+          "discarded": 71765,
+          "averageSteps": 15.918947482638888,
+          "clumpsOff": 0,
+          "minAlpha": 0,
+          "maxAlpha": 0.99996018409729,
+          "alphaBinEdges": [
+            0.0001,
+            0.001,
+            0.003,
+            0.01,
+            0.03,
+            0.1,
+            0.3,
+            null
+          ],
+          "alphaBins": [
+            71765,
+            0,
+            0,
+            0,
+            0,
+            420787,
+            300399,
+            128649
+          ]
+        }
+      }
+    ],
+    "errors": [],
+    "warnings": [],
+    "assetFailures": [],
+    "outcome": "completed",
+    "finishedAt": "2026-10-22T11:35:45.661Z"
+  },
+  "regression": {
+    "nativeRegression": {
+      "stats": {
+        "startTime": "2026-10-22T11:55:03.717Z",
+        "duration": 4679.778,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "errors": [],
+      "rows": [
+        {
+          "title": "dust clump lookup",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 2486,
+          "retry": 0,
+          "errors": [],
+          "environment": {
+            "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "vendor": "Google Inc. (AMD)",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+          },
+          "probe": {
+            "path": "/tests/ringDust/clumpLookup.gpu.ts",
+            "name": "checkDustClumpLookup",
+            "args": [],
+            "status": "passed",
+            "result": {
+              "points": 16384,
+              "maxSingleError": 2.384185791015625e-7,
+              "maxOctaveError": 2.384185791015625e-7,
+              "referenceRange": [
+                -0.9546720385551453,
+                0.9443707466125488
+              ],
+              "restoredIdentically": true,
+              "reusedIdentically": true,
+              "lookupBytes": 1336336,
+              "texturesBeforeDispose": 3,
+              "texturesAfterDispose": 2
+            }
+          },
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              }
+            ],
+            "errors": []
+          }
+        }
+      ]
+    },
+    "softwareRegression": {
+      "stats": {
+        "startTime": "2026-10-22T11:55:11.461Z",
+        "duration": 4564.742,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "errors": [],
+      "rows": [
+        {
+          "title": "dust clump lookup",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 2510,
+          "retry": 0,
+          "errors": [],
+          "environment": {
+            "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+            "vendor": "Google Inc. (Google)",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+          },
+          "probe": {
+            "path": "/tests/ringDust/clumpLookup.gpu.ts",
+            "name": "checkDustClumpLookup",
+            "args": [],
+            "status": "passed",
+            "result": {
+              "points": 16384,
+              "maxSingleError": 0,
+              "maxOctaveError": 0,
+              "referenceRange": [
+                -0.9546720385551453,
+                0.9443707466125488
+              ],
+              "restoredIdentically": true,
+              "reusedIdentically": true,
+              "lookupBytes": 1336336,
+              "texturesBeforeDispose": 3,
+              "texturesAfterDispose": 2
+            }
+          },
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              }
+            ],
+            "errors": []
+          }
+        }
+      ]
+    },
+    "reuseRed": {
+      "stats": {
+        "startTime": "2026-10-22T11:54:23.390Z",
+        "duration": 4854.955,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "errors": [],
+      "rows": [
+        {
+          "title": "dust clump lookup",
+          "status": "failed",
+          "expectedStatus": "passed",
+          "durationMs": 2719,
+          "retry": 0,
+          "errors": [
+            {
+              "location": {
+                "file": "http://127.0.0.1:8091/tests/ringDust/clumpLookup.gpu.ts",
+                "column": 66,
+                "line": 121
+              },
+              "message": "Error: Error: Reused dust material retained its uploaded lookup\n    at Module.checkDustClumpLookup (http://127.0.0.1:8091/tests/ringDust/clumpLookup.gpu.ts:121:66)\n    at eval (eval at evaluate (:370:30), <anonymous>:11:35)\n    at async <anonymous>:396:30\n    at Module.checkDustClumpLookup (http://127.0.0.1:8091/tests/ringDust/clumpLookup.gpu.ts:121:66)\n    at eval (eval at evaluate (:370:30), <anonymous>:11:35)\n    at async <anonymous>:396:30\n    at runProbe (C:\\Users\\denis\\PhpstormProjects\\te\\tests\\browser\\probe.ts:78:42)\n    at C:\\Users\\denis\\PhpstormProjects\\te\\tests\\browser\\gpu.e2e.ts:45:5"
+            }
+          ],
+          "environment": {
+            "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "vendor": "Google Inc. (AMD)",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+          },
+          "probe": {
+            "path": "/tests/ringDust/clumpLookup.gpu.ts",
+            "name": "checkDustClumpLookup",
+            "args": [],
+            "status": "failed",
+            "error": "Error: Reused dust material retained its uploaded lookup\n    at Module.checkDustClumpLookup (http://127.0.0.1:8091/tests/ringDust/clumpLookup.gpu.ts:121:66)\n    at eval (eval at evaluate (:370:30), <anonymous>:11:35)\n    at async <anonymous>:396:30"
+          },
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        }
+      ]
+    },
+    "assertions": "16,384 points including signed period boundaries and random coordinates up to +/-10,000; compare both original GLSL octaves with 4e-6 tolerance, require nontrivial field, active lookup uniform, bit-identical context-restored/reused pixels and GPU texture release.",
+    "initialRed": "New unit tests: 3 failed due to absent lookup. New native probe: Clumpy dust must own its gradient lookup. Logs below.",
+    "contextWarnings": "The two exact WebGL INVALID_OPERATION delete-object-does-not-belong-to-context warnings are classified only in restoration probes, matching the existing bitmap test. Three retains old disposal listeners. Other GL errors remain failures.",
+    "corrections": "First implemented probe passed numerical/restoration checks but fixture rejected these two known cleanup warnings. Reuse regression initially ran after restoration and hit that stale delete error; moved before context loss to isolate it. It then reproduced actual retained-texture behavior; ownership fix made it pass."
+  },
+  "verification": {
+    "logs": {
+      "unit-red": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/unit-red.log",
+        "tail": "\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯\n\n FAIL  tests/ringDust/RingDustClumpLookup.spec.ts > dust clump gradient resource > releases the previous lookup on copy\n and adopts the cloned resource\nAssertionError: expected undefined to be an instance of DataTexture\n ❯ lookup tests/ringDust/RingDustClumpLookup.spec.ts:7:19\n      5| function lookup(material: RingDustRaymarchMaterial): DataTexture {\n      6|   const texture = material.uniforms.uDustClumpGradients?.value\n      7|   expect(texture).toBeInstanceOf(DataTexture)\n       |                   ^\n      8|   return texture as DataTexture\n      9| }\n ❯ tests/ringDust/RingDustClumpLookup.spec.ts:53:24\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯\n\n\n Test Files  1 failed (1)\n      Tests  3 failed (3)\n   Start at  14:47:28\n   Duration  2.27s (transform 113ms, setup 27ms, import 239ms, tests 9ms, environment 1.77s)\n\n"
+      },
+      "gpu-red": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/gpu-red.log",
+        "tail": "        at async <anonymous>:396:30\n        at Module.checkDustClumpLookup (http://127.0.0.1:8091/tests/ringDust/clumpLookup.gpu.ts:44:11)\n        at eval (eval at evaluate (:370:30), <anonymous>:11:35)\n        at async <anonymous>:396:30\n        at runProbe (C:\\Users\\denis\\PhpstormProjects\\te\\tests\\browser\\probe.ts:75:42)\n        at C:\\Users\\denis\\PhpstormProjects\\te\\tests\\browser\\gpu.e2e.ts:45:5\n\n    attachment #3: screenshot (image/png) ──────────────────────────────────────────────────────────\n    test-results\\gpu.e2e.ts-dust-clump-lookup\\test-failed-1.png\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    Error Context: test-results\\gpu.e2e.ts-dust-clump-lookup\\error-context.md\n\n    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────\n    test-results\\gpu.e2e.ts-dust-clump-lookup\\trace.zip\n    Usage:\n\n        npx playwright show-trace test-results\\gpu.e2e.ts-dust-clump-lookup\\trace.zip\n\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n  1 failed\n    tests\\browser\\gpu.e2e.ts:42:3 › dust clump lookup ──────────────────────────────────────────────\n"
+      },
+      "unit-green": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/unit-green.log",
+        "tail": "\n RUN  v4.1.11 C:/Users/denis/PhpstormProjects/te\n\n\n Test Files  19 passed (19)\n      Tests  149 passed (149)\n   Start at  14:50:02\n   Duration  7.52s (transform 7.85s, setup 486ms, import 18.95s, tests 5.33s, environment 38.20s)\n\n"
+      },
+      "gpu-reuse-red": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/gpu-reuse-red.log",
+        "tail": "        at async <anonymous>:396:30\n        at Module.checkDustClumpLookup (http://127.0.0.1:8091/tests/ringDust/clumpLookup.gpu.ts:121:66)\n        at eval (eval at evaluate (:370:30), <anonymous>:11:35)\n        at async <anonymous>:396:30\n        at runProbe (C:\\Users\\denis\\PhpstormProjects\\te\\tests\\browser\\probe.ts:78:42)\n        at C:\\Users\\denis\\PhpstormProjects\\te\\tests\\browser\\gpu.e2e.ts:45:5\n\n    attachment #3: screenshot (image/png) ──────────────────────────────────────────────────────────\n    test-results\\gpu.e2e.ts-dust-clump-lookup\\test-failed-1.png\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    Error Context: test-results\\gpu.e2e.ts-dust-clump-lookup\\error-context.md\n\n    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────\n    test-results\\gpu.e2e.ts-dust-clump-lookup\\trace.zip\n    Usage:\n\n        npx playwright show-trace test-results\\gpu.e2e.ts-dust-clump-lookup\\trace.zip\n\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n  1 failed\n    tests\\browser\\gpu.e2e.ts:42:3 › dust clump lookup ──────────────────────────────────────────────\n"
+      },
+      "full-test": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/full-test.log",
+        "tail": "> titan-engine@0.0.0 test\n> npm run typecheck && vitest --run\n\n\n> titan-engine@0.0.0 typecheck\n> tsc -b\n\n\n RUN  v4.1.11 C:/Users/denis/PhpstormProjects/te\n\nnode.exe : Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package\nстрока:1 знак:1\n+ & \"C:\\Users\\denis\\AppData\\Local\\nvm\\v24.17.0/node.exe\" \"C:\\Users\\deni ...\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n    + CategoryInfo          : NotSpecified: (Not implemented...vas npm package:String) [], RemoteException\n    + FullyQualifiedErrorId : NativeCommandError\n \n\n Test Files  553 passed | 2 skipped (555)\n      Tests  5461 passed | 7 skipped (5468)\n   Start at  14:55:49\n   Duration  201.68s (transform 46.45s, setup 6.02s, import 282.64s, tests 346.09s, environment 1275.94s)\n\n"
+      },
+      "lint": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/lint.log",
+        "tail": "\n> titan-engine@0.0.0 lint\n> eslint .\n\n"
+      },
+      "build": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/build.log",
+        "tail": "dist/assets/ID3v2Parser-D87HzSyB.js                                                         10.87 kB │ gzip:   3.99 kB\ndist/assets/MatroskaParser-D09TY2pn.js                                                      12.37 kB │ gzip:   4.03 kB\ndist/assets/MpegParser-hzwe3MKh.js                                                          12.73 kB │ gzip:   4.20 kB\ndist/assets/AsfParser-B_yqfVhK.js                                                           14.98 kB │ gzip:   5.14 kB\ndist/assets/MP4Parser-BJ_AXucZ.js                                                           20.67 kB │ gzip:   6.18 kB\ndist/assets/DataEditorModal-Dec_-sHv.js                                                     50.65 kB │ gzip:  16.45 kB\ndist/assets/core-2CeqL3jz.js                                                               118.57 kB │ gzip:  36.13 kB\ndist/assets/index-CL4s_qnf.js                                                              285.23 kB │ gzip:  88.34 kB\ndist/assets/TitanModal-OAWeDfep.js                                                         671.70 kB │ gzip: 161.39 kB\ndist/assets/simulationRuntime-cMQTHTHB.js                                                1,173.88 kB │ gzip: 347.77 kB\nnode.exe : \nстрока:1 знак:1\n+ & \"C:\\Users\\denis\\AppData\\Local\\nvm\\v24.17.0/node.exe\" \"C:\\Users\\deni ...\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\n    + FullyQualifiedErrorId : NativeCommandError\n \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-m\nanualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 9.08s\n"
+      },
+      "native-full": {
+        "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/native-full.log",
+        "tail": "  ok 19 tests\\browser\\gpu.e2e.ts:42:3 › nebula temporal procedural (19.2s)\n  ok 20 tests\\browser\\gpu.e2e.ts:42:3 › nebula LOD composition (589ms)\n  ok 21 tests\\browser\\gpu.e2e.ts:42:3 › nebula emission LOD (638ms)\n  ok 22 tests\\browser\\gpu.e2e.ts:42:3 › nebula dust LOD (600ms)\n  ok 23 tests\\browser\\gpu.e2e.ts:42:3 › nebula lighting LOD (694ms)\n  ok 24 tests\\browser\\gpu.e2e.ts:42:3 › nebula diagonal bake (496ms)\n  ok 25 tests\\browser\\gpu.e2e.ts:42:3 › nebula incremental baking (677ms)\n  ok 26 tests\\browser\\gpu.e2e.ts:42:3 › atmosphere terminator (13.7s)\n  ok 27 tests\\browser\\gpu.e2e.ts:42:3 › black hole depth (0 samples) (1.1s)\n  ok 28 tests\\browser\\gpu.e2e.ts:42:3 › black hole depth (4 samples) (609ms)\n  ok 29 tests\\browser\\gpu.e2e.ts:42:3 › star LOD photometry (1.6s)\n  ok 30 tests\\browser\\gpu.e2e.ts:42:3 › star granulation filtering (17.2s)\n  ok 31 tests\\browser\\gpu.e2e.ts:42:3 › star granulation photometry (2.4s)\n  ok 32 tests\\browser\\gpu.e2e.ts:42:3 › star camera finalization (976ms)\n  ok 33 tests\\browser\\gpu.e2e.ts:42:3 › star prominences (858ms)\n  ok 34 tests\\browser\\gpu.e2e.ts:42:3 › stellar bloom (3.8s)\n  ok 35 tests\\browser\\gpu.e2e.ts:42:3 › bitmap context restoration (575ms)\n  ok 36 tests\\browser\\native.e2e.ts:6:1 › native terrain worker cancellation (987ms)\n  ok 37 tests\\browser\\native.e2e.ts:10:1 › native anime moving-target flight (7.5s)\n  ok 38 tests\\browser\\native.e2e.ts:14:1 › native texture fetch cancellation and cube orientation (535ms)\n  ok 39 tests\\browser\\productionStartup.e2e.ts:13:1 › production home loads without the simulation and requests it only on Run (1.2s)\n\n  39 passed (2.7m)\n"
+      }
+    },
+    "fullBrowser": {
+      "stats": {
+        "startTime": "2026-10-22T12:00:19.264Z",
+        "duration": 164838.781,
+        "expected": 39,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "errors": [],
+      "rows": [
+        {
+          "title": "dust clump lookup",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 2255,
+          "retry": 0,
+          "errors": [],
+          "environment": {
+            "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "vendor": "Google Inc. (AMD)",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+          },
+          "probe": {
+            "path": "/tests/ringDust/clumpLookup.gpu.ts",
+            "name": "checkDustClumpLookup",
+            "args": [],
+            "status": "passed",
+            "result": {
+              "points": 16384,
+              "maxSingleError": 2.384185791015625e-7,
+              "maxOctaveError": 2.384185791015625e-7,
+              "referenceRange": [
+                -0.9546720385551453,
+                0.9443707466125488
+              ],
+              "restoredIdentically": true,
+              "reusedIdentically": true,
+              "lookupBytes": 1336336,
+              "texturesBeforeDispose": 3,
+              "texturesAfterDispose": 2
+            }
+          },
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              }
+            ],
+            "errors": []
+          }
+        },
+        {
+          "title": "ring dust analytic program",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 1147,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "asteroid near visibility",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 1777,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "water ocean surface",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 12553,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula seed",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 20708,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula world precision",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 515,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula bake state",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 526,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula baked program",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 18487,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula absorption",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 520,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula gas dust optics",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 674,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula gas dust fields",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 917,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula directed structure",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 1641,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula light transport",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 2903,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula lighting images",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 626,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula resolution",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 773,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula reconstruction",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 573,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula resolution fields",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 17561,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula temporal baked",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 1083,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula temporal procedural",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 19167,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula LOD composition",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 589,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula emission LOD",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 638,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula dust LOD",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 600,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula lighting LOD",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 694,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula diagonal bake",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 496,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "nebula incremental baking",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 677,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "atmosphere terminator",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 13734,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "black hole depth (0 samples)",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 1070,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [
+              {
+                "text": "THREE.WebGLProgram: Program Info Log: (350,1): warning X4000: use of potentially uninitialized variable (f_sampleBackground)",
+                "category": "warning"
+              }
+            ],
+            "errors": []
+          }
+        },
+        {
+          "title": "black hole depth (4 samples)",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 609,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "star LOD photometry",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 1557,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "star granulation filtering",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 17245,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "star granulation photometry",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 2421,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "star camera finalization",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 976,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "star prominences",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 858,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "stellar bloom",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 3847,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "bitmap context restoration",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 575,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: deleteVertexArray: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              },
+              {
+                "text": "WebGL: INVALID_OPERATION: delete: object does not belong to this context",
+                "category": "expected-context-restoration-cleanup"
+              }
+            ],
+            "errors": []
+          }
+        },
+        {
+          "title": "native terrain worker cancellation",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 987,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "native anime moving-target flight",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 7460,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "native texture fetch cancellation and cube orientation",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 535,
+          "retry": 0,
+          "errors": [],
+          "probe": "passed",
+          "diagnostics": {
+            "pageErrors": [],
+            "failedRequests": [
+              {
+                "url": "http://127.0.0.1:60083/held-texture.png",
+                "failure": "net::ERR_ABORTED"
+              }
+            ],
+            "warnings": [],
+            "errors": []
+          }
+        },
+        {
+          "title": "production home loads without the simulation and requests it only on Run",
+          "status": "passed",
+          "expectedStatus": "passed",
+          "durationMs": 1195,
+          "retry": 0,
+          "errors": []
+        }
+      ]
+    }
+  },
+  "finalReview": {
+    "status": "clean",
+    "reviewer": "gpt-6-astra / medium, fresh context, read-only",
+    "base": "012c56a2",
+    "scope": "Entire current task diff including untracked production, tests and evidence files",
+    "critical": [],
+    "important": [],
+    "minor": [],
+    "declinedToJudge": [],
+    "verdict": "Ready for local commit",
+    "details": "Numeric construction and periodic addressing preserve the original simplex field; both octaves and integration remain intact. Copy, clone, disposal and reuse ownership is correct. CPU pixels survive restoration. Unclumped shaders remain unchanged. Archived evidence supports parity and hardware-specific performance claims. All 28 reviewed provenance hashes match. Recorded verification confirms 5461 unit passes, typecheck/lint/build, and 39/39 native browser tests. Reviewer did not rerun suites or modify files."
+  },
+  "diagnosticsSources": {
+    "benchmark-results/heavy-scenes/dust-lookup.browser.ts": "// Throwaway native-GPU diagnosis. Frozen production inputs; no application edits.\nimport { Color, FloatType, GLSL3, Mesh, NoBlending, OrthographicCamera, PlaneGeometry, ShaderMaterial, UniformsUtils, WebGLRenderTarget } from 'three'\nimport { getInitializedSimulationRuntime } from '/src/ui/runtime/simulationRuntime'\nimport { Tokens } from '/src/core/providers/tokens'\nimport { GpuTimer } from '/tests/browser/gpuTimer'\nimport { state } from './profile.browser'\nimport { RingDustRaymarchMaterial as BaselineMaterial } from './baseline-RingDustRaymarchMaterial'\nimport { createDustClumpGradientTexture } from '/src/core/renderables/DetailedRingStreamingSystem/dust/DustClumpNoise'\n\nconst stats = (xs: number[]) => {\n  const sorted = xs.slice().sort((a, b) => a - b)\n  return { count: xs.length, p50: sorted[Math.ceil(xs.length * .5) - 1], p95: sorted[Math.ceil(xs.length * .95) - 1], max: sorted.at(-1) }\n}\nconst owner = (o: any, id: number) => {\n  for (; o; o = o.parent) if (o.model?.getAttribute('id') === id) return true\n  return false\n}\nexport async function diagnose(actorId: number) {\n  const container = getInitializedSimulationRuntime()!.container\n  const engine: any = container.get(Tokens.Engine), renderer = container.get(Tokens.Renderer)\n  const volume: any = container.get(Tokens.DepthVolumeRegistry).volumes().find(v => owner(v, actorId) && v.material.uniforms.uDustMaxSteps)\n  if (!volume) throw new Error(`Dust ${actorId} missing`)\n  engine.stop()\n  const gl = renderer.getContext() as WebGL2RenderingContext\n  const savedTarget = renderer.getRenderTarget(), savedAlpha = renderer.getClearAlpha()\n  const savedColor = renderer.getClearColor(new Color()), savedAuto = renderer.autoClear\n  const targets: WebGLRenderTarget[] = [], materials: ShaderMaterial[] = []\n  const draw = renderer.render\n  const blitMaterial = new ShaderMaterial({ glslVersion: GLSL3, uniforms: { map: { value: null } }, depthTest: false, depthWrite: false, blending: NoBlending,\n    vertexShader: 'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',\n    fragmentShader: 'precision highp float; uniform sampler2D map; out vec4 fragColor; void main(){fragColor=texelFetch(map,ivec2(gl_FragCoord.xy),0);}' })\n  const blit = new Mesh(new PlaneGeometry(2, 2), blitMaterial), blitCamera = new OrthographicCamera()\n  let mesh: Mesh, camera: any, uniforms: any, width = 0, height = 0\n  const source = volume.material.fragmentShader\n  const baselineOwner = new BaselineMaterial(undefined, { clumps: true, phaseHG: true, arcs: true, lightAtOrigin: true, extinction: true })\n  const make = (fragmentShader: string, removeDefine?: string) => {\n    const defines = { ...volume.material.defines }\n    if (removeDefine) delete defines[removeDefine]\n    const m = new ShaderMaterial({ vertexShader: volume.material.vertexShader, fragmentShader, uniforms, defines,\n      side: volume.material.side, depthTest: false, depthWrite: false, blending: NoBlending })\n    materials.push(m); return m\n  }\n  const read = (target: WebGLRenderTarget) => {\n    const pixels = new Float32Array(target.width * target.height * 4)\n    renderer.readRenderTargetPixels(target, 0, 0, target.width, target.height, pixels)\n    if (pixels.some(x => !Number.isFinite(x))) throw new Error('Nonfinite dust image')\n    return pixels\n  }\n  try {\n    renderer.autoClear = false\n    renderer.render = function (object: any, view: any) {\n      draw.call(this, object, view)\n      if (object !== volume || uniforms) return\n      uniforms = {}\n      for (const [name, u] of Object.entries(object.material.uniforms) as any) uniforms[name] = u.value?.isTexture ? { value: u.value } : UniformsUtils.clone({ u }).u\n      const depth = object.material.uniforms.uSceneDepth.value\n      const copy = new WebGLRenderTarget(depth.image.width, depth.image.height, { type: FloatType, depthBuffer: false, minFilter: depth.minFilter, magFilter: depth.magFilter })\n      targets.push(copy)\n      const previous = renderer.getRenderTarget()\n      renderer.setRenderTarget(copy); blitMaterial.uniforms.map.value = depth\n      draw.call(renderer, blit, blitCamera); renderer.setRenderTarget(previous)\n      uniforms.uSceneDepth.value = copy.texture\n      width = uniforms.uResolution.value.x; height = uniforms.uResolution.value.y\n      camera = view.clone(); mesh = new Mesh(object.geometry, blitMaterial)\n      mesh.layers.mask = object.layers.mask; mesh.matrixAutoUpdate = false\n      mesh.matrix.copy(object.matrixWorld); mesh.updateMatrixWorld(true); mesh.frustumCulled = false\n    }\n    engine.renderFrame(); renderer.render = draw\n    if (!uniforms) throw new Error('Dust capture failed')\n    const snapshot = state()\n    const values: any = {}\n    for (const [name, u] of Object.entries(uniforms) as any) values[name] = u.value?.isTexture\n      ? { texture: true, width: u.value.image.width, height: u.value.image.height, minFilter: u.value.minFilter, generateMipmaps: u.value.generateMipmaps }\n      : u.value?.toArray ? u.value.toArray() : u.value\n    const output = new WebGLRenderTarget(width, height, { type: FloatType, depthBuffer: false }); targets.push(output)\n    const render = (m: ShaderMaterial) => {\n      renderer.setRenderTarget(output); renderer.setClearColor(0, 0); renderer.clear(true, false, false)\n      mesh.material = m; draw.call(renderer, mesh, camera)\n    }\n    const measure = async (m: ShaderMaterial) => {\n      const timer = new GpuTimer(gl), samples: number[] = []\n      try {\n        for (let i = 0; i < 6; i++) { render(m); await new Promise(r => setTimeout(r, 0)) }\n        for (let i = 0; i < 32; i++) { timer.measure(() => render(m)); await new Promise(r => setTimeout(r, 0)); samples.push(...timer.poll()) }\n        const deadline = performance.now() + 30000\n        while (timer.pendingCount) { await new Promise(r => setTimeout(r, 16)); samples.push(...timer.poll()); if (performance.now() > deadline) throw new Error('Dust timer timeout') }\n        return { summary: stats(samples), samples }\n      } finally { timer.dispose() }\n    }\n    const baseline = make(baselineOwner.fragmentShader)\n    const candidate = make(source)\n    const creationMs: number[] = []\n    for (let i = 0; i < 12; i++) {\n      const start = performance.now(), texture = createDustClumpGradientTexture()\n      creationMs.push(performance.now() - start); texture.dispose()\n    }\n    render(baseline); const reference = read(output)\n    const compare = (candidate: Float32Array) => {\n      let maxError = 0, error = 0, signal = 0, different = 0, alphaPixels = 0\n      for (let i = 0; i < reference.length; i++) { const d = Math.abs(reference[i] - candidate[i]); maxError = Math.max(maxError, d); error += d; signal += Math.abs(reference[i]); if (d !== 0) different++; if (i % 4 === 3 && candidate[i] > 0) alphaPixels++ }\n      return { maxError, relativeError: error / Math.max(signal, 1e-20), different, alphaPixels }\n    }\n    const rows: any[] = []\n    const variants: [string, ShaderMaterial][] = [\n      ['baseline', baseline], ['productionLookup', candidate], ['baselineRepeat', baseline], ['productionRepeat', candidate]\n    ]\n    for (const [name, m] of variants) {\n      render(m); const image = compare(read(output)); const timing = await measure(m)\n      rows.push({ name, image, ...timing }); console.info('DUST', actorId, name, JSON.stringify({ image, summary: timing.summary }))\n    }\n    const diagnosticsSource = source.replace('if (alpha < 0.003) discard;', 'gl_FragColor = vec4(alpha, marched / steps, dt, 1.0); return;')\n    render(make(diagnosticsSource)); const diagnostic = read(output)\n    let covered = 0, discarded = 0, steps = 0, clumpsOff = 0, minAlpha = Infinity, maxAlpha = 0\n    const alphaBins = Array(8).fill(0), edges = [.0001, .001, .003, .01, .03, .1, .3, Infinity]\n    for (let i = 0; i < diagnostic.length; i += 4) if (diagnostic[i + 3] > 0) {\n      covered++; const a = diagnostic[i]; if (a < .003) discarded++; steps += diagnostic[i + 1] * uniforms.uDustMaxSteps.value\n      minAlpha = Math.min(minAlpha, a); maxAlpha = Math.max(maxAlpha, a); alphaBins[edges.findIndex(e => a < e)]++\n      if (uniforms.uDustClumpStrength.value * Math.min(1, uniforms.uDustClumpScale.value / (2 * diagnostic[i + 2])) <= .001) clumpsOff++\n    }\n    if (!covered) throw new Error('Dust proxy empty')\n    if (gl.getError() !== gl.NO_ERROR) throw new Error('Dust GPU error')\n    if (rows.some(row => row.image.maxError > 1e-5 || row.image.alphaPixels !== rows[0].image.alphaPixels)) throw new Error('Production lookup image regression')\n    return { actorId, width, height, snapshot, uniforms: values, defines: volume.material.defines, rows,\n      creationMs, creation: stats(creationMs), lookupBytes: uniforms.uDustClumpGradients.value.image.data.byteLength,\n      diagnostics: { covered, discarded, averageSteps: steps / covered, clumpsOff, minAlpha, maxAlpha, alphaBinEdges: edges, alphaBins } }\n  } finally {\n    renderer.render = draw\n    baselineOwner.dispose()\n    for (const m of materials) m.dispose(); for (const target of targets) target.dispose()\n    blit.geometry.dispose(); blitMaterial.dispose()\n    renderer.setRenderTarget(savedTarget); renderer.setClearColor(savedColor, savedAlpha); renderer.autoClear = savedAuto\n    engine.start()\n  }\n}\n",
+    "benchmark-results/heavy-scenes/run-dust-lookup.mjs": "import { createServer } from 'vite'\nimport { chromium } from '@playwright/test'\nimport { writeFile } from 'node:fs/promises'\nprocess.env.VITE_FS_DRIVER = 's3'\nprocess.env.VITE_S3_URL = 'https://storage.yandexcloud.net'\nprocess.env.VITE_FILE_BUCKET = 'textures'\nprocess.env.VITE_SHOW_STATS_PANEL = 'false'\nprocess.env.VITE_SKY_SOURCE = 'gaia'\nconst file = `benchmark-results/heavy-scenes/${process.env.REPORT_FILE || 'dust-lookup-production.json'}`\nconst report = { startedAt: new Date().toISOString(), rows: [], errors: [], warnings: [], assetFailures: [], outcome: 'failed' }\nlet server, browser\ntry {\n  server = await createServer({ server: { host: '127.0.0.1', port: 8094, strictPort: true, hmr: false } }); await server.listen()\n  browser = await chromium.launch({ channel: 'chrome', headless: true })\n  const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 })\n  page.on('pageerror', e => report.errors.push(e.stack || e.message))\n  page.on('console', m => { if (m.type() === 'error') report.errors.push(m.text()); if (m.type() === 'warning') report.warnings.push(m.text()); if (m.text().startsWith('DUST')) console.log(m.text()) })\n  page.on('response', r => { if (r.status() >= 400) report.assetFailures.push(`${r.status()} ${r.url()}`) })\n  page.on('requestfailed', r => { if (!/ERR_ABORTED/.test(r.failure()?.errorText ?? '')) report.assetFailures.push(`${r.failure()?.errorText} ${r.url()}`) })\n  await page.goto('http://127.0.0.1:8094/'); await page.getByRole('button', { name: /^Run / }).first().waitFor()\n  for (const [id, actorId] of [[13, 135], [12, 127]]) {\n    console.log('Starting', id)\n    const selected = await page.evaluate(async id => {\n      const probe = await import('/tests/browser/scenarioSoak.browser.ts')\n      return Promise.race([probe.selectScenario(id), new Promise((_, reject) => setTimeout(() => reject(new Error('Scenario startup timed out')), 180000))])\n    }, id)\n    const view = await page.evaluate(async actorId => (await import('/benchmark-results/heavy-scenes/profile.browser.ts')).setView(actorId, 'belt'), actorId)\n    await page.waitForTimeout(5000)\n    const row = await page.evaluate(async actorId => (await import('/benchmark-results/heavy-scenes/dust-lookup.browser.ts')).diagnose(actorId), actorId)\n    if (/SwiftShader|llvmpipe|software/i.test(row.snapshot.renderer)) throw new Error('Software renderer')\n    report.rows.push({ selected, view, ...row }); await writeFile(file, JSON.stringify(report, null, 2))\n    console.log(JSON.stringify(row.diagnostics))\n    await page.screenshot({ path: `benchmark-results/heavy-scenes/dust-lookup-${id}.png` })\n    await page.evaluate(async () => (await import('/tests/browser/scenarioSoak.browser.ts')).returnToMenu())\n    if (report.errors.length || report.assetFailures.length) throw new Error('Browser or asset errors')\n  }\n  report.outcome = 'completed'\n} catch (e) { report.failure = e.stack || e.message; console.error(e); process.exitCode = 1 }\nfinally { report.finishedAt = new Date().toISOString(); await writeFile(file, JSON.stringify(report, null, 2)); await browser?.close(); await server?.close() }\n"
+  },
+  "provenance": [
+    {
+      "path": "benchmark-results/heavy-scenes/dust-lookup-production.json",
+      "bytes": 29212,
+      "sha256": "c2aff21f7db4f0f49e02fd140f3afe15e39b70e766234bb0ab961879895fa9df"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/dust-gradient-layout-experiment.json",
+      "bytes": 30067,
+      "sha256": "640310ad1a8a397ee7fcd52d42292818f267b5a747496cff76e83e1c7ce05ff4"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/native-full-results.json",
+      "bytes": 292943,
+      "sha256": "d4714a6d9bab7223861cc58dab42b79fbc0108e4d10a7fe7156d9401d52e4c5d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/gpu-green-results.json",
+      "bytes": 8684,
+      "sha256": "86543ec269899c3a3e4385e372930021a4c8baad07872c9607a082cdb66e6fd7"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/gpu-software-results.json",
+      "bytes": 8750,
+      "sha256": "dceb3118af96071ca63b5dbd440c5c4996fb4315081bd1a7745a5ace2d3de372"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/gpu-reuse-red-results.json",
+      "bytes": 9574,
+      "sha256": "7ecc2553bcefa6f5f9e65ed260cc15be9626dd1290d9251e16c140472e798038"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/unit-red.log",
+      "bytes": 5730,
+      "sha256": "539af1c596e972c96aa7d7591a1d39d6e954daf439ad544051e282c71297aa46"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/gpu-red.log",
+      "bytes": 5292,
+      "sha256": "d9dd2239d38bec60c214ed452839f6e49fd6fab48f5c05971649e51835e0eaf1"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/unit-green.log",
+      "bytes": 482,
+      "sha256": "ee06a63d7f0dc43afc450a3a9a2a48abdbf7380ba965548c155ffe091f6650c1"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/gpu-reuse-red.log",
+      "bytes": 5310,
+      "sha256": "d2e418879239666412a852b75d3dd8159dfc94f1d9bba7b4dd188376d166747c"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/full-test.log",
+      "bytes": 1662,
+      "sha256": "1f965a5cd730cc37a66c1e94bc44aaee7f77d89b1ec56a57378ff5c11a83cd39"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/lint.log",
+      "bytes": 88,
+      "sha256": "e05fce691da8b6a2afb7aa7a2ddacaf3dad9b9c3bfbaa5cbb3ada959700425e6"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/build.log",
+      "bytes": 7648,
+      "sha256": "020da1c70f0e805f92c5c58a782dd0e6536aea3972bab56597bee2e798589070"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/native-full.log",
+      "bytes": 7796,
+      "sha256": "ac39e6095579beedf4c2405727cc57b4d5294be37fe2af0ccab0943e2e4e19a1"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/dust-lookup.browser.ts",
+      "bytes": 9221,
+      "sha256": "9dc3b256a22b5ce8e601951fb98fb2c65bccd6b0a3ef60868c637d1768889d7b"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/run-dust-lookup.mjs",
+      "bytes": 3150,
+      "sha256": "852615dca111327a373ebea22f3ddd422592d993cd5269597b2e08de0b9f9dbd"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/baseline-RingDustRaymarchMaterial.ts",
+      "bytes": 28355,
+      "sha256": "5eb7285e7ca6229fd8144ed4b786147b55fe5b18e91fa76a31d463107ddba545"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/dust-gradient-lookup.browser.ts",
+      "bytes": 5357,
+      "sha256": "484014e427d9e68aea990bdf5be1318200a103cae8e101b36863e7efa5fa1b79"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/dust-gradient-cpu.browser.ts",
+      "bytes": 1412,
+      "sha256": "49da083e43da4793f2f544aaa49791c385d554cb8e1660e67d16b997d635f22c"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/dust-noise.browser.ts",
+      "bytes": 8587,
+      "sha256": "7752ea47e5fc13dc64172f3eb672176002a29f8d3109542589aa0b22fefb8933"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/run-dust-noise.mjs",
+      "bytes": 3059,
+      "sha256": "8cf16275de78cb33bcbb06fa8c2d0ced70192077284448736eec03e70de4a403"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/profile.browser.ts",
+      "bytes": 11229,
+      "sha256": "6e963cf61671ae3569a89db3c7e683e8637008cb7a67aedcd9f9005a3a78cd21"
+    },
+    {
+      "path": "src/core/renderables/DetailedRingStreamingSystem/dust/DustClumpNoise.ts",
+      "bytes": 3764,
+      "sha256": "358957536369d68a1cacc6b67edc6241dbddabbc95bf732b878e0d88a3279df0"
+    },
+    {
+      "path": "src/core/renderables/DetailedRingStreamingSystem/dust/RingDustRaymarchMaterial.ts",
+      "bytes": 29206,
+      "sha256": "bb5ab8653418444b3d05f62eefc79f0e58ed6535cc31f42b4f887868617df8bf"
+    },
+    {
+      "path": "tests/ringDust/RingDustClumpLookup.spec.ts",
+      "bytes": 3101,
+      "sha256": "26f633b3b937d4b5b85521c226708d0de839b92a77fb7fdf305953b4e64e18ee"
+    },
+    {
+      "path": "tests/ringDust/clumpLookup.gpu.ts",
+      "bytes": 7096,
+      "sha256": "a1e951032c5b15b55af480064c60d09ea74a4947934af946aedcf543d42c2baf"
+    },
+    {
+      "path": "tests/browser/probe.ts",
+      "bytes": 4952,
+      "sha256": "c0fd1d41a3aa9d7ccc58b27f608da6ebb58d8ede41bb36c391ecf5bf975e417b"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/archive-dust-lookup.mjs",
+      "bytes": 8790,
+      "sha256": "02ab991930b2f6e1c92c984477af011faa1475fc7b474752f3b86409a6d38658"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-22-dust-clump-lookup/final-review.json",
+      "bytes": 853,
+      "sha256": "df713b18e43e3a3749fb52571cc7580fd41bd744ea55e68c1e19b80261372656"
+    }
+  ]
+}

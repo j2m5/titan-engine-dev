@@ -27,7 +27,7 @@ describe('RingDustClumps', () => {
     const m = new RingDustRaymarchMaterial(undefined, { clumps: true })
     expect(m.defines.DUST_CLUMPS).toBe('1')
     const fs = m.fragmentShader
-    expect(fs).toContain('snoise(')
+    expect(fs).toContain('dustClumpNoise(')
     expect(fs).toContain('mix(1.0 - clumpGain, 1.0 + clumpGain,')
     const mixIdx = fs.indexOf('mix(1.0 - clumpGain, 1.0 + clumpGain,')
     const litTauIdx = fs.indexOf('litTau +=')
