@@ -1,6 +1,7 @@
 import { test, runProbe } from './probe'
 
 const probes: { title: string; path: string; name: string; args?: unknown[] }[] = [
+  { title: 'impostor side culling', path: 'asteroidImpostors/sideCulling', name: 'checkImpostorSideCulling' },
   { title: 'asteroid zero amplitude', path: 'asteroidShape/zeroAmplitude', name: 'checkAsteroidZeroAmplitude' },
   { title: 'dust clump lookup', path: 'ringDust/clumpLookup', name: 'checkDustClumpLookup' },
   { title: 'ring dust analytic program', path: 'ringDust/analyticProgram', name: 'checkRingDustAnalyticProgram' },

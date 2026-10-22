@@ -79,6 +79,24 @@ const vertexMain = /* glsl */`
     bool perspective = isPerspectiveMatrix(projectionMatrix);
     impostorSelectFrames(perspective ? cameraObject : vAtlasViewToObject * vec3(0.0, 0.0, 1.0));
     vec3 extent = h * vec3(length(vec3(a[0].x, a[1].x, a[2].x)), length(vec3(a[0].y, a[1].y, a[2].y)), length(vec3(a[0].z, a[1].z, a[2].z)));
+    // Near side-on views the conservative quad can expand across the screen
+    // even though every capture ray will miss. Reject those instances first.
+    // The first atlas projection accepts a square [-h,h]^2 at depth zero:
+    // its corners need sqrt(2)*h, not just the physical model radius. 1.5
+    // includes that square in every frame basis with a rounding margin.
+    vec3 captureExtent = extent * 1.5;
+    vec4 clipCenter = projectionMatrix * vec4(center, 1.0);
+    vec3 px = vec3(projectionMatrix[0][0], projectionMatrix[1][0], projectionMatrix[2][0]);
+    vec3 py = vec3(projectionMatrix[0][1], projectionMatrix[1][1], projectionMatrix[2][1]);
+    vec3 pw = vec3(projectionMatrix[0][3], projectionMatrix[1][3], projectionMatrix[2][3]);
+    // Full rows support off-axis and orthographic projections. Only side
+    // planes: reconstructed/logarithmic depth keeps its original clipping.
+    if (clipCenter.x + clipCenter.w < -dot(abs(px + pw), captureExtent) ||
+        clipCenter.w - clipCenter.x < -dot(abs(pw - px), captureExtent) ||
+        clipCenter.y + clipCenter.w < -dot(abs(py + pw), captureExtent) ||
+        clipCenter.w - clipCenter.y < -dot(abs(pw - py), captureExtent)) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return;
+    }
     vec2 halfSize = extent.xy;
     if (perspective) {
       float depth = max(-center.z, 1e-6);
