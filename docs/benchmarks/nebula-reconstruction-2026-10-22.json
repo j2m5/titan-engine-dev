@@ -1,0 +1,3109 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "13b3006d24efe9f12ae2890649d92c4c9573d7d0",
+  "changedShader": "src/core/renderables/Nebula/material/shader/chunks/NebulaUpsampling.ts",
+  "changedShaderSha256": "7075ed0933627b8f6cb244d92373e2e7b199681f6187b82791b9284b7f8e5e52",
+  "methodology": [
+    "Frozen-input experiments copy the actual low-resolution HDR and scene depth after rendering the main nebula from the global belt midplane. The engine is stopped while variants render the same proxy, camera, uniforms and textures to RGBA32F, with blending disabled.",
+    "Split renders matching reconstruction pixels and full-raymarch fallback pixels in separate disjoint draws. Weighted rejects individual depth-incompatible bilinear taps and normalizes surviving weights, with full raymarch when none survive.",
+    "Each variant has 6 warm-up draws and 40 EXT_disjoint_timer_query_webgl2 samples. Baseline is repeated last. Disjoint state, software renderer, empty reference and GL errors invalidate the experiment.",
+    "Image metrics compare uncomposited premultiplied HDR components against a full-resolution raymarch using the same frozen inputs. Relative error is sum(abs(reference-candidate))/sum(abs(reference)); edge metrics select baseline fallback pixels. These are two static views, not universal image equality.",
+    "Actual application stage profiles have 32 samples per draw after 5 seconds at the selected view, on the dev build with cloud assets. These GPU stage durations must not be converted into whole-frame FPS or summed as whole-frame medians.",
+    "Initial empty-proxy, navigation-interrupted and ERR_NO_BUFFER_SPACE runs are excluded. Only completed error-free measurements are archived. Driver warnings remain recorded."
+  ],
+  "inputs": [
+    {
+      "path": "benchmark-results/heavy-scenes/reconstruct.json",
+      "sha256": "4546e09724cf59981acdc56ecacbfda0f6afc71b02568c3804e855f57f8eccbd"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/reconstruct-weighted.json",
+      "sha256": "8cffeaec99dc6197242b1df29502e2639ba252b7b6ccc12581666f413e979e93"
+    },
+    {
+      "path": "docs/benchmarks/heavy-scenes-volume-stages-2026-10-22.json",
+      "sha256": "649f289e9bfe50f2fefa13cfc53b959f162f3bc059d87512d07fb3c9236297bc"
+    },
+    {
+      "path": "benchmark-results/heavy-scenes/close-detail-weighted.json",
+      "sha256": "86162461a8c64d2916a443bb58bbaceb0c594cf0dc436fb322d6636618768ad6"
+    }
+  ],
+  "frozenSplit": {
+    "startedAt": "2026-10-22T07:39:13.341Z",
+    "rows": [
+      {
+        "id": 13,
+        "view": {
+          "actorId": 135,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "name": "Frostwake Belt"
+        },
+        "actorId": 136,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 56,
+          "textures": 86,
+          "programs": 46,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 4939,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 25165824,
+          "belts": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L4:139/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L5:140/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132",
+              "info": {
+                "totalSectors": 8051,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/AsteroidRingSystem:135",
+              "info": {
+                "totalSectors": 515323743685709,
+                "activeSectors": 410,
+                "sectorsByLod": {
+                  "l0": 20,
+                  "near": 56,
+                  "l1": 334
+                },
+                "instances": {
+                  "l0": 2160,
+                  "near": 6048,
+                  "l1": 36048,
+                  "total": 44256
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 2160,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6048,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 36048,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "orientation": [
+            1.445911537725195e-17,
+            0.984807753012208,
+            8.200171816676385e-17,
+            -0.1736481776669304
+          ],
+          "volumes": [
+            {
+              "id": 80,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132/RingDustVolume",
+              "visible": true,
+              "position": [
+                640344.6244018506,
+                -28147.338778239562,
+                1216814.9473155038
+              ],
+              "scale": [
+                1,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 84,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                1374124.9190044147,
+                -19362.70490331715,
+                53646.242375530535
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 92,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                -733780.2946025643,
+                -8784.633874922416,
+                1163168.7049399733
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 126,
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            },
+            {
+              "id": 131,
+              "label": "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                14245543.098148145,
+                14245543.098148145,
+                14245543.098148145
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            }
+          ]
+        },
+        "covered": 921600,
+        "fallbackPixels": 172773,
+        "fallbackSky": 114514,
+        "fallbackFraction": 0.187470703125,
+        "image": {
+          "maxError": 0,
+          "relativeError": 0,
+          "different": 0
+        },
+        "measurements": {
+          "baseline": {
+            "summary": {
+              "count": 40,
+              "p50": 34.92836,
+              "p95": 35.13316,
+              "max": 35.17336
+            },
+            "samples": [
+              34.92028,
+              34.99164,
+              35.17336,
+              34.94964,
+              34.87036,
+              34.95492,
+              35.14348,
+              34.9484,
+              34.93456,
+              34.96632,
+              34.86956,
+              34.91396,
+              34.923,
+              34.93416,
+              34.92764,
+              34.92724,
+              34.9238,
+              34.9382,
+              34.9334,
+              34.92416,
+              34.91296,
+              34.92036,
+              34.9134,
+              34.93076,
+              35.13316,
+              34.92836,
+              34.95504,
+              34.92492,
+              34.93304,
+              34.8816,
+              34.96,
+              34.89956,
+              34.87916,
+              34.92112,
+              34.84504,
+              34.94312,
+              34.8642,
+              34.9458,
+              34.94068,
+              34.94144
+            ]
+          },
+          "reconstructOnly": {
+            "summary": {
+              "count": 40,
+              "p50": 1.31132,
+              "p95": 1.3918,
+              "max": 1.40368
+            },
+            "samples": [
+              1.34356,
+              1.37616,
+              1.37324,
+              1.38132,
+              1.3918,
+              1.3276,
+              1.31132,
+              1.39816,
+              1.31136,
+              1.3188,
+              1.30256,
+              1.29972,
+              1.3508,
+              1.31236,
+              1.30276,
+              1.31948,
+              1.32656,
+              1.30208,
+              1.34564,
+              1.40368,
+              1.3048,
+              1.30528,
+              1.35108,
+              1.3014,
+              1.30904,
+              1.37216,
+              1.30172,
+              1.35256,
+              1.30484,
+              1.31616,
+              1.30416,
+              1.32256,
+              1.30132,
+              1.29904,
+              1.30764,
+              1.30124,
+              1.30176,
+              1.30228,
+              1.30836,
+              1.30484
+            ]
+          },
+          "fallbackOnly": {
+            "summary": {
+              "count": 40,
+              "p50": 34.8574,
+              "p95": 35.06728,
+              "max": 35.09476
+            },
+            "samples": [
+              34.87604,
+              34.92988,
+              34.89368,
+              34.91544,
+              34.88148,
+              34.8452,
+              34.89756,
+              34.82172,
+              34.9,
+              34.84208,
+              34.8458,
+              34.85932,
+              34.8078,
+              34.78108,
+              34.85284,
+              34.8574,
+              34.90108,
+              34.836,
+              34.8752,
+              34.88136,
+              35.07212,
+              34.8654,
+              35.06728,
+              34.7796,
+              34.8476,
+              35.09476,
+              34.79596,
+              34.8308,
+              34.83948,
+              34.88892,
+              34.85876,
+              34.84256,
+              34.83048,
+              34.837,
+              34.78816,
+              34.78948,
+              34.79308,
+              34.88056,
+              34.86788,
+              35.06024
+            ]
+          },
+          "split": {
+            "summary": {
+              "count": 40,
+              "p50": 35.8746,
+              "p95": 35.99976,
+              "max": 36.08368
+            },
+            "samples": [
+              35.8216,
+              35.91228,
+              35.89108,
+              35.87352,
+              35.826,
+              35.83824,
+              35.81712,
+              36.0464,
+              35.8746,
+              35.78608,
+              35.86276,
+              35.88968,
+              36.08368,
+              35.86316,
+              35.93956,
+              35.99976,
+              35.87132,
+              35.91716,
+              35.89288,
+              35.95344,
+              35.89904,
+              35.8282,
+              35.87084,
+              35.90032,
+              35.8832,
+              35.88092,
+              35.85804,
+              35.89364,
+              35.87068,
+              35.92492,
+              35.87648,
+              35.87804,
+              35.85704,
+              35.88348,
+              35.8514,
+              35.86132,
+              35.83544,
+              35.85832,
+              35.77804,
+              35.89364
+            ]
+          },
+          "baselineRepeat": {
+            "summary": {
+              "count": 40,
+              "p50": 34.92128,
+              "p95": 35.01004,
+              "max": 35.20636
+            },
+            "samples": [
+              34.92932,
+              34.96896,
+              34.87048,
+              35.20636,
+              34.93768,
+              34.89572,
+              34.93248,
+              34.93036,
+              35.01004,
+              34.9016,
+              34.8568,
+              34.91688,
+              34.95972,
+              34.8726,
+              34.93616,
+              34.92128,
+              34.88772,
+              34.9586,
+              34.91452,
+              34.90384,
+              34.83856,
+              34.92424,
+              34.9296,
+              34.9282,
+              34.89416,
+              34.93108,
+              34.8576,
+              34.94816,
+              34.86916,
+              34.85716,
+              34.91068,
+              34.84256,
+              34.90232,
+              34.92744,
+              34.89068,
+              34.92568,
+              34.85728,
+              34.92228,
+              34.92468,
+              35.15804
+            ]
+          }
+        }
+      },
+      {
+        "id": 12,
+        "view": {
+          "actorId": 127,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "name": "Ashfall Belt"
+        },
+        "actorId": 118,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 55,
+          "textures": 79,
+          "programs": 48,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 8663,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 8388608,
+          "belts": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125",
+              "info": {
+                "totalSectors": 13658,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/AsteroidRingSystem:127",
+              "info": {
+                "totalSectors": 1552764576077464,
+                "activeSectors": 406,
+                "sectorsByLod": {
+                  "l0": 24,
+                  "near": 50,
+                  "l1": 332
+                },
+                "instances": {
+                  "l0": 3060,
+                  "near": 6375,
+                  "l1": 42326,
+                  "total": 51761
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 3060,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6375,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 42326,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "orientation": [
+            -1.3585610992439083e-18,
+            0.9914448613738105,
+            1.031929605697032e-17,
+            0.13052619222005157
+          ],
+          "volumes": [
+            {
+              "id": 295,
+              "label": "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                32239913.327387907,
+                32239913.327387907,
+                32239913.327387907
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            },
+            {
+              "id": 388,
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125/RingDustVolume",
+              "visible": true,
+              "position": [
+                -4135085.34874265,
+                57389.974106723,
+                3684064.163269773
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999998
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 406,
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            }
+          ]
+        },
+        "covered": 921600,
+        "fallbackPixels": 191980,
+        "fallbackSky": 121362,
+        "fallbackFraction": 0.20831163194444444,
+        "image": {
+          "maxError": 0,
+          "relativeError": 0,
+          "different": 0
+        },
+        "measurements": {
+          "baseline": {
+            "summary": {
+              "count": 40,
+              "p50": 35.45644,
+              "p95": 35.97804,
+              "max": 36.00308
+            },
+            "samples": [
+              35.49376,
+              35.4346,
+              35.43076,
+              35.87176,
+              35.45644,
+              35.95568,
+              35.44028,
+              35.977,
+              35.43148,
+              35.4478,
+              35.45664,
+              35.50276,
+              35.4244,
+              35.94104,
+              35.95692,
+              35.988,
+              35.4356,
+              35.44832,
+              35.96988,
+              35.46648,
+              35.42552,
+              35.4336,
+              35.95036,
+              35.44996,
+              35.45572,
+              35.4288,
+              35.43412,
+              35.959,
+              35.43364,
+              35.405,
+              35.46464,
+              35.97144,
+              35.47876,
+              36.00308,
+              35.97684,
+              35.435,
+              35.47888,
+              35.39752,
+              35.97804,
+              35.43052
+            ]
+          },
+          "reconstructOnly": {
+            "summary": {
+              "count": 40,
+              "p50": 1.31108,
+              "p95": 1.44396,
+              "max": 1.64484
+            },
+            "samples": [
+              1.30952,
+              1.37812,
+              1.31284,
+              1.29696,
+              1.2924,
+              1.30796,
+              1.44396,
+              1.38712,
+              1.29624,
+              1.3358,
+              1.294,
+              1.30936,
+              1.32192,
+              1.34364,
+              1.29544,
+              1.29868,
+              1.64484,
+              1.32412,
+              1.2954,
+              1.29212,
+              1.29004,
+              1.30696,
+              1.29068,
+              1.30056,
+              1.31108,
+              1.35396,
+              1.30984,
+              1.32048,
+              1.57228,
+              1.3546,
+              1.34544,
+              1.44396,
+              1.37696,
+              1.34396,
+              1.29264,
+              1.296,
+              1.28984,
+              1.34544,
+              1.36076,
+              1.35044
+            ]
+          },
+          "fallbackOnly": {
+            "summary": {
+              "count": 40,
+              "p50": 35.46608,
+              "p95": 36.02024,
+              "max": 36.11968
+            },
+            "samples": [
+              35.95104,
+              35.98616,
+              35.43232,
+              35.42544,
+              35.44152,
+              35.42344,
+              35.42712,
+              35.94568,
+              35.44824,
+              35.83644,
+              35.46084,
+              35.971,
+              35.98452,
+              36.048,
+              35.4534,
+              36.02024,
+              35.96436,
+              35.43736,
+              35.42696,
+              35.96516,
+              35.43572,
+              35.91984,
+              35.9412,
+              35.99072,
+              35.96748,
+              35.44108,
+              35.4618,
+              35.48944,
+              35.46136,
+              35.44604,
+              35.48336,
+              35.49628,
+              35.48004,
+              36.11968,
+              35.46608,
+              35.44532,
+              35.51444,
+              35.42172,
+              35.42808,
+              35.4226
+            ]
+          },
+          "split": {
+            "summary": {
+              "count": 40,
+              "p50": 36.47232,
+              "p95": 37.04116,
+              "max": 37.25816
+            },
+            "samples": [
+              37.017,
+              37.25816,
+              37.06448,
+              36.93156,
+              36.43496,
+              36.4504,
+              36.44768,
+              36.94752,
+              36.43212,
+              36.93008,
+              36.50812,
+              36.42464,
+              36.94908,
+              36.47232,
+              36.94336,
+              36.51064,
+              36.44596,
+              36.43568,
+              36.44152,
+              36.97,
+              36.42752,
+              36.98396,
+              36.9636,
+              36.93576,
+              36.42396,
+              36.96768,
+              36.46808,
+              36.9696,
+              36.45596,
+              36.41512,
+              37.04116,
+              36.4414,
+              36.42372,
+              36.43876,
+              36.45276,
+              36.45108,
+              36.49312,
+              36.4384,
+              36.9978,
+              36.95944
+            ]
+          },
+          "baselineRepeat": {
+            "summary": {
+              "count": 40,
+              "p50": 35.46344,
+              "p95": 35.97476,
+              "max": 35.97896
+            },
+            "samples": [
+              35.43404,
+              35.5028,
+              35.97896,
+              35.46344,
+              35.43932,
+              35.43052,
+              35.96912,
+              35.43548,
+              35.43716,
+              35.52904,
+              35.43736,
+              35.85916,
+              35.92968,
+              35.45812,
+              35.41668,
+              35.44464,
+              35.97476,
+              35.877,
+              35.94752,
+              35.42956,
+              35.95932,
+              35.4344,
+              35.42308,
+              35.44984,
+              35.4712,
+              35.44872,
+              35.9764,
+              35.46212,
+              35.4576,
+              35.43688,
+              35.97108,
+              35.9698,
+              35.44028,
+              35.95724,
+              35.8588,
+              35.46504,
+              35.45424,
+              35.93776,
+              35.97052,
+              35.4638
+            ]
+          }
+        }
+      }
+    ],
+    "errors": [],
+    "warnings": [
+      "THREE.WebGLProgram: Program Info Log: (570,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (579,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (587,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms()."
+    ],
+    "assetFailures": [],
+    "outcome": "completed",
+    "finishedAt": "2026-10-22T07:40:38.042Z"
+  },
+  "frozenWeighted": {
+    "mode": "weighted",
+    "startedAt": "2026-10-22T07:42:11.161Z",
+    "rows": [
+      {
+        "id": 13,
+        "view": {
+          "actorId": 135,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "name": "Frostwake Belt"
+        },
+        "actorId": 136,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 56,
+          "textures": 86,
+          "programs": 46,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 4939,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 25165824,
+          "belts": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L4:139/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn Trojans L5:140/AsteroidBelt",
+              "lod": "Far",
+              "streamer": false
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132",
+              "info": {
+                "totalSectors": 8051,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/AsteroidRingSystem:135",
+              "info": {
+                "totalSectors": 515323743685709,
+                "activeSectors": 410,
+                "sectorsByLod": {
+                  "l0": 20,
+                  "near": 56,
+                  "l1": 334
+                },
+                "instances": {
+                  "l0": 2160,
+                  "near": 6048,
+                  "l1": 36048,
+                  "total": 44256
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 2160,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6048,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 36048,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "orientation": [
+            1.445911537725195e-17,
+            0.984807753012208,
+            8.200171816676385e-17,
+            -0.1736481776669304
+          ],
+          "volumes": [
+            {
+              "id": 80,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132/RingDustVolume",
+              "visible": true,
+              "position": [
+                640345.9651402357,
+                -28147.345671918356,
+                1216814.2519129927
+              ],
+              "scale": [
+                1,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 84,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                1374124.9873652246,
+                -19362.68161559646,
+                53644.733735058224
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 92,
+              "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                -733779.0222249891,
+                -8784.664056321897,
+                1163169.5181779342
+              ],
+              "scale": [
+                26241.78991764132,
+                26241.78991764132,
+                26241.78991764132
+              ],
+              "resolution": 1,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 0
+            },
+            {
+              "id": 126,
+              "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999999
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            },
+            {
+              "id": 131,
+              "label": "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                14245543.098148145,
+                14245543.098148145,
+                14245543.098148145
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            }
+          ]
+        },
+        "covered": 921600,
+        "fallbackPixels": 172827,
+        "fallbackSky": 114571,
+        "fallbackFraction": 0.187529296875,
+        "image": {
+          "maxError": 0,
+          "relativeError": 0,
+          "different": 0
+        },
+        "experiment": {
+          "weightedFallback": 6348,
+          "weightedSky": 61,
+          "fallbackFraction": 0.006888020833333334,
+          "baselineVsNative": {
+            "maxError": 0.0006267577409744263,
+            "relativeError": 0.0017187432549231917,
+            "meanAbsoluteError": 0.000024210850660925154
+          },
+          "weightedVsNative": {
+            "maxError": 0.001002240926027298,
+            "relativeError": 0.0019456446191405926,
+            "meanAbsoluteError": 0.000027407066866046012
+          },
+          "changedEdgesVsNative": {
+            "maxError": 0.001002240926027298,
+            "relativeError": 0.0016989050206183496,
+            "meanAbsoluteError": 0.00001704382332990392
+          },
+          "weightedVsBaseline": {
+            "maxError": 0.001002240926027298,
+            "relativeError": 0.0002272463234993429,
+            "meanAbsoluteError": 0.000003196216205118603
+          }
+        },
+        "measurements": {
+          "baseline": {
+            "summary": {
+              "count": 40,
+              "p50": 34.92088,
+              "p95": 35.16004,
+              "max": 37.03784
+            },
+            "samples": [
+              34.91248,
+              35.00648,
+              34.95256,
+              34.95424,
+              34.85088,
+              35.04908,
+              34.91616,
+              34.87944,
+              34.84416,
+              34.88392,
+              34.87188,
+              34.8666,
+              34.92096,
+              34.9228,
+              34.92088,
+              34.8616,
+              34.93068,
+              34.92608,
+              34.90528,
+              34.931,
+              34.9102,
+              34.81772,
+              34.9082,
+              34.95292,
+              34.94864,
+              35.17892,
+              34.9458,
+              34.8598,
+              34.86288,
+              34.93548,
+              34.92524,
+              35.16004,
+              34.88668,
+              34.90088,
+              34.88896,
+              34.95684,
+              34.90756,
+              34.9408,
+              34.95296,
+              37.03784
+            ]
+          },
+          "weighted": {
+            "summary": {
+              "count": 40,
+              "p50": 23.35664,
+              "p95": 23.51532,
+              "max": 23.5672
+            },
+            "samples": [
+              23.05584,
+              23.339,
+              23.2838,
+              23.47092,
+              23.4042,
+              23.40336,
+              23.06828,
+              23.16688,
+              23.49392,
+              23.29496,
+              23.5672,
+              23.35664,
+              23.51076,
+              23.45564,
+              23.33332,
+              23.42444,
+              23.32316,
+              23.36728,
+              23.46436,
+              23.271,
+              23.42848,
+              23.35856,
+              23.11884,
+              23.16476,
+              23.355,
+              23.54376,
+              23.03032,
+              23.1624,
+              23.29352,
+              23.2556,
+              23.15448,
+              23.51532,
+              23.46368,
+              23.51196,
+              23.3906,
+              23.10828,
+              23.33248,
+              23.426,
+              23.50216,
+              23.4742
+            ]
+          },
+          "baselineRepeat": {
+            "summary": {
+              "count": 40,
+              "p50": 34.92736,
+              "p95": 35.11804,
+              "max": 35.21124
+            },
+            "samples": [
+              34.87448,
+              34.96944,
+              34.86444,
+              34.86492,
+              34.9482,
+              34.91108,
+              34.92476,
+              34.91248,
+              34.99476,
+              34.88968,
+              34.94316,
+              34.93556,
+              34.9698,
+              34.91936,
+              34.92848,
+              34.93988,
+              35.11804,
+              34.93356,
+              34.91368,
+              34.9084,
+              34.93024,
+              34.8702,
+              34.93128,
+              34.90344,
+              34.88392,
+              34.91924,
+              35.1864,
+              34.94864,
+              34.92668,
+              34.92736,
+              34.92968,
+              34.898,
+              34.97544,
+              34.94676,
+              34.91892,
+              34.952,
+              34.93652,
+              34.84496,
+              35.21124,
+              34.90716
+            ]
+          }
+        }
+      },
+      {
+        "id": 12,
+        "view": {
+          "actorId": 127,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "name": "Ashfall Belt"
+        },
+        "actorId": 118,
+        "width": 1280,
+        "height": 720,
+        "snapshot": {
+          "geometries": 55,
+          "textures": 79,
+          "programs": 48,
+          "canvases": 1,
+          "renderCalls": 1,
+          "frame": 8570,
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1,
+          "pending": 0,
+          "allocated": 8388608,
+          "belts": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt",
+              "lod": "Near",
+              "streamer": true,
+              "visible": true
+            }
+          ],
+          "streamers": [
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125",
+              "info": {
+                "totalSectors": 13658,
+                "activeSectors": 0,
+                "sectorsByLod": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0
+                },
+                "instances": {
+                  "l0": 0,
+                  "near": 0,
+                  "l1": 0,
+                  "total": 0
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 0,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 0,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 0,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            },
+            {
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/AsteroidRingSystem:127",
+              "info": {
+                "totalSectors": 1552764576077464,
+                "activeSectors": 406,
+                "sectorsByLod": {
+                  "l0": 24,
+                  "near": 50,
+                  "l1": 332
+                },
+                "instances": {
+                  "l0": 3060,
+                  "near": 6375,
+                  "l1": 42326,
+                  "total": 51761
+                },
+                "pendingRemoval": 0,
+                "poolPressure": {
+                  "l0": {
+                    "used": 3060,
+                    "capacity": 75012,
+                    "failures": 0
+                  },
+                  "near": {
+                    "used": 6375,
+                    "capacity": 30002,
+                    "failures": 0
+                  },
+                  "l1": {
+                    "used": 42326,
+                    "capacity": 100000,
+                    "failures": 0
+                  },
+                  "totalFailures": 0
+                }
+              }
+            }
+          ],
+          "camera": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "orientation": [
+            -1.3585610992439083e-18,
+            0.9914448613738105,
+            1.031929605697032e-17,
+            0.13052619222005157
+          ],
+          "volumes": [
+            {
+              "id": 295,
+              "label": "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                32239913.327387907,
+                32239913.327387907,
+                32239913.327387907
+              ],
+              "resolution": 0.5,
+              "defines": {
+                "NEB_BAKED": "",
+                "NEB_BAKED_ONLY": ""
+              },
+              "ready": 1,
+              "lod": 1
+            },
+            {
+              "id": 388,
+              "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125/RingDustVolume",
+              "visible": true,
+              "position": [
+                -4135084.4874154567,
+                57389.97676593109,
+                3684065.217486502
+              ],
+              "scale": [
+                0.9999999999999998,
+                1,
+                0.9999999999999998
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1"
+              }
+            },
+            {
+              "id": 406,
+              "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume",
+              "visible": true,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ],
+              "defines": {
+                "USE_LIGHT_TINT": "1",
+                "DUST_LIGHT_AT_ORIGIN": "1",
+                "DUST_CLUMPS": "1",
+                "DUST_PHASE_HG": "1",
+                "DUST_ARCS": "1"
+              }
+            }
+          ]
+        },
+        "covered": 921600,
+        "fallbackPixels": 192147,
+        "fallbackSky": 121590,
+        "fallbackFraction": 0.20849283854166667,
+        "image": {
+          "maxError": 0,
+          "relativeError": 0,
+          "different": 0
+        },
+        "experiment": {
+          "weightedFallback": 7696,
+          "weightedSky": 80,
+          "fallbackFraction": 0.008350694444444445,
+          "baselineVsNative": {
+            "maxError": 0.0011360347270965576,
+            "relativeError": 0.0021355465968704605,
+            "meanAbsoluteError": 0.00006463409816056731
+          },
+          "weightedVsNative": {
+            "maxError": 0.0011740028858184814,
+            "relativeError": 0.002464840602298097,
+            "meanAbsoluteError": 0.00007460045576741437
+          },
+          "changedEdgesVsNative": {
+            "maxError": 0.0011740028858184814,
+            "relativeError": 0.0021901492033824578,
+            "meanAbsoluteError": 0.000047801918169270905
+          },
+          "weightedVsBaseline": {
+            "maxError": 0.0011740028858184814,
+            "relativeError": 0.0003298147369603345,
+            "meanAbsoluteError": 0.000009966357606847762
+          }
+        },
+        "measurements": {
+          "baseline": {
+            "summary": {
+              "count": 40,
+              "p50": 35.4632,
+              "p95": 35.99104,
+              "max": 36.04064
+            },
+            "samples": [
+              35.95776,
+              36.04064,
+              35.96596,
+              35.4632,
+              35.99672,
+              35.96492,
+              35.46,
+              35.98668,
+              35.50108,
+              35.42708,
+              35.4512,
+              35.99104,
+              35.4458,
+              35.46152,
+              35.46332,
+              35.96916,
+              35.4728,
+              35.4612,
+              35.42892,
+              35.44752,
+              35.98788,
+              35.9624,
+              35.41768,
+              35.44964,
+              35.49444,
+              35.45132,
+              35.97796,
+              35.45964,
+              35.96584,
+              35.44008,
+              35.43636,
+              35.41856,
+              35.9588,
+              35.93524,
+              35.93948,
+              35.45936,
+              35.44096,
+              35.43732,
+              35.47244,
+              35.44872
+            ]
+          },
+          "weighted": {
+            "summary": {
+              "count": 40,
+              "p50": 24.34052,
+              "p95": 24.48644,
+              "max": 24.73492
+            },
+            "samples": [
+              24.11104,
+              24.37456,
+              24.21536,
+              24.2526,
+              24.32912,
+              24.44632,
+              24.1406,
+              24.418,
+              24.28288,
+              24.2498,
+              24.48852,
+              24.4622,
+              24.37768,
+              24.33788,
+              24.73492,
+              24.48644,
+              24.42136,
+              24.47332,
+              24.38156,
+              24.36904,
+              24.3544,
+              24.27928,
+              24.34684,
+              23.98952,
+              24.22768,
+              24.26756,
+              24.2558,
+              24.48124,
+              24.2132,
+              24.1858,
+              24.36596,
+              24.43488,
+              24.16144,
+              24.47544,
+              24.40868,
+              24.2286,
+              24.34052,
+              24.4218,
+              24.2888,
+              24.29152
+            ]
+          },
+          "baselineRepeat": {
+            "summary": {
+              "count": 40,
+              "p50": 35.45728,
+              "p95": 35.9848,
+              "max": 36.05948
+            },
+            "samples": [
+              35.96472,
+              35.48612,
+              35.4602,
+              35.43748,
+              35.97496,
+              35.45956,
+              35.42596,
+              35.44336,
+              35.45432,
+              35.43868,
+              35.46408,
+              35.9856,
+              35.95064,
+              35.46896,
+              35.42944,
+              36.05948,
+              35.42612,
+              35.48084,
+              35.43392,
+              35.4598,
+              35.44092,
+              35.442,
+              35.41908,
+              35.44196,
+              35.97504,
+              35.95304,
+              35.96384,
+              35.95748,
+              35.43228,
+              35.45488,
+              35.9848,
+              35.44824,
+              35.45728,
+              35.43152,
+              35.4524,
+              35.4422,
+              35.97892,
+              35.53088,
+              35.94528,
+              35.44244
+            ]
+          }
+        }
+      }
+    ],
+    "errors": [],
+    "warnings": [
+      "THREE.WebGLProgram: Program Info Log: (570,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (579,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (587,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms().",
+      "THREE.UniformsUtils: Textures of render targets cannot be cloned via cloneUniforms() or mergeUniforms()."
+    ],
+    "assetFailures": [],
+    "outcome": "completed",
+    "finishedAt": "2026-10-22T07:43:32.010Z"
+  },
+  "applicationBefore": {
+    "startedAt": "2026-10-22T06:53:46.371Z",
+    "finishedAt": "2026-10-22T06:55:04.205Z",
+    "outcome": "completed",
+    "errors": [],
+    "warnings": [
+      "THREE.WebGLProgram: Program Info Log: (570,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (579,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (587,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)"
+    ],
+    "assetFailures": [],
+    "rows": [
+      {
+        "selected": {
+          "id": 13,
+          "name": "Alkaid system",
+          "startupMs": 29250.100000023842
+        },
+        "view": {
+          "actorId": 135,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "name": "Frostwake Belt"
+        },
+        "mode": "volumeDraws",
+        "frames": 32,
+        "environment": {
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1
+        },
+        "camera": [
+          -756482.891680675,
+          3.683400263705484e-10,
+          -2078419.6630963914
+        ],
+        "orientation": [
+          1.445911537725195e-17,
+          0.984807753012208,
+          8.200171816676385e-17,
+          -0.1736481776669304
+        ],
+        "volumes": [
+          {
+            "id": 80,
+            "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132/RingDustVolume",
+            "visible": true,
+            "position": [
+              640323.9877005328,
+              -28147.232666590782,
+              1216825.6507398032
+            ],
+            "scale": [
+              1,
+              0.9999999999999999,
+              0.9999999999999999
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1"
+            }
+          },
+          {
+            "id": 84,
+            "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              1374123.8665839043,
+              -19363.063344158116,
+              53669.463312719716
+            ],
+            "scale": [
+              26241.78991764132,
+              26241.78991764132,
+              26241.78991764132
+            ],
+            "resolution": 1,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 0
+          },
+          {
+            "id": 92,
+            "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              -733799.8788833712,
+              -8784.169322432674,
+              1163156.187427084
+            ],
+            "scale": [
+              26241.78991764132,
+              26241.78991764132,
+              26241.78991764132
+            ],
+            "resolution": 1,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 0
+          },
+          {
+            "id": 126,
+            "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              0.9999999999999998,
+              1,
+              0.9999999999999999
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1",
+              "DUST_LIGHT_AT_ORIGIN": "1",
+              "DUST_CLUMPS": "1",
+              "DUST_PHASE_HG": "1",
+              "DUST_ARCS": "1"
+            }
+          },
+          {
+            "id": 131,
+            "label": "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              14245543.098148145,
+              14245543.098148145,
+              14245543.098148145
+            ],
+            "resolution": 0.5,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 1
+          }
+        ],
+        "gpu": {
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:march": [
+            11.38096,
+            11.38052,
+            11.3776,
+            11.3782,
+            11.39068,
+            11.38748,
+            11.37432,
+            11.38624,
+            11.381,
+            11.38124,
+            11.37824,
+            11.38364,
+            11.38772,
+            11.38644,
+            11.39296,
+            11.38956,
+            11.38552,
+            11.37788,
+            11.37512,
+            11.38844,
+            11.37884,
+            11.38156,
+            11.38768,
+            11.3816,
+            11.38192,
+            11.37168,
+            11.3798,
+            11.36848,
+            11.38704,
+            11.37888,
+            11.3932,
+            11.3914
+          ],
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:reconstruct": [
+            35.84684,
+            35.74848,
+            35.77516,
+            35.78028,
+            35.90816,
+            35.80068,
+            35.8074,
+            35.76364,
+            35.82488,
+            35.72944,
+            35.79324,
+            35.84992,
+            35.92924,
+            36.162,
+            35.90996,
+            35.9292,
+            35.8362,
+            35.80184,
+            35.8088,
+            35.75512,
+            35.82132,
+            35.80312,
+            35.76688,
+            35.79432,
+            35.77516,
+            35.75688,
+            35.75116,
+            35.73444,
+            35.7802,
+            35.83692,
+            35.75488,
+            35.7522
+          ],
+          "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume:march": [
+            23.18172,
+            22.92,
+            22.90552,
+            22.92432,
+            22.90056,
+            22.95392,
+            22.92832,
+            23.05188,
+            22.92636,
+            22.9412,
+            22.8888,
+            23.148,
+            23.04976,
+            23.36056,
+            23.11888,
+            22.92536,
+            23.0248,
+            22.9002,
+            23.0646,
+            22.89128,
+            22.89804,
+            22.9242,
+            22.9188,
+            22.96496,
+            22.90252,
+            22.98664,
+            22.9006,
+            22.9316,
+            22.89972,
+            22.90372,
+            22.89024,
+            22.89468
+          ],
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume:march": [
+            2.02188,
+            1.79956,
+            1.8224,
+            1.80848,
+            1.81484,
+            1.80404,
+            1.80524,
+            1.83296,
+            1.81032,
+            1.93104,
+            1.8026,
+            1.92732,
+            1.92724,
+            2.19684,
+            1.94772,
+            1.8818,
+            1.97364,
+            1.78316,
+            2.10184,
+            1.83344,
+            1.80956,
+            1.78364,
+            1.80132,
+            1.79884,
+            1.79252,
+            1.80452,
+            1.81824,
+            1.88276,
+            1.79868,
+            1.8052,
+            1.7974,
+            1.79136
+          ],
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume:march": [
+            2.00424,
+            1.84376,
+            1.83244,
+            1.86904,
+            1.82648,
+            1.8638,
+            1.78884,
+            1.78464,
+            1.785,
+            1.83772,
+            1.98704,
+            1.89148,
+            1.90904,
+            2.12756,
+            1.8768,
+            1.87444,
+            1.99008,
+            1.78352,
+            1.81964,
+            1.88096,
+            1.78456,
+            1.81896,
+            1.77608,
+            1.78468,
+            1.81496,
+            1.7864,
+            1.7868,
+            1.78008,
+            1.775,
+            1.86924,
+            1.79216,
+            1.84048
+          ]
+        },
+        "summary": {
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 11.38156,
+            "p95": 11.39296,
+            "max": 11.3932
+          },
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:reconstruct": {
+            "count": 32,
+            "p50": 35.79432,
+            "p95": 35.92924,
+            "max": 36.162
+          },
+          "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume:march": {
+            "count": 32,
+            "p50": 22.92432,
+            "p95": 23.18172,
+            "max": 23.36056
+          },
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 1.80956,
+            "p95": 2.10184,
+            "max": 2.19684
+          },
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 1.82648,
+            "p95": 2.00424,
+            "max": 2.12756
+          }
+        }
+      },
+      {
+        "selected": {
+          "id": 12,
+          "name": "Westerlund 1-26 system",
+          "startupMs": 17503.200000047684
+        },
+        "view": {
+          "actorId": 127,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "name": "Ashfall Belt"
+        },
+        "mode": "volumeDraws",
+        "frames": 32,
+        "environment": {
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1
+        },
+        "camera": [
+          970267.8583235546,
+          7.803814118020094e-11,
+          -3621088.9442145475
+        ],
+        "orientation": [
+          -1.3585610992439083e-18,
+          0.9914448613738105,
+          1.031929605697032e-17,
+          0.13052619222005157
+        ],
+        "volumes": [
+          {
+            "id": 291,
+            "label": "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              32239913.327387907,
+              32239913.327387907,
+              32239913.327387907
+            ],
+            "resolution": 0.5,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 1
+          },
+          {
+            "id": 384,
+            "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125/RingDustVolume",
+            "visible": true,
+            "position": [
+              -4135098.585811441,
+              57389.9332388661,
+              3684047.9617632506
+            ],
+            "scale": [
+              0.9999999999999998,
+              1,
+              0.9999999999999998
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1"
+            }
+          },
+          {
+            "id": 402,
+            "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1",
+              "DUST_LIGHT_AT_ORIGIN": "1",
+              "DUST_CLUMPS": "1",
+              "DUST_PHASE_HG": "1",
+              "DUST_ARCS": "1"
+            }
+          }
+        ],
+        "gpu": {
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:march": [
+            11.9468,
+            11.94884,
+            11.95004,
+            11.94848,
+            11.9402,
+            11.95084,
+            11.95248,
+            11.937,
+            11.95416,
+            11.95964,
+            11.9416,
+            11.94208,
+            11.9496,
+            11.96724,
+            11.95164,
+            11.94392,
+            11.96068,
+            11.9586,
+            11.94576,
+            11.96712,
+            11.95056,
+            11.94216,
+            11.9466,
+            11.9584,
+            11.9506,
+            11.93152,
+            11.95712,
+            11.96432,
+            11.94652,
+            11.95128,
+            11.94212,
+            11.94396
+          ],
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:reconstruct": [
+            37.10804,
+            37.1226,
+            37.11168,
+            37.14064,
+            37.15156,
+            37.106,
+            37.46724,
+            37.08244,
+            37.1032,
+            37.10736,
+            37.1742,
+            37.0686,
+            37.16076,
+            37.1004,
+            37.1484,
+            37.09904,
+            37.09924,
+            37.22484,
+            37.14172,
+            37.41424,
+            37.17888,
+            37.14272,
+            37.2838,
+            37.12244,
+            37.16044,
+            37.12864,
+            37.14216,
+            37.18848,
+            37.10536,
+            37.16288,
+            37.1396,
+            37.16144
+          ],
+          "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume:march": [
+            23.07192,
+            23.01356,
+            23.02156,
+            22.99584,
+            23.01208,
+            23.1382,
+            23.02232,
+            23.00012,
+            22.99572,
+            23.03752,
+            23.1396,
+            22.99008,
+            23.0002,
+            23.00784,
+            23.081,
+            22.99676,
+            23.00068,
+            23.0262,
+            23.0172,
+            23.13248,
+            23.17764,
+            23.01068,
+            22.9986,
+            24.44696,
+            22.99296,
+            23.04964,
+            23.01088,
+            23.01604,
+            22.99236,
+            23.015,
+            23.032,
+            23.03768
+          ]
+        },
+        "summary": {
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 11.9496,
+            "p95": 11.96712,
+            "max": 11.96724
+          },
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:reconstruct": {
+            "count": 32,
+            "p50": 37.14064,
+            "p95": 37.41424,
+            "max": 37.46724
+          },
+          "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume:march": {
+            "count": 32,
+            "p50": 23.015,
+            "p95": 23.17764,
+            "max": 24.44696
+          }
+        }
+      }
+    ]
+  },
+  "applicationAfter": {
+    "startedAt": "2026-10-22T07:51:52.500Z",
+    "finishedAt": "2026-10-22T07:53:02.822Z",
+    "outcome": "completed",
+    "errors": [],
+    "warnings": [
+      "THREE.WebGLProgram: Program Info Log: (570,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (579,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+      "THREE.WebGLProgram: Program Info Log: (587,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)"
+    ],
+    "assetFailures": [],
+    "rows": [
+      {
+        "selected": {
+          "id": 13,
+          "name": "Alkaid system",
+          "startupMs": 30178.199999928474
+        },
+        "view": {
+          "actorId": 135,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            -756482.891680675,
+            3.683400263705484e-10,
+            -2078419.6630963914
+          ],
+          "name": "Frostwake Belt"
+        },
+        "mode": "volumeDraws",
+        "frames": 32,
+        "environment": {
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1
+        },
+        "camera": [
+          -756482.891680675,
+          3.683400263705484e-10,
+          -2078419.6630963914
+        ],
+        "orientation": [
+          1.445911537725195e-17,
+          0.984807753012208,
+          8.200171816676385e-17,
+          -0.1736481776669304
+        ],
+        "volumes": [
+          {
+            "id": 80,
+            "label": "MainScene/Alkaid system:128/Thalorn:130/ThalornEquatorialFrame/ThalornRing:132/ThalornRing/ThalornRing:132/AsteroidRingSystem:132/RingDustVolume",
+            "visible": true,
+            "position": [
+              640350.3571981807,
+              -28147.36825436294,
+              1216811.9738652841
+            ],
+            "scale": [
+              1,
+              0.9999999999999999,
+              0.9999999999999999
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1"
+            }
+          },
+          {
+            "id": 84,
+            "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              1374125.2112934375,
+              -19362.60532825277,
+              53639.79164838162
+            ],
+            "scale": [
+              26241.78991764132,
+              26241.78991764132,
+              26241.78991764132
+            ],
+            "resolution": 1,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 0
+          },
+          {
+            "id": 92,
+            "label": "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              -733774.854095257,
+              -8784.762926110168,
+              1163172.1822169023
+            ],
+            "scale": [
+              26241.78991764132,
+              26241.78991764132,
+              26241.78991764132
+            ],
+            "resolution": 1,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 0
+          },
+          {
+            "id": 126,
+            "label": "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              0.9999999999999998,
+              1,
+              0.9999999999999999
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1",
+              "DUST_LIGHT_AT_ORIGIN": "1",
+              "DUST_CLUMPS": "1",
+              "DUST_PHASE_HG": "1",
+              "DUST_ARCS": "1"
+            }
+          },
+          {
+            "id": 131,
+            "label": "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              14245543.098148145,
+              14245543.098148145,
+              14245543.098148145
+            ],
+            "resolution": 0.5,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 1
+          }
+        ],
+        "gpu": {
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:march": [
+            11.391,
+            11.38264,
+            11.37316,
+            11.38184,
+            11.38272,
+            11.38464,
+            11.37636,
+            11.3738,
+            11.38244,
+            11.38288,
+            11.36604,
+            11.4006,
+            11.38008,
+            11.3798,
+            11.38004,
+            11.37796,
+            11.38812,
+            11.37308,
+            11.3864,
+            11.38216,
+            11.38388,
+            11.37416,
+            11.38016,
+            11.37916,
+            11.37604,
+            11.38284,
+            11.38292,
+            11.38468,
+            11.3758,
+            11.37028,
+            11.38756,
+            11.377
+          ],
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:reconstruct": [
+            22.28964,
+            23.48608,
+            22.14064,
+            22.437,
+            22.4952,
+            22.40776,
+            22.4278,
+            22.2582,
+            22.20516,
+            22.34524,
+            22.3738,
+            22.07876,
+            22.2892,
+            22.09548,
+            22.33932,
+            22.154,
+            22.16592,
+            22.27376,
+            22.49408,
+            22.19484,
+            22.26268,
+            22.35284,
+            22.18108,
+            21.95432,
+            22.30072,
+            22.18924,
+            22.42488,
+            22.309,
+            22.16912,
+            22.39444,
+            22.26628,
+            22.1848
+          ],
+          "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume:march": [
+            23.15124,
+            22.93928,
+            22.92036,
+            22.9252,
+            22.9108,
+            22.90592,
+            22.9348,
+            22.91124,
+            22.9014,
+            22.9218,
+            22.91132,
+            22.90784,
+            22.90572,
+            22.92624,
+            22.89592,
+            22.8984,
+            22.94332,
+            22.99316,
+            22.95248,
+            23.03516,
+            22.91096,
+            22.93576,
+            22.93712,
+            22.90288,
+            22.91236,
+            22.91244,
+            22.90544,
+            22.99024,
+            22.97776,
+            22.9226,
+            23.06644,
+            22.94016
+          ],
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume:march": [
+            1.96004,
+            1.80292,
+            1.8044,
+            1.80676,
+            1.79632,
+            1.80584,
+            1.79516,
+            1.8158,
+            1.79124,
+            1.79408,
+            1.80072,
+            1.80028,
+            1.82892,
+            1.8312,
+            1.79792,
+            1.79316,
+            1.80496,
+            1.976,
+            1.82208,
+            1.87224,
+            1.78932,
+            1.79344,
+            1.80232,
+            1.79436,
+            1.87504,
+            1.79904,
+            1.92416,
+            1.80064,
+            1.86448,
+            1.81048,
+            1.85104,
+            1.80948
+          ],
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume:march": [
+            1.80976,
+            1.79472,
+            1.89192,
+            1.8032,
+            1.9208,
+            1.79504,
+            1.7882,
+            1.79616,
+            1.80908,
+            1.86908,
+            1.79424,
+            1.78708,
+            1.79552,
+            1.81564,
+            1.79352,
+            1.79076,
+            1.79296,
+            1.947,
+            1.78672,
+            1.84216,
+            1.83908,
+            1.81168,
+            1.83584,
+            1.7954,
+            1.80292,
+            1.8188,
+            1.86024,
+            1.80156,
+            1.84864,
+            1.82096,
+            1.89336,
+            1.79568
+          ]
+        },
+        "summary": {
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 11.38016,
+            "p95": 11.391,
+            "max": 11.4006
+          },
+          "MainScene/Alkaid system:128/Alkaid Veil:136/Nebula/NebulaVolume:reconstruct": {
+            "count": 32,
+            "p50": 22.27376,
+            "p95": 22.4952,
+            "max": 23.48608
+          },
+          "MainScene/Alkaid system:128/Frostwake Belt:135/AsteroidBelt/RingDustVolume:march": {
+            "count": 32,
+            "p50": 22.9218,
+            "p95": 23.06644,
+            "max": 23.15124
+          },
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L5 Cloud:138/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 1.8044,
+            "p95": 1.96004,
+            "max": 1.976
+          },
+          "MainScene/Alkaid system:128/Thalorn:130/Thalorn L4 Cloud:137/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 1.8032,
+            "p95": 1.9208,
+            "max": 1.947
+          }
+        }
+      },
+      {
+        "selected": {
+          "id": 12,
+          "name": "Westerlund 1-26 system",
+          "startupMs": 8001.200000047684
+        },
+        "view": {
+          "actorId": 127,
+          "kind": "belt",
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "requestedPosition": [
+            970267.8583235546,
+            7.803814118020094e-11,
+            -3621088.9442145475
+          ],
+          "name": "Ashfall Belt"
+        },
+        "mode": "volumeDraws",
+        "frames": 32,
+        "environment": {
+          "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            720
+          ],
+          "devicePixelRatio": 1
+        },
+        "camera": [
+          970267.8583235546,
+          7.803814118020094e-11,
+          -3621088.9442145475
+        ],
+        "orientation": [
+          -1.3585610992439083e-18,
+          0.9914448613738105,
+          1.031929605697032e-17,
+          0.13052619222005157
+        ],
+        "volumes": [
+          {
+            "id": 291,
+            "label": "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              32239913.327387907,
+              32239913.327387907,
+              32239913.327387907
+            ],
+            "resolution": 0.5,
+            "defines": {
+              "NEB_BAKED": "",
+              "NEB_BAKED_ONLY": ""
+            },
+            "ready": 1,
+            "lod": 1
+          },
+          {
+            "id": 384,
+            "label": "MainScene/Westerlund 1-26 system:116/Halcyra:120/HalcyraEquatorialFrame/HalcyraRing:125/HalcyraRing/HalcyraRing:125/AsteroidRingSystem:125/RingDustVolume",
+            "visible": true,
+            "position": [
+              -4135081.6354803285,
+              57389.98557078921,
+              3684068.7080931063
+            ],
+            "scale": [
+              0.9999999999999998,
+              1,
+              0.9999999999999998
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1"
+            }
+          },
+          {
+            "id": 402,
+            "label": "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume",
+            "visible": true,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "defines": {
+              "USE_LIGHT_TINT": "1",
+              "DUST_LIGHT_AT_ORIGIN": "1",
+              "DUST_CLUMPS": "1",
+              "DUST_PHASE_HG": "1",
+              "DUST_ARCS": "1"
+            }
+          }
+        ],
+        "gpu": {
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:march": [
+            11.9378,
+            11.94436,
+            11.92828,
+            11.93068,
+            11.92988,
+            11.92092,
+            11.90524,
+            11.94368,
+            12.16632,
+            11.93764,
+            11.95948,
+            11.9406,
+            11.91648,
+            11.92704,
+            11.92088,
+            11.92164,
+            11.91816,
+            11.91472,
+            11.9338,
+            11.93692,
+            11.9396,
+            11.93912,
+            12.39392,
+            11.926,
+            11.93032,
+            11.93192,
+            11.92708,
+            11.94116,
+            11.929,
+            11.91988,
+            11.93256,
+            11.9754
+          ],
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:reconstruct": [
+            23.97692,
+            23.43496,
+            23.97184,
+            23.59196,
+            23.674,
+            23.5598,
+            23.70828,
+            23.95248,
+            24.97648,
+            23.7302,
+            23.93464,
+            23.6224,
+            23.58112,
+            23.5686,
+            23.764,
+            23.39092,
+            23.52588,
+            23.56452,
+            23.99732,
+            24.21564,
+            23.68804,
+            23.6858,
+            23.95528,
+            23.70144,
+            23.42868,
+            24.36416,
+            23.41,
+            23.42788,
+            23.513,
+            23.44196,
+            23.4214,
+            23.9812
+          ],
+          "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume:march": [
+            23.82028,
+            23.26144,
+            23.11464,
+            23.03924,
+            23.03308,
+            23.23612,
+            23.05976,
+            23.54332,
+            27.54708,
+            23.21912,
+            23.2142,
+            23.1218,
+            23.07632,
+            23.02112,
+            23.0888,
+            23.03104,
+            23.10744,
+            23.1058,
+            23.09572,
+            23.33808,
+            23.59196,
+            23.2058,
+            23.19824,
+            23.13812,
+            23.0858,
+            23.20136,
+            23.04436,
+            23.18244,
+            23.10716,
+            23.05572,
+            23.01372,
+            23.07336
+          ]
+        },
+        "summary": {
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:march": {
+            "count": 32,
+            "p50": 11.93068,
+            "p95": 12.16632,
+            "max": 12.39392
+          },
+          "MainScene/Westerlund 1-26 system:116/W26 Nebula:118/Nebula/NebulaVolume:reconstruct": {
+            "count": 32,
+            "p50": 23.674,
+            "p95": 24.36416,
+            "max": 24.97648
+          },
+          "MainScene/Westerlund 1-26 system:116/Ashfall Belt:127/AsteroidBelt/RingDustVolume:march": {
+            "count": 32,
+            "p50": 23.10744,
+            "p95": 23.82028,
+            "max": 27.54708
+          }
+        }
+      }
+    ]
+  },
+  "validation": {
+    "unitAndTypecheck": {
+      "command": "npm test -- --run --maxWorkers=4 --reporter=dot",
+      "exitCode": 0,
+      "passed": 5452,
+      "skipped": 7,
+      "filesPassed": 551,
+      "filesSkipped": 2,
+      "durationSeconds": 277.18
+    },
+    "lint": {
+      "command": "npm run lint",
+      "exitCode": 0
+    },
+    "build": {
+      "command": "npm run build -- --base=/titan-engine-dev/",
+      "fsDriver": "s3",
+      "exitCode": 0,
+      "viteSeconds": 12.11,
+      "warning": "Existing chunks over 500 kB after minification"
+    },
+    "browser": {
+      "command": "TITAN_BROWSER_CHANNEL=chrome TITAN_BROWSER_GPU=native npm run test:browser",
+      "exitCode": 0,
+      "stats": {
+        "startTime": "2026-10-22T07:59:32.689Z",
+        "duration": 160517.70500000002,
+        "expected": 36,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  }
+}

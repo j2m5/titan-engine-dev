@@ -1,5 +1,5 @@
-// Reconstruct premultiplied HDR only across matching scene depths. At a depth
-// discontinuity the caller raymarches this full-resolution pixel instead.
+// Reconstruct premultiplied HDR from neighbours with matching scene depths.
+// Without a matching sample, the caller raymarches this full-resolution pixel.
 export const nebulaUpsamplingChunk = `
   uniform sampler2D uLowResolutionMap;
   uniform vec2 uLowResolutionSize;
@@ -23,15 +23,21 @@ export const nebulaUpsamplingChunk = `
     vec4 weights = vec4((1.0-f.x)*(1.0-f.y), f.x*(1.0-f.y), (1.0-f.x)*f.y, f.x*f.y);
     float depth = texture(uSceneDepth, uv).r;
     result = vec4(0.0);
+    float weightSum = 0.0;
     for (int i = 0; i < 4; i++) {
       if (weights[i] <= 0.0) continue;
       ivec2 p = clamp(base + ivec2(i % 2, i / 2), ivec2(0), ivec2(uLowResolutionSize) - 1);
       // The shared target may be larger than this volume's viewport. Fetch by
       // texel, while scene depth uses that viewport's normalized coordinates.
       vec2 sourceUV = (vec2(p) + 0.5) / uLowResolutionSize;
-      if (!nebulaMatchingDepth(depth, texture(uSceneDepth, sourceUV).r)) return false;
+      if (!nebulaMatchingDepth(depth, texture(uSceneDepth, sourceUV).r)) continue;
       result += texelFetch(uLowResolutionMap, p, 0) * weights[i];
+      weightSum += weights[i];
     }
+    // A silhouette can reject some neighbours without invalidating the others.
+    // Normalize RGB and alpha together to retain premultiplied HDR and opacity.
+    if (weightSum <= 0.0) return false;
+    result /= weightSum;
     return true;
   }
 `
