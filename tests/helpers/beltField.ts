@@ -1,4 +1,6 @@
-import { PerspectiveCamera, Vector3, type InstancedMesh } from 'three'
+import { PerspectiveCamera, Vector3 } from 'three'
+import type { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
+import { poolSourceStreams } from './ringSystemInternals'
 import { toAstronomicalUnits } from '@/core/helpers/scaling'
 import { AU } from '@/core/constants'
 import { PIXEL_RAD } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
@@ -15,7 +17,7 @@ const km = (units: number): number => toAstronomicalUnits(units) * AU
  * такое пересечение в never.
  */
 type StreamerInternals = {
-  pool: { geometryMeshes: InstancedMesh[]; nearMeshes: InstancedMesh[]; billboardMesh: InstancedMesh }
+  pool: InstancePool
   originGroup: { position: Vector3 } | null
   config: { asteroidSizeKm: number }
   getDebugInfo(): { activeSectors: number; poolPressure: { totalFailures: number } }
@@ -34,10 +36,9 @@ type StreamerInternals = {
  */
 function countLiveInstances(streamer: StreamerInternals): number {
   let count = 0
-  const meshes = [...streamer.pool.geometryMeshes, ...streamer.pool.nearMeshes, streamer.pool.billboardMesh]
-  for (const mesh of meshes) {
-    const m = mesh.instanceMatrix.array as Float32Array
-    for (let i = 0; i < mesh.count; i++) {
+  for (const stream of poolSourceStreams(streamer.pool)) {
+    const m = stream.matrix.array as Float32Array
+    for (let i = 0; i < stream.count; i++) {
       const scale = Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2])
       if (scale >= 1e-9) count++
     }
@@ -95,13 +96,11 @@ export function measureBeltField(belt: AsteroidBelt, cameraWorld: Vector3, frame
     // Габарит архетипа общий на пул (см. AsteroidBelt.__createStreamer): матричный
     // масштаб — безразмерный множитель к нему, а не км сам по себе
     const asteroidSizeKm = streamer.config.asteroidSizeKm
-    const meshes = [...streamer.pool.geometryMeshes, ...streamer.pool.nearMeshes, streamer.pool.billboardMesh]
+    for (const stream of poolSourceStreams(streamer.pool)) {
+      const m = stream.matrix.array as Float32Array
+      const origins = stream.origin.array as Float32Array
 
-    for (const mesh of meshes) {
-      const m = mesh.instanceMatrix.array as Float32Array
-      const origins = mesh.geometry.getAttribute('instanceOrigin')?.array as Float32Array | undefined
-
-      for (let i = 0; i < mesh.count; i++) {
+      for (let i = 0; i < stream.count; i++) {
         // Масштаб инстанса — длина первого столбца матрицы (поворот длину сохраняет)
         const scale = Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2])
         // Пустой слот внутри high-water mark: масштаб нулевой

@@ -1,9 +1,10 @@
-import { BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry, Vector3 } from 'three'
+import { BufferGeometry, Camera, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry, Vector3 } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import type { Actor } from '@/core/models/Actor'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 import type { PreparedImpostorUpdate } from './impostors/impostorTypes'
 import { trackImpostorGeometry } from './impostors/impostorGeometry'
+import { NearInstanceVisibility } from './NearInstanceVisibility'
 
 /** Фактические ёмкости, включая запас и округление каждого архетипа. */
 export function instancePoolCapacities(l0Max: number, nearMax: number, l1Max: number, archetypeCount: number): readonly number[] {
@@ -58,11 +59,12 @@ interface PoolLayerConfig {
 interface Stream {
   mesh: InstancedMesh
   freeList: FreeRange[]
-  /** Текущий максимальный занятый индекс (определяет .count меша) */
+  /** Верхняя граница слотов аллокатора; Near после отсечения рисует меньше. */
   hwm: number
   /** Счётчик отказов allocate() — диагностика исчерпания стрима */
   failures: number
   capacity: number
+  visibility?: NearInstanceVisibility
 }
 
 /**
@@ -79,7 +81,7 @@ interface Stream {
 class InstancePool {
   /** Geometry-меши, по одному на архетип (стримы 0..K-1) */
   public readonly geometryMeshes: InstancedMesh[]
-  /** Near-меши, по одному на архетип, свой detail (стримы K..2K-1) */
+  /** Near-меши: после updateNearVisibility содержат только видимые экземпляры. */
   public readonly nearMeshes: InstancedMesh[]
   /** Материал, общий для ВСЕХ Geometry- и Near-мешей (один инстанс на 2K геометрий) */
   public readonly geometryMaterial: InstancedAsteroidMaterial
@@ -329,6 +331,7 @@ class InstancePool {
     this.atlasAttributes = false
     for (const stream of this.streams) for (const name of ['instanceArchetype', 'instanceDetailEnd', 'instanceDetailMix']) {
       stream.mesh.geometry.deleteAttribute(name)
+      stream.visibility?.attributes.delete(name)
     }
     this.dirtyImpostorAttributes.clear()
     this.geometryMaterial.uniforms.uImpostorReady.value = 0
@@ -346,17 +349,27 @@ class InstancePool {
 
   /** InstancedBufferAttribute fade для заданного стрима. */
   private fadeAttribute(stream: number): InstancedBufferAttribute {
-    return this.streams[stream].mesh.geometry.getAttribute('instanceFade') as InstancedBufferAttribute
+    return this.instanceAttribute(stream, 'instanceFade')!
   }
 
   /** InstancedBufferAttribute origin (смещение сектора) для заданного стрима. */
   private originAttribute(stream: number): InstancedBufferAttribute {
-    return this.streams[stream].mesh.geometry.getAttribute('instanceOrigin') as InstancedBufferAttribute
+    return this.instanceAttribute(stream, 'instanceOrigin')!
   }
 
   /** InstancedBufferAttribute порога fade билборда СВОЕГО каскада для заданного стрима. */
   private maxDistanceAttribute(stream: number): InstancedBufferAttribute {
-    return this.streams[stream].mesh.geometry.getAttribute('instanceMaxDistance') as InstancedBufferAttribute
+    return this.instanceAttribute(stream, 'instanceMaxDistance')!
+  }
+
+  private matrixAttribute(stream: number): InstancedBufferAttribute {
+    const s = this.streams[stream]
+    return s.visibility?.matrix ?? s.mesh.instanceMatrix
+  }
+
+  private instanceAttribute(stream: number, name: string): InstancedBufferAttribute | undefined {
+    const s = this.streams[stream]
+    return s.visibility ? s.visibility.attributes.get(name) : s.mesh.geometry.getAttribute(name) as InstancedBufferAttribute | undefined
   }
 
   /**
@@ -411,7 +424,7 @@ class InstancePool {
    * Записать матрицы экземпляров в буфер стрима.
    */
   public writeMatrices(stream: number, offset: number, matrices: Float32Array): void {
-    const attr = this.streams[stream].mesh.instanceMatrix
+    const attr = this.matrixAttribute(stream)
     const dst = attr.array as Float32Array
     dst.set(matrices, offset * 16)
     attr.addUpdateRange(offset * 16, matrices.length)
@@ -468,7 +481,7 @@ class InstancePool {
   public writeArchetypes(allocation: Allocation, ids: Int32Array): void {
     if (!this.impostorAttributes) return
     if (ids.length !== allocation.count) throw new RangeError('Число ID не совпадает с аллокацией')
-    const attr = this.streams[allocation.stream].mesh.geometry.getAttribute('instanceArchetype') as InstancedBufferAttribute | undefined
+    const attr = this.instanceAttribute(allocation.stream, 'instanceArchetype')
     if (!attr) return
     ;(attr.array as Float32Array).set(ids, allocation.offset)
     attr.addUpdateRange(allocation.offset, allocation.count)
@@ -485,7 +498,7 @@ class InstancePool {
 
   private writeImpostorScalar({ stream, offset, count }: Allocation, name: string, value: number): void {
     if (!this.impostorAttributes) return
-    const attr = this.streams[stream].mesh.geometry.getAttribute(name) as InstancedBufferAttribute | undefined
+    const attr = this.instanceAttribute(stream, name)
     if (!attr) return
     ;(attr.array as Float32Array).fill(value, offset, offset + count)
     attr.addUpdateRange(offset, count)
@@ -505,8 +518,9 @@ class InstancePool {
   public commitUpdates(): void {
     for (const stream of this.dirtyStreams) {
       const s = this.streams[stream]
-      InstancePool.coalesceRanges(s.mesh.instanceMatrix)
-      s.mesh.instanceMatrix.needsUpdate = true
+      const matrix = this.matrixAttribute(stream)
+      InstancePool.coalesceRanges(matrix)
+      matrix.needsUpdate = true
       s.mesh.count = s.hwm
     }
 
@@ -537,6 +551,24 @@ class InstancePool {
     this.dirtyFadeStreams.clear()
     this.dirtyOriginStreams.clear()
     this.dirtyMaxDistanceStreams.clear()
+    // CPU-only source versions drive compact uploads. Their pending ranges
+    // cannot be consumed by WebGLAttributes, so clear them here.
+    for (const stream of this.streams) if (stream.visibility) {
+      stream.visibility.matrix.clearUpdateRanges()
+      for (const attribute of stream.visibility.attributes.values()) attribute.clearUpdateRanges()
+    }
+  }
+
+  /** Use the render camera, independently of the wider sector-prewarm frustum. */
+  public updateNearVisibility(camera: Camera): void {
+    const uniforms = this.geometryMaterial.uniforms
+    const amplitude = Math.max(Math.abs(uniforms.uShapeAmpMin.value), Math.abs(uniforms.uShapeAmpMax.value))
+    for (let i = this.nearStreamBase; i < this.billboardStream; i++) {
+      const stream = this.streams[i]
+      if (!stream.visibility && stream.hwm === 0) continue
+      stream.visibility ??= new NearInstanceVisibility(stream.mesh)
+      stream.visibility.update(camera, stream.hwm, amplitude)
+    }
   }
 
   /**
@@ -642,12 +674,12 @@ class InstancePool {
   }
 
   private clearInstances(stream: number, offset: number, count: number): void {
-    const mesh = this.streams[stream].mesh
-    const dst = mesh.instanceMatrix.array as Float32Array
+    const matrix = this.matrixAttribute(stream)
+    const dst = matrix.array as Float32Array
     for (let i = 0; i < count; i++) {
       dst.set(InstancePool.ZERO_MATRIX, (offset + i) * 16)
     }
-    mesh.instanceMatrix.addUpdateRange(offset * 16, count * 16)
+    matrix.addUpdateRange(offset * 16, count * 16)
 
     // Обнулить fade освобождённого диапазона — чтобы переиспользуемый слот не
     // унаследовал остаточную видимость до первой записи менеджером.

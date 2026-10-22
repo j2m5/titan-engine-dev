@@ -8,7 +8,8 @@ import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/d
 import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/RadialDensityProfile'
 import { AngularDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/AngularDensityProfile'
 import { FloatingOrigin } from '@/core/renderables/DetailedRingStreamingSystem/FloatingOrigin'
-import type { Group } from 'three'
+import type { Group, InstancedBufferAttribute, InstancedMesh } from 'three'
+import type { NearInstanceVisibility } from '@/core/renderables/DetailedRingStreamingSystem/NearInstanceVisibility'
 
 /**
  * Приватные поля системы, к которым обращаются тесты. Типы взяты с объявлений
@@ -35,6 +36,18 @@ export const internalsOf = (system: AsteroidRingSystem): RingSystemInternals => 
 /** Поле `pool` приватно, а всё внутри него — публично. Тонкая обёртка над internalsOf,
  *  форма уже разошлась по сайтам вызова. */
 export const poolOf = (system: AsteroidRingSystem): InstancePool => internalsOf(system).pool
+
+/** Allocation identity lives in CPU slots; Near draw slots are compacted per view. */
+export const poolSourceStreams = (pool: InstancePool) => {
+  const streams = (pool as unknown as { streams: {
+    mesh: InstancedMesh; hwm: number; visibility?: NearInstanceVisibility
+  }[] }).streams
+  return streams.map(s => ({
+    count: s.hwm,
+    matrix: s.visibility?.matrix ?? s.mesh.instanceMatrix,
+    origin: s.visibility?.attributes.get('instanceOrigin') ?? s.mesh.geometry.getAttribute('instanceOrigin') as InstancedBufferAttribute
+  }))
+}
 
 /** Поле `thresholds` приватно в SectorManager — отдельный аксессор, не часть RingSystemInternals. */
 export const thresholdsOf = (manager: SectorManager): LODThresholds =>

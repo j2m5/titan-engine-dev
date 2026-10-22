@@ -1134,6 +1134,7 @@ class AsteroidRingSystem extends Group {
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
+    this.pool.updateNearVisibility(camera)
 
     // Диагностика: молчаливые отказы аллокации = сектора пропадают из рендера
     // (дырки в L0 при заполненном пуле). Подсвечиваем в dev, не чаще раза в 5с.

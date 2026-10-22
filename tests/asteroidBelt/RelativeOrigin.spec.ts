@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { PerspectiveCamera, Vector3 } from 'three'
-import type { Group, InstancedMesh } from 'three'
+import type { Group } from 'three'
 import '@/core/framework/TitanThree'
 
 const fakeTexture = { name: 'ring.png' }
@@ -23,6 +23,7 @@ import { AsteroidGenerator } from '@/core/renderables/DetailedRingStreamingSyste
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { InstancedAsteroidShaderTemplate } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
 import { billboardVertexSource } from '../helpers/billboardSource'
+import { poolSourceStreams } from '../helpers/ringSystemInternals'
 import { withoutComments } from '../helpers/glsl'
 import { internalsOf, poolOf, generatorConfigOf } from '../helpers/ringSystemInternals'
 import { fromAstronomicalUnits } from '@/core/helpers/scaling'
@@ -213,13 +214,6 @@ const frameAt = (system: AsteroidRingSystem, x: number): void => {
   system.updateView(camera)
 }
 
-/** Все меши пула одним списком (K Geometry + K Near + billboard) */
-const streamMeshes = (system: AsteroidRingSystem): InstancedMesh[] => {
-  const pool = poolOf(system)
-
-  return [...pool.geometryMeshes, ...pool.nearMeshes, pool.billboardMesh]
-}
-
 /**
  * Абсолютные центры секторов по всем слотам всех стримов:
  * originGroup.position + instanceOrigin (по X). Эта сумма — свойство САМОГО
@@ -232,13 +226,13 @@ const sectorAnchors = (system: AsteroidRingSystem): ({ anchor: number; local: nu
   const groupX = (internalsOf(system).originGroup as Group).position.x
   const out: ({ anchor: number; local: number } | null)[] = []
 
-  for (const mesh of streamMeshes(system)) {
-    const origins = mesh.geometry.getAttribute('instanceOrigin').array as Float32Array
-    const matrices = mesh.instanceMatrix.array as Float32Array
+  for (const stream of poolSourceStreams(poolOf(system))) {
+    const origins = stream.origin.array as Float32Array
+    const matrices = stream.matrix.array as Float32Array
 
-    for (let i = 0; i < mesh.geometry.getAttribute('instanceOrigin').count; i++) {
+    for (let i = 0; i < stream.origin.count; i++) {
       const m = i * 16
-      const alive = i < mesh.count && matrices[m] ** 2 + matrices[m + 1] ** 2 + matrices[m + 2] ** 2 > 0
+      const alive = i < stream.count && matrices[m] ** 2 + matrices[m + 1] ** 2 + matrices[m + 2] ** 2 > 0
       out.push(alive ? { anchor: groupX + origins[i * 3], local: matrices[m + 12] } : null)
     }
   }
