@@ -202,7 +202,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.CameraCollision),
           c.get(Tokens.BodyInfoService),
           c.get(Tokens.GaiaSky),
-          c.get(Tokens.AsteroidImpostorLibrary)
+          c.get(Tokens.AsteroidImpostorLibrary),
+          c.get(Tokens.NebulaBakeQueue)
         )
     )
 

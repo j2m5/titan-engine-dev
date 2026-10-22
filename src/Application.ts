@@ -16,6 +16,7 @@ import { config } from '@/core/framework/config'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
+import type { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 
 class Application {
   private everLoaded: boolean = false
@@ -44,7 +45,8 @@ class Application {
      * приложения — это «назад к сценариям», небо при этом не освобождается
      */
     private gaiaSky?: Pick<GaiaSky, 'start'>,
-    private asteroidImpostors?: Pick<AsteroidImpostorLibrary, 'prepareInitial' | 'clear'>
+    private asteroidImpostors?: Pick<AsteroidImpostorLibrary, 'prepareInitial' | 'clear'>,
+    private nebulaBakes?: Pick<NebulaBakeQueue, 'prepareInitial'>
   ) {}
 
   /**
@@ -121,6 +123,10 @@ class Application {
     this.everLoaded = true
     this.engine.initialize()
     await this.asteroidImpostors?.prepareInitial()
+    if (generation !== this.runGeneration) return
+    // Density is queued by initialize(). Preparing it while loading avoids
+    // dozens of procedural raymarch frames competing with their own bake work.
+    await this.nebulaBakes?.prepareInitial(() => generation === this.runGeneration)
     if (generation !== this.runGeneration) return
     this.engine.start()
 

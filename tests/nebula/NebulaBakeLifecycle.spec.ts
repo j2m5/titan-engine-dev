@@ -23,6 +23,22 @@ function setup(maxTextureBytes = 64 * 1024 ** 2) {
 }
 
 describe('Nebula bake lifecycle', () => {
+  it('keeps the live fallback after an initial bake failure and prepares the other nebula', async () => {
+    const { create, volumeOf, render, queue } = setup()
+    const first = create(), second = create()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      render.mockImplementationOnce(() => { throw new Error('initial density failure') })
+      await expect(queue.prepareInitial()).resolves.toBeUndefined()
+      expect(volumeOf(first).visible).toBe(true)
+      expect(volumeOf(first).material.uniforms.uDensityReady.value).toBe(0)
+      expect(volumeOf(first).material.uniforms.uLodBlend.value).toBe(1)
+      expect(volumeOf(second).material.uniforms.uDensityReady.value).toBe(1)
+      expect(queue.pendingCount).toBe(0)
+      expect(error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ message: 'initial density failure' }))
+    } finally { first.dispose(); second.dispose(); error.mockRestore() }
+  })
+
   it('submits no constructor work and publishes only complete density and impostor generations', () => {
     const { create, volumeOf, frame, render, queue } = setup()
     const nebula = create()

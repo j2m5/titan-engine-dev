@@ -21,6 +21,20 @@ class NebulaBakeQueue {
 
   public cancel(key: object): void { this.jobs.delete(key) }
 
+  /** Finish initial density before the first expensive live frame, yielding between bounded chunks. */
+  public async prepareInitial(isCurrent: () => boolean = () => true): Promise<void> {
+    while (isCurrent() && this.jobs.size > 0) {
+      try {
+        this.pumpFrame()
+      } catch (error) {
+        // Nebula releases a failed bake and keeps its live fallback. Preserve
+        // the frame loop's recovery behavior while preparing the other jobs.
+        console.error('[NebulaBakeQueue] Initial bake failed; using live fallback:', error)
+      }
+      if (this.jobs.size > 0) await new Promise<void>(resolve => setTimeout(resolve, 0))
+    }
+  }
+
   public pumpFrame(): void {
     const start = this.now()
     for (let i = 0; i < this.budget.maxStepsPerFrame && this.jobs.size > 0; i++) {

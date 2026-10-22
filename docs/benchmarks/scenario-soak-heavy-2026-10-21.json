@@ -1,0 +1,454 @@
+{
+  "startedAt": "2026-10-21T13:53:26.810Z",
+  "finishedAt": "2026-10-21T13:56:19.626Z",
+  "outcome": "completed",
+  "failure": null,
+  "options": {
+    "rounds": 2,
+    "dwellMs": 10000,
+    "scenarioIds": [
+      13,
+      12
+    ],
+    "assetSource": {
+      "driver": "s3",
+      "url": "https://storage.yandexcloud.net",
+      "bucket": "textures"
+    },
+    "mode": "Vite development, real configured assets, 1280x720 DPR1; actual GPU recorded in each row"
+  },
+  "totalRequests": 1176,
+  "successfulAssetResponses": 636,
+  "notes": [
+    "Warmup rows are excluded from summary.",
+    "Frame intervals include GPU and main-thread work; no hardware-independent FPS threshold.",
+    "Renderer counts are live objects, not VRAM bytes. JS heap is sampled after explicit GC.",
+    "Gaia and renderer session caches may remain between scenarios. Inspect per-scenario rows before inferring a leak."
+  ],
+  "summary": {
+    "menuCanvases": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "createdWebGLContexts": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuGeometries": {
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    "menuTextures": {
+      "first": 0,
+      "last": 0,
+      "min": 0,
+      "max": 0
+    },
+    "menuPrograms": {
+      "first": 0,
+      "last": 0,
+      "min": 0,
+      "max": 0
+    },
+    "heapBytesAfterGC": {
+      "first": 53969876,
+      "last": 55039760,
+      "min": 53969876,
+      "max": 55039760
+    }
+  },
+  "byScenario": [
+    {
+      "id": 13,
+      "name": "Alkaid system",
+      "samples": 2,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 53969876,
+        "last": 54527692,
+        "min": 53969876,
+        "max": 54527692
+      },
+      "requests": {
+        "first": 172,
+        "last": 32,
+        "min": 32,
+        "max": 172
+      }
+    },
+    {
+      "id": 12,
+      "name": "Westerlund 1-26 system",
+      "samples": 2,
+      "menuGeometries": {
+        "first": 1,
+        "last": 1,
+        "min": 1,
+        "max": 1
+      },
+      "menuTextures": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "menuPrograms": {
+        "first": 0,
+        "last": 0,
+        "min": 0,
+        "max": 0
+      },
+      "heapBytesAfterGC": {
+        "first": 54565120,
+        "last": 55039760,
+        "min": 54565120,
+        "max": 55039760
+      },
+      "requests": {
+        "first": 159,
+        "last": 20,
+        "min": 20,
+        "max": 159
+      }
+    }
+  ],
+  "rows": [
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 35855.40000009537
+      },
+      "frames": {
+        "count": 353,
+        "p50": 33.299999999995634,
+        "p95": 50,
+        "p99": 66.69999999999709,
+        "max": 66.89999999999418,
+        "elapsedMs": 10058.100000023842
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 19563,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 19609,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 52585220,
+      "requests": 152
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "scenario": {
+        "id": 12,
+        "name": "Westerlund 1-26 system",
+        "startupMs": 15747.300000071526
+      },
+      "frames": {
+        "count": 368,
+        "p50": 16.80000000000291,
+        "p95": 33.5,
+        "p99": 50.10000000000582,
+        "max": 984.1999999999971,
+        "elapsedMs": 10069.200000047684
+      },
+      "active": {
+        "geometries": 25,
+        "textures": 72,
+        "programs": 47,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 36931,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 37011,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 53748520,
+      "requests": 128
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 13126.899999976158
+      },
+      "frames": {
+        "count": 342,
+        "p50": 33.30000000000291,
+        "p95": 50,
+        "p99": 66.69999999999709,
+        "max": 66.69999999999709,
+        "elapsedMs": 10041.5
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 56188,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 56234,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 53969876,
+      "requests": 172
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "scenario": {
+        "id": 12,
+        "name": "Westerlund 1-26 system",
+        "startupMs": 13267.100000023842
+      },
+      "frames": {
+        "count": 365,
+        "p50": 33.20000000001164,
+        "p95": 50,
+        "p99": 66.70000000001164,
+        "max": 100,
+        "elapsedMs": 10058.299999952316
+      },
+      "active": {
+        "geometries": 25,
+        "textures": 72,
+        "programs": 47,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 73516,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 73604,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54565120,
+      "requests": 159
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 13,
+        "name": "Alkaid system",
+        "startupMs": 16693.5
+      },
+      "frames": {
+        "count": 344,
+        "p50": 33.29999999998836,
+        "p95": 50.09999999997672,
+        "p99": 66.70000000001164,
+        "max": 83.60000000000582,
+        "elapsedMs": 10070.399999976158
+      },
+      "active": {
+        "geometries": 26,
+        "textures": 79,
+        "programs": 45,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 92855,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 92947,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 54527692,
+      "requests": 32
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "scenario": {
+        "id": 12,
+        "name": "Westerlund 1-26 system",
+        "startupMs": 8139.899999976158
+      },
+      "frames": {
+        "count": 365,
+        "p50": 33.20000000001164,
+        "p95": 50.10000000000582,
+        "p99": 66.70000000001164,
+        "max": 83.60000000000582,
+        "elapsedMs": 10043.199999928474
+      },
+      "active": {
+        "geometries": 25,
+        "textures": 72,
+        "programs": 47,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 110189,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "menu": {
+        "geometries": 1,
+        "textures": 0,
+        "programs": 0,
+        "canvases": 1,
+        "createdWebGLContexts": 1,
+        "renderCalls": 1,
+        "frame": 110277,
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 1
+      },
+      "heapBytesAfterGC": 55039760,
+      "requests": 20
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "THREE.WebGLProgram: Program Info Log: (570,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (579,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (578,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)",
+    "THREE.WebGLProgram: Program Info Log: (587,1): warning X4000: use of potentially uninitialized variable (f_ringDustPieceMask)"
+  ],
+  "assetFailures": []
+}
