@@ -49,8 +49,8 @@ export function createDustClumpGradientTexture(): DataTexture {
 export const dustClumpNoiseFunctions = `
   uniform sampler2D uDustClumpGradients;
 
-  vec4 dustClumpPermute(vec4 x) {
-    vec4 p = ((x * 34.0) + 1.0) * x;
+  vec2 dustClumpPermute(vec2 x) {
+    vec2 p = ((x * 34.0) + 1.0) * x;
     return p - floor(p * (1.0 / 289.0)) * 289.0;
   }
 
@@ -68,7 +68,9 @@ export const dustClumpNoiseFunctions = `
 
     i = mod(i, 289.0);
     vec4 gx = i.x + vec4(0.0, i1.x, i2.x, 1.0);
-    vec4 gy = dustClumpPermute(i.z + vec4(0.0, i1.z, i2.z, 1.0))
+    // Corner Z offsets are exactly 0 or 1; reuse the two permutations.
+    vec2 zPerm = dustClumpPermute(i.z + vec2(0.0, 1.0));
+    vec4 gy = vec4(zPerm.x, i1.z == 0.0 ? zPerm.x : zPerm.y, i2.z == 0.0 ? zPerm.x : zPerm.y, zPerm.y)
       + i.y + vec4(0.0, i1.y, i2.y, 1.0);
     // Nearest/repeat fetches the exact gradient, wrapping both permutations'
     // period. Explicit LOD avoids derivative work inside the raymarch loop.
