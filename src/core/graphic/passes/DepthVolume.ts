@@ -1,4 +1,4 @@
-import type { Object3D, Texture, Vector2 } from 'three'
+import type { BufferGeometry, Camera, Mesh, Object3D, ShaderMaterial, Texture, Vector2 } from 'three'
 
 /**
  * Слой графа сцены для объёмов, которые рисует DepthVolumePass. Основной
@@ -87,6 +87,21 @@ export function isScaledDepthVolume(volume: DepthVolume): volume is ScaledDepthV
   const candidate = volume as Partial<ScaledDepthVolume>
   return typeof candidate.resolutionScale === 'number' &&
     typeof candidate.bindLowResolution === 'function' && typeof candidate.unbindLowResolution === 'function'
+}
+
+/** Opt-in shader modes DEPTH_VOLUME_RECONSTRUCT / DEPTH_VOLUME_FALLBACK.
+ * A closed BackSide proxy covers each pixel once; depth comes from the scene sampler.
+ * Callbacks must only refresh the current draw's uniforms (as for a multipass material). */
+export type StencilDepthVolume = ScaledDepthVolume & Mesh<BufferGeometry, ShaderMaterial> & {
+  readonly supportsStencilReconstruction: true
+  /** MSAA composition is safe only when every viewport sample has proxy coverage. */
+  coversReconstructionViewport?(camera: Camera): boolean
+}
+
+export function isStencilDepthVolume(volume: DepthVolume): volume is StencilDepthVolume {
+  const candidate = volume as Partial<StencilDepthVolume>
+  return isScaledDepthVolume(volume) && candidate.supportsStencilReconstruction === true &&
+    candidate.isMesh === true && candidate.material?.isShaderMaterial === true
 }
 
 /** Optional local-position metadata for independent, per-volume history. */

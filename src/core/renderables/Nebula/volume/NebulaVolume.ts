@@ -1,4 +1,4 @@
-import { BackSide, BoxGeometry, Camera, Matrix4, Mesh, Object3D, Scene, Texture, Vector2, Vector3, WebGLRenderer } from 'three'
+import { BackSide, BoxGeometry, Camera, Matrix4, Mesh, Object3D, PerspectiveCamera, Scene, Texture, Vector2, Vector3, WebGLCoordinateSystem, WebGLRenderer, type BufferAttribute } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
 import { UpdateContext } from '@/core/UpdateContext'
@@ -19,6 +19,7 @@ import { IMPOSTOR_FRAME_FILL } from './lod'
  */
 class NebulaVolume extends Mesh implements TemporalDepthVolume, Disposable {
   declare public material: NebulaRaymarchMaterial
+  public readonly supportsStencilReconstruction = true
 
   /** Bounds actual density + billboard, rather than the larger raster proxy. */
   public readonly boundingRadius = Math.max(Math.sqrt(3), Math.SQRT2 / IMPOSTOR_FRAME_FILL)
@@ -26,6 +27,13 @@ class NebulaVolume extends Mesh implements TemporalDepthVolume, Disposable {
   private static readonly _cameraWorld = new Vector3()
   private static readonly _starLocal = new Vector3()
   private readonly inverseWorld = new Matrix4()
+  private readonly reconstructionMatrix = new Matrix4()
+  private readonly reconstructionPoint = new Vector3()
+  private readonly proxyGeometry = this.geometry
+  private readonly proxyPosition = this.geometry.getAttribute('position') as BufferAttribute
+  private readonly proxyIndex = this.geometry.index!
+  private readonly proxyPositions = this.proxyPosition.array.slice()
+  private readonly proxyIndices = this.proxyIndex.array.slice()
   private impostorFrame: Object3D | null = null
 
   /** Star world position (lighting), or null. Transformed to local space per frame. */
@@ -99,6 +107,42 @@ class NebulaVolume extends Mesh implements TemporalDepthVolume, Disposable {
   /** Far impostors are already cheap texture draws; keep them at native resolution. */
   public get resolutionScale(): number {
     return this.material.uniforms.uLodBlend.value <= 0 ? 1 : this.quality.resolutionScale
+  }
+
+  /** A convex box encloses all viewport rays when its near-plane rectangle is
+   * strictly inside and the entire box is before the far plane. Then composition
+   * covers every MSAA sample; partial proxy edges keep the original draw. */
+  public coversReconstructionViewport(camera: Camera): boolean {
+    if (!(camera instanceof PerspectiveCamera) || camera.coordinateSystem !== WebGLCoordinateSystem || camera.reversedDepth ||
+      !Number.isFinite(camera.far) || camera.far <= camera.near || this.geometry !== this.proxyGeometry ||
+      this.geometry.getAttribute('position') !== this.proxyPosition || this.geometry.index !== this.proxyIndex ||
+      this.proxyPosition.version !== 0 || this.proxyIndex.version !== 0 || this.geometry.drawRange.start !== 0 ||
+      this.geometry.drawRange.count < this.proxyIndex.count) return false
+    // setXYZ/setX before the first upload need not increment attribute.version.
+    // Certify the actual small box, not only its attribute identities/versions.
+    if (this.proxyPosition.itemSize !== 3 || this.proxyIndex.itemSize !== 1 ||
+      this.proxyPosition.count !== this.proxyPositions.length / 3 || this.proxyIndex.count !== this.proxyIndices.length ||
+      this.proxyPosition.array.length !== this.proxyPositions.length || this.proxyIndex.array.length !== this.proxyIndices.length ||
+      this.proxyPosition.array.constructor !== this.proxyPositions.constructor || this.proxyIndex.array.constructor !== this.proxyIndices.constructor) return false
+    for (let i = 0; i < this.proxyPositions.length; i++) if (this.proxyPosition.array[i] !== this.proxyPositions[i]) return false
+    for (let i = 0; i < this.proxyIndices.length; i++) if (this.proxyIndex.array[i] !== this.proxyIndices[i]) return false
+    this.updateWorldMatrix(true, false)
+    camera.updateWorldMatrix(true, false)
+    const determinant = this.matrixWorld.determinant()
+    if (!Number.isFinite(determinant) || determinant === 0 || camera.projectionMatrix.determinant() === 0) return false
+    const matrix = this.reconstructionMatrix, point = this.reconstructionPoint
+    matrix.copy(this.matrixWorld).invert().multiply(camera.matrixWorld).multiply(camera.projectionMatrixInverse)
+    for (let i = 0; i < 4; i++) {
+      point.set(i & 1 ? 1 : -1, i & 2 ? 1 : -1, -1).applyMatrix4(matrix)
+      // A local margin rejects uncertain boundary coverage after float32 rasterization.
+      if (![point.x, point.y, point.z].every(value => Number.isFinite(value) && Math.abs(value) < 2 - 1e-5)) return false
+    }
+    matrix.multiplyMatrices(camera.matrixWorldInverse, this.matrixWorld)
+    for (let i = 0; i < 8; i++) {
+      point.set(i & 1 ? 2 : -2, i & 2 ? 2 : -2, i & 4 ? 2 : -2).applyMatrix4(matrix)
+      if (!Number.isFinite(point.z) || -point.z >= camera.far * (1 - 1e-6)) return false
+    }
+    return true
   }
 
   public bindLowResolution(texture: Texture, size: Vector2): void {

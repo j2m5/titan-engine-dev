@@ -1,6 +1,7 @@
 import { Color, type PerspectiveCamera, type Texture, Vector2, Vector4, type WebGLRenderer, type WebGLRenderTarget } from 'three'
 import { isScaledDepthVolume, isTemporalDepthVolume, type DepthVolume } from './DepthVolume'
 import { createVolumeTarget, DepthVolumeHistory, temporalWeight } from './DepthVolumeHistory'
+import { DepthVolumeReconstructionRenderer } from './DepthVolumeReconstructionRenderer'
 
 function scaleOf(volume: DepthVolume): number {
   if (!isScaledDepthVolume(volume) || !Number.isFinite(volume.resolutionScale)) return 1
@@ -14,6 +15,7 @@ export class DepthVolumeResolutionRenderer {
   private readonly viewport = new Vector4()
   private readonly clearColor = new Color()
   private readonly history: DepthVolumeHistory
+  private readonly reconstruction = new DepthVolumeReconstructionRenderer()
   private renderer: WebGLRenderer | null = null
   private readonly resetHistory = () => this.history.clear()
 
@@ -21,6 +23,7 @@ export class DepthVolumeResolutionRenderer {
 
   public prepare(volumes: readonly DepthVolume[], resolution: Vector2): void {
     this.history.prepare(volumes, resolution)
+    this.reconstruction.prepare(volumes)
     let largestScale = 0
     let count = 1
     for (const volume of volumes) {
@@ -84,7 +87,7 @@ export class DepthVolumeResolutionRenderer {
       renderer.setRenderTarget(output)
       volume.bindSceneDepth(sceneDepth, resolution, logFarFactor)
       volume.bindLowResolution(image, this.lowSize)
-      renderer.render(volume, camera)
+      if (!this.reconstruction.render(renderer, output, camera, volume, resolution)) renderer.render(volume, camera)
       if (frame) this.history.commit(frame)
     } catch (error) {
       if (frame) this.history.invalidate(frame)
@@ -101,6 +104,7 @@ export class DepthVolumeResolutionRenderer {
   public dispose(): void {
     this.detachRenderer()
     this.history.dispose()
+    this.reconstruction.dispose()
     this.target?.dispose()
     this.target = null
   }

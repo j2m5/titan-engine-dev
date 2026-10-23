@@ -46,7 +46,9 @@ export function checkNebulaTemporal(baked = true): Record<string, number> {
   renderer.render = (object, view) => {
     draw(object, view)
     const output = renderer.getRenderTarget()
-    if (output && output !== target) {
+    // Capture/history both carry color and representative-position attachments.
+    // The separate full-float stencil scratch is not a temporal resolve image.
+    if (output && output !== target && output.textures.length === 2) {
       if (object === volume) capture = read(renderer, output)
       else resolved = read(renderer, output)
     }

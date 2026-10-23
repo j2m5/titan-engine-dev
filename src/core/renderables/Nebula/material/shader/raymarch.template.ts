@@ -259,6 +259,12 @@ export const nebulaRaymarchFragment = `
   void main() {
     vec4 result = vec4(0.0);
     temporalPosition = vec4(0.0);
+    #ifdef DEPTH_VOLUME_RECONSTRUCT
+      // This small program marks matched pixels in a separate stencil target.
+      if (!nebulaLowResolution(result)) discard;
+      fragColor = result;
+    #else
+    #ifndef DEPTH_VOLUME_FALLBACK
     if (nebulaLowResolution(result)) {
       // Keep reconstruction as an early fragment exit. On ANGLE/D3D11 the
       // inverse branch retained the march's GPU cost even for reconstructed
@@ -266,6 +272,7 @@ export const nebulaRaymarchFragment = `
       fragColor = result;
       return;
     }
+    #endif
     vec3 ro = uCameraLocal;
     vec3 rd = normalize(vLocalPos - ro);
     result = vec4(0.0);
@@ -277,6 +284,7 @@ export const nebulaRaymarchFragment = `
     // Transparent self-emission (absorption=0) still adds radiance to the scene.
     if (result.a <= 0.0 && all(lessThanEqual(result.rgb, vec3(0.0)))) discard;
     fragColor = result;
+    #endif
   }
 `
 

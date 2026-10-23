@@ -20,6 +20,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula light transport', path: 'nebula/lightTransport', name: 'checkNebulaLightTransport' },
   { title: 'nebula lighting images', path: 'nebula/lightTransport', name: 'checkNebulaLightingImages' },
   { title: 'nebula resolution', path: 'nebula/resolution', name: 'checkNebulaResolution' },
+  { title: 'nebula stencil reconstruction', path: 'nebula/stencilReconstruction', name: 'checkNebulaStencilReconstruction' },
   { title: 'nebula reconstruction', path: 'nebula/reconstruction', name: 'checkNebulaReconstruction' },
   { title: 'nebula resolution fields', path: 'nebula/resolution', name: 'checkNebulaResolutionFields' },
   { title: 'nebula temporal baked', path: 'nebula/temporal', name: 'checkNebulaTemporal', args: [true] },
