@@ -1,7 +1,7 @@
 import { BufferAttribute, Camera, Frustum, InstancedBufferAttribute, InstancedMesh, Matrix4 } from 'three'
 
 /** Stable CPU allocation slots, compacted into the mesh's existing GPU buffers. */
-export class NearInstanceVisibility {
+export class GeometryInstanceVisibility {
   public readonly matrix: InstancedBufferAttribute
   public readonly attributes = new Map<string, InstancedBufferAttribute>()
   private readonly slots: Uint32Array

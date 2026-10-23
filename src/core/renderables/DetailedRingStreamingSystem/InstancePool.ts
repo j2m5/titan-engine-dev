@@ -4,7 +4,7 @@ import type { Actor } from '@/core/models/Actor'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 import type { PreparedImpostorUpdate } from './impostors/impostorTypes'
 import { trackImpostorGeometry } from './impostors/impostorGeometry'
-import { NearInstanceVisibility } from './NearInstanceVisibility'
+import { GeometryInstanceVisibility } from './GeometryInstanceVisibility'
 
 /** Фактические ёмкости, включая запас и округление каждого архетипа. */
 export function instancePoolCapacities(l0Max: number, nearMax: number, l1Max: number, archetypeCount: number): readonly number[] {
@@ -59,12 +59,12 @@ interface PoolLayerConfig {
 interface Stream {
   mesh: InstancedMesh
   freeList: FreeRange[]
-  /** Верхняя граница слотов аллокатора; Near после отсечения рисует меньше. */
+  /** Верхняя граница слотов аллокатора; геометрия после отсечения рисует меньше. */
   hwm: number
   /** Счётчик отказов allocate() — диагностика исчерпания стрима */
   failures: number
   capacity: number
-  visibility?: NearInstanceVisibility
+  visibility?: GeometryInstanceVisibility
 }
 
 /**
@@ -79,9 +79,9 @@ interface Stream {
  * через независимый free-list аллокатор. Итого 2K+1 draw call.
  */
 class InstancePool {
-  /** Geometry-меши, по одному на архетип (стримы 0..K-1) */
+  /** Geometry-меши по архетипам (стримы 0..K-1); после отсечения содержат только видимые экземпляры. */
   public readonly geometryMeshes: InstancedMesh[]
-  /** Near-меши: после updateNearVisibility содержат только видимые экземпляры. */
+  /** Near-меши: после updateGeometryVisibility содержат только видимые экземпляры. */
   public readonly nearMeshes: InstancedMesh[]
   /** Материал, общий для ВСЕХ Geometry- и Near-мешей (один инстанс на 2K геометрий) */
   public readonly geometryMaterial: InstancedAsteroidMaterial
@@ -560,13 +560,13 @@ class InstancePool {
   }
 
   /** Use the render camera, independently of the wider sector-prewarm frustum. */
-  public updateNearVisibility(camera: Camera): void {
+  public updateGeometryVisibility(camera: Camera): void {
     const uniforms = this.geometryMaterial.uniforms
     const amplitude = Math.max(Math.abs(uniforms.uShapeAmpMin.value), Math.abs(uniforms.uShapeAmpMax.value))
-    for (let i = this.nearStreamBase; i < this.billboardStream; i++) {
+    for (let i = 0; i < this.billboardStream; i++) {
       const stream = this.streams[i]
       if (!stream.visibility && stream.hwm === 0) continue
-      stream.visibility ??= new NearInstanceVisibility(stream.mesh)
+      stream.visibility ??= new GeometryInstanceVisibility(stream.mesh)
       stream.visibility.update(camera, stream.hwm, amplitude)
     }
   }

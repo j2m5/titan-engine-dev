@@ -5,7 +5,7 @@ import {
 import { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 
 /** Compare the real asteroid program and depth, with allocations fixed across view changes. */
-export function checkNearVisibility(): Record<string, { submitted: number; reference: number; different: number }> {
+function checkLayerVisibility(layer: 'near' | 'l0'): Record<string, { submitted: number; reference: number; different: number }> {
   const renderer = new WebGLRenderer({ logarithmicDepthBuffer: true })
   renderer.setSize(128, 128)
   const target = new WebGLRenderTarget(128, 128, { type: FloatType })
@@ -19,13 +19,14 @@ export function checkNearVisibility(): Record<string, { submitted: number; refer
   const blit = new Mesh(new PlaneGeometry(2, 2), depthMaterial)
   const blitCamera = new OrthographicCamera(), camera = new PerspectiveCamera(60, 1, 0.1, 100)
   const shape = new IcosahedronGeometry(0.7, 2)
-  const pools = [0, 1].map(() => new InstancePool({ maxInstances: 1 }, { maxInstances: 32 }, { maxInstances: 1 }, [shape], [shape], 1, undefined, false, false, true))
-  const groups = pools.map(pool => { const group = new Group(); group.add(pool.nearMeshes[0]); return group })
+  const pools = [0, 1].map(() => new InstancePool({ maxInstances: 32 }, { maxInstances: 32 }, { maxInstances: 1 }, [shape], [shape], 1, undefined, false, false, true))
+  const streamOf = (pool: InstancePool) => layer === 'near' ? pool.nearStreamBase : 0
+  const groups = pools.map(pool => { const group = new Group(); group.add(layer === 'near' ? pool.nearMeshes[0] : pool.geometryMeshes[0]); return group })
   const results: Record<string, { submitted: number; reference: number; different: number }> = {}
   const positions = [[0, 0, -5], [0, 0, 5], [2.7, 0, -5], [-2.7, 0, -5], [0, 2.7, -5], [0, -2.7, -5], [20, 0, -5], [-20, 0, -5]]
   for (const pool of pools) {
     for (const [i, xyz] of positions.entries()) {
-      const allocation = pool.allocate(pool.nearStreamBase, 1)!
+      const allocation = pool.allocate(streamOf(pool), 1)!
       pool.writeMatrices(allocation.stream, allocation.offset, new Float32Array(new Matrix4().makeTranslation(...xyz as [number, number, number]).elements))
       pool.writeFade(allocation.stream, allocation.offset, 1, i === 2 ? -0.5 : 0.8)
       pool.writeDetailEnd(allocation, 20); pool.writeDetailMix(allocation, 0.8)
@@ -52,7 +53,7 @@ export function checkNearVisibility(): Record<string, { submitted: number; refer
   }
   const check = (name: string) => {
     camera.updateMatrixWorld(true)
-    pools[1].updateNearVisibility(camera)
+    pools[1].updateGeometryVisibility(camera)
     const baseline = render(0), compact = render(1)
     let different = 0, covered = 0
     for (let i = 0; i < baseline.color.length; i++) {
@@ -61,7 +62,7 @@ export function checkNearVisibility(): Record<string, { submitted: number; refer
     }
     if (!covered) throw new Error(`${name}: empty reference image`)
     if (different) throw new Error(`${name}: ${different} color/depth components differ`)
-    if (compact.triangles >= baseline.triangles) throw new Error(`${name}: no submitted geometry saved`)
+    if (compact.triangles >= baseline.triangles) throw new Error(`${layer}/${name}: no submitted geometry saved`)
     if (renderer.getContext().getError()) throw new Error(`${name}: WebGL error`)
     results[name] = { submitted: compact.triangles, reference: baseline.triangles, different }
   }
@@ -80,7 +81,7 @@ export function checkNearVisibility(): Record<string, { submitted: number; refer
     const shift = new Vector3(100, 20, 40)
     for (const [i, pool] of pools.entries()) {
       groups[i].position.add(shift.clone().multiply(groups[i].scale))
-      pool.writeOrigins(pool.nearStreamBase, 0, positions.length, shift.clone().negate())
+      pool.writeOrigins(streamOf(pool), 0, positions.length, shift.clone().negate())
       pool.commitUpdates()
     }
     check('floating origin rebase')
@@ -96,4 +97,8 @@ export function checkNearVisibility(): Record<string, { submitted: number; refer
     shape.dispose(); replacement?.dispose(); blit.geometry.dispose(); depthMaterial.dispose()
     target.dispose(); depthTarget.dispose(); renderer.dispose()
   }
+}
+
+export function checkGeometryVisibility() {
+  return { near: checkLayerVisibility('near'), l0: checkLayerVisibility('l0') }
 }

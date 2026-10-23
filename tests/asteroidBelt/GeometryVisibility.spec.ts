@@ -1,30 +1,30 @@
 import { BoxGeometry, Group, InstancedBufferAttribute, Matrix4, PerspectiveCamera, Vector3 } from 'three'
 import { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 
-const setup = () => {
+const setup = (layer: 'near' | 'l0') => {
   const geometry = new BoxGeometry(1, 1, 1)
   const pool = new InstancePool({ maxInstances: 16 }, { maxInstances: 16 }, { maxInstances: 16 }, [geometry], [geometry], 1, undefined, false, false, true)
   const camera = new PerspectiveCamera(60, 1, 0.1, 100)
   camera.updateMatrixWorld(true)
-  const mesh = pool.nearMeshes[0], stream = pool.nearStreamBase
+  const mesh = layer === 'near' ? pool.nearMeshes[0] : pool.geometryMeshes[0], stream = layer === 'near' ? pool.nearStreamBase : 0
   const add = (x: number, y: number, z: number) => {
     const allocation = pool.allocate(stream, 1)!
     pool.writeMatrices(stream, allocation.offset, new Float32Array(new Matrix4().makeTranslation(x, y, z).elements))
     pool.writeFade(stream, allocation.offset, 1, 1)
     return allocation
   }
-  const update = () => { camera.updateMatrixWorld(true); pool.commitUpdates(); pool.updateNearVisibility(camera) }
+  const update = () => { camera.updateMatrixWorld(true); pool.commitUpdates(); pool.updateGeometryVisibility(camera) }
   return { pool, camera, mesh, stream, add, update }
 }
 
-describe('Near instance visibility', () => {
+describe.each(['near', 'l0'] as const)('%s instance visibility', layer => {
   it('submits only visible slots and restores the others immediately on a camera turn', () => {
-    const { pool, camera, mesh, add, update } = setup()
+    const { pool, camera, mesh, add, update } = setup(layer)
     add(0, 0, -5); add(0, 0, 5); add(20, 0, -5)
     update()
     expect(mesh.count).toBe(1)
     expect(mesh.instanceMatrix.array[14]).toBe(-5)
-    expect(pool.getPressureInfo().near.used).toBe(3)
+    expect(pool.getPressureInfo()[layer].used).toBe(3)
     camera.rotation.y = Math.PI
     update()
     expect(mesh.count).toBe(1)
@@ -35,7 +35,7 @@ describe('Near instance visibility', () => {
   })
 
   it('keeps source slots and all per-instance attributes paired through writes, release and reuse', () => {
-    const { pool, mesh, stream, add, update } = setup()
+    const { pool, mesh, stream, add, update } = setup(layer)
     const hidden = add(30, 0, -5), visible = add(0, 0, -5)
     pool.writeFade(stream, visible.offset, 1, -0.4)
     pool.writeDetailEnd(visible, 17); pool.writeDetailMix(visible, 0.7)
@@ -60,11 +60,11 @@ describe('Near instance visibility', () => {
     update()
     expect(mesh.count).toBe(2)
     expect(mesh.instanceMatrix.array[13]).toBe(1)
-    expect(pool.getPressureInfo().near.used).toBe(2)
+    expect(pool.getPressureInfo()[layer].used).toBe(2)
   })
 
   it('preserves visibility when floating origin and transformed parents move together', () => {
-    const { pool, mesh, stream, camera, add, update } = setup()
+    const { pool, mesh, stream, camera, add, update } = setup(layer)
     const parent = new Group()
     parent.position.set(1e8, 2e8, -3e8); parent.scale.set(2, 3, 0.5); parent.rotation.y = 0.3
     parent.add(mesh); parent.updateMatrixWorld(true)
@@ -80,7 +80,7 @@ describe('Near instance visibility', () => {
   })
 
   it('refreshes off-center spin bounds after a geometry swap and position edits', () => {
-    const { pool, mesh, add, update } = setup()
+    const { pool, mesh, add, update } = setup(layer)
     add(5, 0, -5)
     update()
     expect(mesh.count).toBe(0)
@@ -96,7 +96,7 @@ describe('Near instance visibility', () => {
   })
 
   it('keeps geometry that can enter the view after residual displacement', () => {
-    const { pool, mesh, add, update } = setup()
+    const { pool, mesh, add, update } = setup(layer)
     add(4.1, 0, -5)
     update()
     expect(mesh.count).toBe(0)
@@ -106,7 +106,7 @@ describe('Near instance visibility', () => {
   })
 
   it('does not upload unchanged attributes, bounds changed uploads, and survives context fallback/reset', () => {
-    const { pool, mesh, stream, add, update } = setup()
+    const { pool, mesh, stream, add, update } = setup(layer)
     const allocation = add(0, 0, -5)
     add(20, 0, -5)
     update()
@@ -132,4 +132,19 @@ describe('Near instance visibility', () => {
     expect(mesh.count).toBe(1)
     expect(mesh.instanceMatrix.array[14]).toBe(-7)
   })
+})
+
+it('keeps allocator counts independent while culling both geometry tiers and retaining billboards', () => {
+  const { pool, add, update } = setup('l0')
+  add(0, 0, -5); add(0, 0, 5); add(20, 0, -5)
+  for (const [stream, z] of [[pool.nearStreamBase, -5], [pool.nearStreamBase, 5], [pool.billboardStream, 5]]) {
+    const allocation = pool.allocate(stream, 1)!
+    pool.writeMatrices(stream, allocation.offset, new Float32Array(new Matrix4().makeTranslation(0, 0, z).elements))
+    pool.writeFade(stream, allocation.offset, 1, 1)
+  }
+  update()
+  expect(pool.geometryMeshes[0].count).toBe(1)
+  expect(pool.nearMeshes[0].count).toBe(1)
+  expect(pool.billboardMesh.count).toBe(1)
+  expect(pool.getActiveCount()).toEqual({ l0: 3, near: 2, l1: 1, total: 6 })
 })
