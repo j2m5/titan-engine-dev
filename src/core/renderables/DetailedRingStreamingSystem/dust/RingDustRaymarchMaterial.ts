@@ -152,6 +152,17 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             #endif`
       : ''
 
+    // Clumpy system belts normally have neither shadow. Guard both calls before
+    // entering their helpers; even disabled uniform branches cost GPU time in
+    // this loop. Keep live uniform switching and the plain ring program intact.
+    const shadowContribChunk = options.clumps
+      ? `if (uDustPlanetRadius <= 0.0 && uRingBandEnabled < 0.5) {
+              litTau += contrib;
+            } else {
+              litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);
+            }`
+      : 'litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);'
+
     // Дуги вставляются тем же приёмом: без options.arcs текст фрагментного
     // шейдера остаётся байт-в-байт прежним.
     const arcsDeclChunk = options.arcs
@@ -406,7 +417,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;${clumpContribChunk}${arcsContribChunk}${phaseContribChunk}
             tau += contrib;
             // Тень планеты и самозатенение слоя кольца — на каждом шаге
-            litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);
+            ${shadowContribChunk}
             #ifdef DUST_LIGHT_AT_ORIGIN
               // Звезда в начале ring-local: направление на неё своё в каждой точке марша
               vec3 toStar = -p / max(length(p), 1e-6);
