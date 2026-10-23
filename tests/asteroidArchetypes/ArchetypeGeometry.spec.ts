@@ -13,7 +13,8 @@ describe('buildArchetypeGeometry: запекание осколка', () => {
   it('та же тесселяция, что у IcosahedronGeometry той же детализации', () => {
     const geometry = buildArchetypeGeometry(makeShape(5), 3, 1)
     const reference = new IcosahedronGeometry(1, 3)
-    expect(geometry.getAttribute('position').count).toBe(reference.getAttribute('position').count)
+    expect(geometry.index?.count).toBe(reference.getAttribute('position').count)
+    geometry.dispose(); reference.dispose()
   })
 
   it('габарит: максимум |вершины| ≈ radius (допуск межсеточного расхождения), минимум > 0', () => {

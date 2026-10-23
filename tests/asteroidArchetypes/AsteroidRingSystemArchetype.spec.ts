@@ -21,8 +21,10 @@ const makeFakeActor = (): Actor =>
 describe('AsteroidRingSystem: запечённый архетип в L0', () => {
   it('L0-геометрия — запечённый осколок: тесселяция detail 3, радиусы вершин НЕ равны константе', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const pos = poolOf(system).geometryMeshes[0].geometry.getAttribute('position')
-    expect(pos.count).toBe(new IcosahedronGeometry(1, 3).getAttribute('position').count)
+    const geometry = poolOf(system).geometryMeshes[0].geometry
+    const pos = geometry.getAttribute('position'), reference = new IcosahedronGeometry(1, 3)
+    expect(geometry.index?.count).toBe(reference.getAttribute('position').count)
+    reference.dispose()
     // Икосаэдр имел бы все |v| = asteroidSize; у осколка радиусы разные
     const radii = new Set<number>()
     for (let i = 0; i < 30; i++) {

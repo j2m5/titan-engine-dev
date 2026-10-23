@@ -15,7 +15,26 @@ function buildArchetypeGeometry(
 ): BufferGeometry {
   const source = new IcosahedronGeometry(1, detail)
   const sourcePos = source.getAttribute('position')
-  const count = sourcePos.count
+  // Икосфера повторяет вершины для каждого угла треугольника. Одинаковые
+  // входные биты дают одинаковые позицию, нормаль и surfaceData: запекаем
+  // направление один раз, сохраняя порядок треугольников через индекс.
+  // Ключ по битам (включая знак нуля), без допуска и склейки близких точек.
+  const sourceArray = sourcePos.array as Float32Array
+  const directionBits = new Uint32Array(sourceArray.buffer, sourceArray.byteOffset, sourceArray.length)
+  const uniqueDirections = new Map<string, number>()
+  const sourceIndices: number[] = []
+  const indices: number[] = []
+  for (let i = 0; i < sourcePos.count; i++) {
+    const key = `${directionBits[i * 3]},${directionBits[i * 3 + 1]},${directionBits[i * 3 + 2]}`
+    let index = uniqueDirections.get(key)
+    if (index === undefined) {
+      index = sourceIndices.length
+      uniqueDirections.set(key, index)
+      sourceIndices.push(i)
+    }
+    indices.push(index)
+  }
+  const count = sourceIndices.length
 
   const positions = new Float32Array(count * 3)
   const normals = new Float32Array(count * 3)
@@ -25,9 +44,10 @@ function buildArchetypeGeometry(
   const EPS = 1e-3
 
   for (let i = 0; i < count; i++) {
-    let dx = sourcePos.getX(i)
-    let dy = sourcePos.getY(i)
-    let dz = sourcePos.getZ(i)
+    const sourceIndex = sourceIndices[i]
+    let dx = sourcePos.getX(sourceIndex)
+    let dy = sourcePos.getY(sourceIndex)
+    let dz = sourcePos.getZ(sourceIndex)
     const invLen = 1 / Math.hypot(dx, dy, dz)
     dx *= invLen
     dy *= invLen
@@ -101,6 +121,7 @@ function buildArchetypeGeometry(
   geometry.setAttribute('position', new BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new BufferAttribute(normals, 3))
   geometry.setAttribute('surfaceData', new BufferAttribute(surfaceData, 4))
+  geometry.setIndex(indices)
   source.dispose()
   return geometry
 }

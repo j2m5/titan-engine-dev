@@ -17,10 +17,10 @@ const makeFakeActor = (): Actor =>
   }) as unknown as Actor
 
 describe('AsteroidRingSystem: интеграция формы', () => {
-  it('дефолтом ставит detail 3 на L0-геометрию (960 позиций)', () => {
+  it('дефолтом ставит detail 3 на L0-геометрию (320 треугольников)', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
     const geom = poolOf(system).geometryMeshes[0].geometry
-    expect(geom.getAttribute('position').count).toBe(960)
+    expect(geom.index?.count).toBe(960)
   })
 
   it('дефолтом кладёт диапазон амплитуды и частоту в L0-материал', () => {
@@ -41,7 +41,7 @@ describe('AsteroidRingSystem: интеграция формы', () => {
     })
     const geom = poolOf(system).geometryMeshes[0].geometry
     const u = poolOf(system).geometryMaterial.uniforms
-    expect(geom.getAttribute('position').count).toBe(240)
+    expect(geom.index?.count).toBe(240)
     expect(u.uShapeAmpMin.value).toBe(0)
     expect(u.uShapeAmpMax.value).toBe(0)
   })

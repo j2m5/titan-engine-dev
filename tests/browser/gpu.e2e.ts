@@ -6,6 +6,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'dust clump lookup', path: 'ringDust/clumpLookup', name: 'checkDustClumpLookup' },
   { title: 'ring dust analytic program', path: 'ringDust/analyticProgram', name: 'checkRingDustAnalyticProgram' },
   { title: 'asteroid geometry visibility', path: 'asteroidBelt/geometryVisibility', name: 'checkGeometryVisibility' },
+  { title: 'asteroid archetype indexing', path: 'asteroidArchetypes/indexing', name: 'checkArchetypeIndexing' },
   { title: 'water ocean surface', path: 'water/oceanView', name: 'checkOceanView' },
   { title: 'nebula seed', path: 'nebula/rendering', name: 'checkNebulaSeed' },
   { title: 'nebula world precision', path: 'nebula/rendering', name: 'checkNebulaWorldPrecision' },
