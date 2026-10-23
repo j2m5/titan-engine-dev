@@ -13,7 +13,7 @@ const setup = (layer: 'near' | 'l0') => {
     pool.writeFade(stream, allocation.offset, 1, 1)
     return allocation
   }
-  const update = () => { camera.updateMatrixWorld(true); pool.commitUpdates(); pool.updateGeometryVisibility(camera) }
+  const update = () => { camera.updateMatrixWorld(true); pool.commitUpdates(); pool.updateVisibility(camera) }
   return { pool, camera, mesh, stream, add, update }
 }
 

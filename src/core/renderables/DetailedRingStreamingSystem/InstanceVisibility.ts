@@ -1,7 +1,8 @@
 import { BufferAttribute, Camera, Frustum, InstancedBufferAttribute, InstancedMesh, Matrix4 } from 'three'
+import { IMPOSTOR_SLOT_CAPACITY } from './impostors/impostorLayout'
 
 /** Stable CPU allocation slots, compacted into the mesh's existing GPU buffers. */
-export class GeometryInstanceVisibility {
+export class InstanceVisibility {
   public readonly matrix: InstancedBufferAttribute
   public readonly attributes = new Map<string, InstancedBufferAttribute>()
   private readonly slots: Uint32Array
@@ -42,10 +43,7 @@ export class GeometryInstanceVisibility {
     // by 3.52; octave weights 0.5+0.25 bound fbm by 2.64. Use 4 for margin.
     // An origin-centered sphere also encloses off-center models at every spin.
     const radius = this.radius * (1 + 4 * Math.abs(shapeAmplitude))
-    mesh.updateWorldMatrix(true, false)
-    this.projection.multiplyMatrices(camera.matrixWorldInverse, mesh.matrixWorld)
-    this.projection.premultiply(camera.projectionMatrix)
-    this.frustum.setFromProjectionMatrix(this.projection, camera.coordinateSystem)
+    this.updateFrustum(camera)
     const matrices = this.matrix.array, origins = this.attributes.get('instanceOrigin')!.array
     let visibleCount = 0, changed = false
     for (let slot = 0; slot < count; slot++) {
@@ -69,6 +67,70 @@ export class GeometryInstanceVisibility {
       if (this.slots[visibleCount] !== slot) changed = true
       this.slots[visibleCount++] = slot
     }
+    this.commitVisible(visibleCount, changed)
+  }
+
+  public updateImpostors(camera: Camera, count: number, halfExtents: Float32Array, physicalSize: number): void {
+    const details = this.attributes.get('instanceDetailEnd'), archetypes = this.attributes.get('instanceArchetype')
+    if (!details || !archetypes || !halfExtents || halfExtents.length < IMPOSTOR_SLOT_CAPACITY || !Number.isFinite(physicalSize) || physicalSize <= 0) {
+      this.restore(count)
+      return
+    }
+    this.updateFrustum(camera)
+    const matrices = this.matrix.array, origins = this.attributes.get('instanceOrigin')!.array
+    let visibleCount = 0, changed = false
+    for (let slot = 0; slot < count; slot++) {
+      // The same draw can contain legacy billboards. Their footprint is not
+      // described by the atlas, so retain their source slots unchanged.
+      if (details.getX(slot) > 0) {
+        const halfExtent = halfExtents[Math.trunc(Math.max(0, Math.min(IMPOSTOR_SLOT_CAPACITY - 1, archetypes.getX(slot))))]
+        const m = slot * 16, o = slot * 3
+        const a = matrices[m], b = matrices[m + 1], c = matrices[m + 2]
+        const d = matrices[m + 4], e = matrices[m + 5], f = matrices[m + 6]
+        const g = matrices[m + 8], h = matrices[m + 9], i = matrices[m + 10]
+        // Match the atlas shader's rejection of invalid captures/degenerate slots.
+        if (halfExtent <= 0 || Math.abs(a * (e * i - f * h) - d * (b * i - c * h) + g * (b * f - c * e)) < 1e-20) continue
+        // The first capture-plane square reaches sqrt(2)*h, beyond the model
+        // radius h. Use 2*h for margin. Frobenius bounds the maximum stretch
+        // under scale/shear/reflection and is invariant under shader spin.
+        // One sqrt per slot avoids four expensive directional support norms.
+        const radius = 2 * halfExtent * physicalSize * Math.sqrt(a*a + b*b + c*c + d*d + e*e + f*f + g*g + h*h + i*i)
+        const x = matrices[m + 12] + origins[o], y = matrices[m + 13] + origins[o + 1], z = matrices[m + 14] + origins[o + 2]
+        const epsilon = 1e-5 * (1 + Math.abs(x) + Math.abs(y) + Math.abs(z))
+        let visible = true
+        // Three's first four planes are the sides. Preserve the shader's
+        // reconstructed/logarithmic depth behavior at the near/far planes.
+        for (let p = 0; p < 4; p++) {
+          const plane = this.frustum.planes[p], n = plane.normal
+          if (n.x * x + n.y * y + n.z * z + plane.constant < -radius - epsilon) { visible = false; break }
+        }
+        if (!visible) continue
+      }
+      if (this.slots[visibleCount] !== slot) changed = true
+      this.slots[visibleCount++] = slot
+    }
+    this.commitVisible(visibleCount, changed)
+  }
+
+  /** Atlas loading, fallback and attribute removal must restore hidden slots. */
+  public restore(count: number): void {
+    let changed = false
+    for (let slot = 0; slot < count; slot++) {
+      if (this.slots[slot] !== slot) changed = true
+      this.slots[slot] = slot
+    }
+    this.commitVisible(count, changed)
+  }
+
+  private updateFrustum(camera: Camera): void {
+    this.mesh.updateWorldMatrix(true, false)
+    this.projection.multiplyMatrices(camera.matrixWorldInverse, this.mesh.matrixWorld)
+    this.projection.premultiply(camera.projectionMatrix)
+    this.frustum.setFromProjectionMatrix(this.projection, camera.coordinateSystem)
+  }
+
+  private commitVisible(visibleCount: number, changed: boolean): void {
+    const mesh = this.mesh
     changed ||= visibleCount !== this.visibleCount
     this.visibleCount = visibleCount
     mesh.count = visibleCount

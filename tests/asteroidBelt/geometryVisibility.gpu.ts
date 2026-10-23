@@ -53,7 +53,7 @@ function checkLayerVisibility(layer: 'near' | 'l0'): Record<string, { submitted:
   }
   const check = (name: string) => {
     camera.updateMatrixWorld(true)
-    pools[1].updateGeometryVisibility(camera)
+    pools[1].updateVisibility(camera)
     const baseline = render(0), compact = render(1)
     let different = 0, covered = 0
     for (let i = 0; i < baseline.color.length; i++) {

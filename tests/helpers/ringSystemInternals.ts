@@ -9,7 +9,7 @@ import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSy
 import { AngularDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/AngularDensityProfile'
 import { FloatingOrigin } from '@/core/renderables/DetailedRingStreamingSystem/FloatingOrigin'
 import type { Group, InstancedBufferAttribute, InstancedMesh } from 'three'
-import type { GeometryInstanceVisibility } from '@/core/renderables/DetailedRingStreamingSystem/GeometryInstanceVisibility'
+import type { InstanceVisibility } from '@/core/renderables/DetailedRingStreamingSystem/InstanceVisibility'
 
 /**
  * Приватные поля системы, к которым обращаются тесты. Типы взяты с объявлений
@@ -40,7 +40,7 @@ export const poolOf = (system: AsteroidRingSystem): InstancePool => internalsOf(
 /** Allocation identity lives in CPU slots; geometry draw slots are compacted per view. */
 export const poolSourceStreams = (pool: InstancePool) => {
   const streams = (pool as unknown as { streams: {
-    mesh: InstancedMesh; hwm: number; visibility?: GeometryInstanceVisibility
+    mesh: InstancedMesh; hwm: number; visibility?: InstanceVisibility
   }[] }).streams
   return streams.map(s => ({
     count: s.hwm,
