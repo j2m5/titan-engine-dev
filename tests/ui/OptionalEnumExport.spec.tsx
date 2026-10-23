@@ -9,7 +9,8 @@ import type { TableSpec } from '@/ui/editor/forms/fieldSpec'
 import { generateDatabaseFiles } from '@/core/framework/generation/generateDatabaseFiles'
 import { shippedSnapshot } from '../helpers/shippedSnapshot'
 
-it('clears optional enums through the real form and exports compilable database files', async () => {
+// Real TypeScript compilation loads project/dependency declarations under parallel worker load.
+it('clears optional enums through the real form and exports compilable database files', { timeout: 30_000 }, async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   const db = await shippedSnapshot()
   const database = new Map<string, unknown[]>(Object.entries(db))

@@ -81,7 +81,8 @@ it.each([undefined, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace])(
     }
   })
 
-it('preserves omission and explicit NoColorSpace through editing, save, compilation and texture parameters', async () => {
+// Real TypeScript compilation loads project/dependency declarations under parallel worker load.
+it('preserves omission and explicit NoColorSpace through editing, save, compilation and texture parameters', { timeout: 30_000 }, async () => {
   const select = mount()
   const unset = select.value
   const exported: GeneratedFile[] = []
