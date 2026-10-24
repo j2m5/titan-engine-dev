@@ -2,8 +2,9 @@ import { replaceExactlyOnce } from '@/core/clouds/appearance/cloudAppearanceShad
 
 /** The scene backend owns single-level shape volumes with identical linear
  * min/mag filters. Explicit LOD avoids gradient-dependent sampling in nested
- * marches without changing their texels, filtering or sample budget. */
-export function adaptSceneCloudDensitySampling(source: string): string {
+ * marches without changing their texels, filtering or sample budget. Both
+ * current and shadow passes skip detail only for exactly empty coarse density. */
+export function adaptSceneCloudDensityLookups(source: string): string {
   let shader = source
   for (const [sampler, position] of [
     ['shapeTexture', 'shapePosition'],
@@ -27,12 +28,15 @@ export function adaptSceneCloudDensitySampling(source: string): string {
     'scene cloud density sampling',
     'empty detail sample'
   )
+  return shader
+}
 
+export function adaptSceneCloudDensitySampling(source: string): string {
   // Keep invalid rays out of density sampling and temporal history. On ANGLE/D3D
   // a live isnan also requests IEEE-strict compilation, stabilizing the planetary
   // arithmetic across the implicit/explicit texture instruction variants.
   return replaceExactlyOnce(
-    shader,
+    adaptSceneCloudDensityLookups(source),
     '  bool intersectsGround = any(lessThan(rayNearFar, vec2(0.0)));',
     `  if (any(isnan(rayNearFar))) {
     outputColor = vec4(0.0);

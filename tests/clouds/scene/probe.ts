@@ -155,6 +155,7 @@ export const sceneCloudProbeRegistry: Partial<
       'linear-density-profile',
       'stationary-weather-evolution',
       'empty-density-detail-sampling',
+      'shadow-empty-density-detail-sampling',
       'white-star',
       'colored-star',
       'zenith',

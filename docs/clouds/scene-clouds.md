@@ -2003,3 +2003,105 @@ and `solar-density-progress.md` under `.superpowers/cloud-tuning/` retain the
 measurements, exact comparisons, observed discrepancy and follow-up. The
 summary reports that discrepancy explicitly; it does not turn the initial
 strict comparison into a passing run.
+
+## Residual GPU cost after density shortcuts (2026-10-24)
+
+The accepted stationary-weather and empty-detail changes are in `790497b6`.
+A fresh native RTX 5070 Ti / ANGLE D3D11 / Chrome 155 profile at 1920 x 1080,
+DPR 1, Solar epoch 2451545 measured High at the same daytime cloud edge.
+Each interval contains 256 nondisjoint GPU samples, balanced across all 64
+noise phases. Camera, quality, visible terrain/water, resource counts and source
+generation match within each view, with effective cloud weight one. Timings
+are means from separate intervals, so stages are not additive:
+
+| View | Main current | Temporal resolve | Shadow update | Scene depth | Full frame before / after |
+| --- | --- | --- | --- | --- | --- |
+| Above | 8.129 ms | 0.0345 ms | 1.945 ms | 0.786 ms | 14.311 / 14.218 ms |
+| Inside | 2.595 ms | 0.0338 ms | 1.924 ms | 0.527 ms | 8.124 / 8.134 ms |
+
+The main march remains the largest measured cloud stage above the layer.
+Inside, shadow generation is a substantial share of cloud work. Temporal
+resolve is already small at both viewpoints. This profile does not establish
+a new speedup; compare future candidates against controls in their own runs.
+
+A disposable candidate passed each exact `cloudECEFToPlanet * position` result
+into both geography and media sampling, keeping independent coordinates for
+every primary/solar sample. High intervals used 512 nondisjoint samples each,
+with balanced phases and unchanged per-view scene state. Production controls
+bracketed the candidate:
+
+| View | Current production / shared position / production | Full frame production / shared position / production |
+| --- | --- | --- |
+| Above | 8.095 / 8.045 / 8.161 ms | 14.240 / 14.312 / 14.254 ms |
+| Inside | 2.614 / 2.663 / 2.581 ms | 8.222 / 8.333 / 8.262 ms |
+
+The roughly 1% current-pass change above did not improve the whole GPU frame;
+inside both intervals became slower. The candidate is rejected. Its source
+stays in ignored diagnostic tooling; expanded pixel-parity checks and product
+integration are unnecessary for this losing candidate.
+
+Two further disposable candidates targeted shadow current. The combination of
+linear-profile and stationary-weather specialization measured 1.967 ms against
+2.003 / 1.989 ms shadow controls; its whole-frame interval did not improve.
+It is rejected. Exact-zero detail rejection with explicit base-level reads
+measured 1.745 ms in shadows and 13.872 ms for the whole GPU frame, against
+14.224 / 14.019 ms full-frame controls. This supports the latter candidate;
+the constants specialization remains absent from the shadow shader.
+
+`adaptSceneCloudDensityLookups` now owns the existing normalized-volume LOD0
+reads and exact-zero detail condition. The current adapter calls it before its
+unchanged ray guard; the scene backend also applies it to shadow current before
+the existing shadow numerical guard and packed-output preparation. Shadow
+profiles, weather evolution, samples, cascades, target sizes and resolve retain
+their existing behavior. Generic lab shaders are unaffected.
+
+The `shadow-empty-density-detail-sampling` regression runs the installed shadow
+detail block through the existing GPU fixture. The fixture now counts implicit
+lookups as well as actual/detail-debug reads. It failed before integration on
+an empty sample with counts 1/1/1 instead of 0/0/0. After integration, empty
+samples skip detail; all four contributing and faint-positive channels retain
+their erosion/LOD behavior with explicit sampling. Lighting passed 2,064 checks
+across 46 cases, with resources released.
+
+Final integrated timing uses the same native environment and fixed epoch, with
+512 samples per High interval and 256 per Medium/Low interval. Every group has
+balanced 64-phase coverage, nondisjoint finite queries and matching camera,
+quality, terrain/water counts, texture/geometry counts and source generation.
+Controls remove only the shadow LOD/detail adapter. Values are GPU means:
+
+| Quality / view | Shadow update original / production / original | Full frame original / production / original |
+| --- | --- | --- |
+| High / above | 2.049 / 1.755 / 2.033 ms | 14.421 / 14.152 / 14.394 ms |
+| High / inside | 2.023 / 1.772 / 2.054 ms | 8.306 / 8.038 / 8.278 ms |
+| Medium / above | 0.745 / 0.684 / 0.762 ms | 7.203 / 7.068 / 7.161 ms |
+| Low / above | 0.180 / 0.180 / 0.181 ms | 6.948 / 6.856 / 6.855 ms |
+
+High shadow updates improve about 14.0% above and 13.1% inside, with whole GPU
+interval reductions of 1.8% and 3.1%. Medium improves about 9.3% / 1.6%.
+Low already disables detail; its shadow change is negligible and the whole-frame
+control spread prevents claiming a useful Low speedup.
+
+Both the prototype and final installed implementation matched all defined
+current and resolved shadow cascade channels bit for bit at frames
+0/1/63/64/121 for Low/Medium/High above, inside and at the transition (nine
+combinations), including same-source repeats. Independent
+original/production/original 128-frame histories above matched their final
+resolved output for each quality. No nonfinite values were found. Final High
+moving-camera overlays above and inside also matched all sampled RGBA values:
+independent effects, 128 warmup frames, 64 captures of a six-degree turn into
+a 320 x 180 target sampled from the 1080p overlay, with nonzero cloud coverage.
+This does not establish full-resolution motion or other-hardware equivalence.
+
+Final lighting, pipeline and lifecycle probes passed 3,143 checks across
+79 cases, each reporting resources released, with no unexpected runtime/WebGL
+errors. The local unit suite passed 5,868 tests (four configured skips, 596
+files including the two existing ignored audit fixtures). TypeScript/production
+build and ESLint passed with the existing `storage/local/**` tooling exclusion.
+Independent read-only code and evidence reviews found no actionable issue.
+
+Ignored evidence: `tmpscreenshots/cloud-tuning/residual-density-1080/`,
+`shared-position-1080-v2/`, `shadow-constants-1080/`,
+`shadow-empty-parity-1080/` and `shadow-empty-integrated-1080/`. The corresponding
+`residual-density-*`, `shared-position-*` and `shadow-empty-*` tooling/logs under
+`.superpowers/cloud-tuning/` retain the raw measurements, summary validation,
+RED/GREEN regression, history/motion comparisons and project-check output.

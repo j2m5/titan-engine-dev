@@ -18,11 +18,17 @@ uniform vec4 fixtureDensity, fixtureHeight, shapeDetailAmounts;
 uniform float fixtureDetail, mipLevel, jitter;
 uniform bool fixtureCount;
 int fixtureLookups = 0;
+int fixtureImplicitLookups = 0;
 vec4 fixtureTextureLod(int sampler, vec3 position, float lod) {
   ++fixtureLookups;
   return vec4(fixtureDetail);
 }
+vec4 fixtureTexture(int sampler, vec3 position) {
+  ++fixtureImplicitLookups;
+  return fixtureTextureLod(sampler, position, 0.0);
+}
 #define textureLod fixtureTextureLod
+#define texture fixtureTexture
 #define shapeDetailTexture 0
 struct WeatherSample { vec4 heightFraction; };
 vec4 remapClamped(vec4 value, vec4 low, vec4 high) {
@@ -37,7 +43,7 @@ void main() {
   mat3 cloudECEFToPlanet = mat3(1.0);
   ivec3 sampleCount = ivec3(0);
 ${source.slice(start, end + endMarker.length)}
-  gl_FragColor = fixtureCount ? vec4(float(fixtureLookups), float(sampleCount.z), 0.0, 1.0) : density;
+  gl_FragColor = fixtureCount ? vec4(float(fixtureLookups), float(sampleCount.z), float(fixtureImplicitLookups), 1.0) : density;
 }
 `
   const uniforms = {
@@ -58,7 +64,10 @@ ${source.slice(start, end + endMarker.length)}
     )
     uniforms.fixtureCount.value = true
     const counts = draw(fragment, uniforms)
-    check(counts[0] === reads && counts[1] === reads, `${label}: detail lookup/debug counts ${counts} != ${reads}`)
+    check(
+      counts[0] === reads && counts[1] === reads && counts[2] === 0,
+      `${label}: detail lookup/debug/implicit counts ${counts} != ${reads},${reads},0,1`
+    )
   }
   for (const detail of [0, 0.25, 0.5, 1])
     for (const strength of [0, 0.65, 1]) {

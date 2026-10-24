@@ -333,6 +333,10 @@ void main() {
     report.cases.push('stationary-weather-evolution')
     checkSceneCloudEmptyDensityDetail(activeEffect().cloudsPass.currentMaterial.fragmentShader, draw, check)
     report.cases.push('empty-density-detail-sampling')
+    checkSceneCloudEmptyDensityDetail(activeEffect().shadowPass.currentMaterial.fragmentShader, draw, (valid, label) =>
+      check(valid, `shadow ${label}`)
+    )
+    report.cases.push('shadow-empty-density-detail-sampling')
 
     // Exercise the actual resolve's clipping kernel. Changing RGB must not pull
     // opacity toward the current frame, while opacity still rejects stale edges.

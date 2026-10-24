@@ -29,7 +29,7 @@ import { prepareCloudTargets } from './prepareCloudTargets'
 import { prepareCloudCurrentOutput } from './prepareCloudCurrentOutput'
 import { prepareCloudShadowOutput } from './prepareCloudShadowOutput'
 import { adaptSceneCloudShadowNumerics } from './sceneCloudShadowNumerics'
-import { adaptSceneCloudDensitySampling } from './sceneCloudDensitySampling'
+import { adaptSceneCloudDensityLookups, adaptSceneCloudDensitySampling } from './sceneCloudDensitySampling'
 import { adaptSceneCloudDensityProfile } from './sceneCloudDensityProfile'
 import { adaptSceneCloudStationaryWeather } from './sceneCloudStationaryWeather'
 import { installSceneCloudPatches, type SceneCloudPatchBinding } from './sceneCloudLighting'
@@ -141,6 +141,7 @@ export class SceneCloudBackend {
       current.fragmentShader = adaptSceneCloudStationaryWeather(current.fragmentShader, effect)
       current.needsUpdate = true
       const shadow = effect.shadowPass.currentMaterial
+      shadow.fragmentShader = adaptSceneCloudDensityLookups(shadow.fragmentShader)
       shadow.fragmentShader = adaptSceneCloudShadowNumerics(shadow.fragmentShader)
       shadow.needsUpdate = true
       effect.haze = false
