@@ -99,7 +99,18 @@ abstract class Model<TData extends object = DataSource> {
     modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
     config: HasManyConfig<TData, TRelatedData>
   ): TRelatedModel | null {
-    return this.hasMany(modelClass, config).first() ?? null
+    const relatedInstance: TRelatedModel = new modelClass()
+    const ownerKey = (config.ownerKey ?? this.primaryKey) as keyof TData
+    const ownerValue: TData[keyof TData] | undefined = this.attributes[ownerKey]
+
+    if (ownerValue === undefined) return null
+
+    // Нужна только первая запись: не создаём коллекцию и остальные совпавшие модели.
+    const item: TRelatedData | undefined = relatedInstance
+      .source()
+      .find((row: TRelatedData): boolean => (row[config.foreignKey] as unknown) === (ownerValue as unknown))
+
+    return item ? new modelClass(item) : null
   }
 
   protected belongsTo<TRelatedData extends object, TRelatedModel extends Model<TRelatedData>>(

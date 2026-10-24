@@ -1714,3 +1714,123 @@ Ignored evidence is under `tmpscreenshots/cloud-tuning/material-sync-final/`
 strict replay attempts remain in `material-sync-integrated/`,
 `material-parity-controls/` and `material-sync-replay/`. Runners and validation
 logs are under `.superpowers/cloud-tuning/` with `material-sync` prefixes.
+
+## Orbit calculation CPU followup (2026-10-24)
+
+After committing the two cloud preparation changes as `609ffca1`, a fresh
+High/night profile identified orbital updates as a remaining shared scene
+cost. `SceneManager.update` averaged 2.867 ms per frame; a separate 1,024-frame
+CPU sample attributed 1,717 ms inclusive to `KeplerianModel.getStateByEpoch`
+over an 8,822 ms recording. Relation getters rebuild models on every access,
+including repeated accesses inside the anomaly solver.
+
+`KeplerianModel` now reuses values within each calculation: eccentricity in
+the iterative solver, related physical models when computing `mu`, the
+explicit period, and repeated state parameters. Position and velocity share
+one orbital quaternion. There is no cache across calls; replacing an orbit,
+mass or parent is still reflected immediately, including at the same epoch.
+The solver equations, iteration limit, tolerance and public API are unchanged.
+Regression tests use actual Actor relations: the high-eccentricity example
+previously read its orbit 19 times in one solve and now reads it once.
+
+The comparison restores the original four method/property descriptors from
+`609ffca1` or installs the production descriptors on the same runtime.
+Both variants retain the committed cloud optimizations. Each of the six
+original/production/original groups has matching camera, viewport, quality,
+resource counts and source generation; all 18 intervals have 1,024 valid,
+non-disjoint GPU samples balanced across 64 phases. Environment: RTX 5070 Ti,
+Chrome 155 native ANGLE/D3D11, 1920×1080/DPR 1. Values below are milliseconds
+in original/production/original order.
+
+| Quality / view | CPU call mean | Scene update CPU mean | Frame-start interval p95 |
+| --- | --- | --- | --- |
+| High / day | 7.082 / 6.002 / 6.908 | 2.922 / 1.893 / 2.875 | 15.0 / 15.1 / 15.0 |
+| High / night | 7.070 / 6.006 / 7.006 | 2.904 / 1.875 / 2.876 | 8.9 / 8.8 / 8.8 |
+| Medium / day | 7.184 / 5.907 / 6.962 | 2.960 / 1.873 / 2.884 | 8.8 / 8.0 / 8.2 |
+| Medium / night | 7.037 / 6.105 / 7.054 | 2.802 / 1.833 / 2.825 | 8.1 / 7.2 / 8.3 |
+| Low / day | 6.961 / 5.953 / 6.889 | 2.845 / 1.859 / 2.813 | 8.2 / 7.6 / 7.9 |
+| Low / night | 6.978 / 6.037 / 7.033 | 2.801 / 1.830 / 2.807 | 7.9 / 7.1 / 8.3 |
+
+Relative to the average of the controls, CPU call mean fell 13.3–16.5% and
+scene update mean fell 34.3–35.9%, releasing about 1 ms per frame. High/day
+remains GPU limited. CPU elapsed includes command submission/waits, stages
+are nested, and frame-start intervals are not display presentation times.
+GPU means varied by −2.8% to +1.3% relative to controls; no shader speedup is
+claimed. This is a shared scene improvement measured with clouds active.
+
+Numeric comparison covered 159 shipped actors plus 16 synthetic elliptic and
+hyperbolic variants at 65 epochs: 11,375 states and 91,000 scalar comparisons
+of position, velocity, `mu` and mean motion, with zero `Object.is` differences.
+The existing undefined mean motion (`NaN`) of roots without an orbit is
+preserved on both paths. Independent unit checks cover rotated positions and
+velocities, live data replacement, explicit periods and missing masses.
+This comparison validates orbital outputs; it does not resolve the earlier
+night near-endpoint pixel comparison limitation.
+
+TypeScript/build and 5,856 local unit tests passed (four skipped, 595 files,
+including the two existing ignored audit fixtures). ESLint passed with the
+same exclusion for known errors in local `storage/local/**` scripts.
+The browser comparison completed without unexpected runtime/WebGL errors.
+Independent code and evidence reviews found no actionable issues.
+
+Ignored evidence is in `tmpscreenshots/cloud-tuning/cpu-after-preparation/`
+and `orbital-preparation-integrated/` (`paired.json`, `parity.json`,
+`summary.json`). Runners and validation logs use `orbital` prefixes under
+`.superpowers/cloud-tuning/`.
+
+## Single-relation lookup CPU followup (2026-10-24)
+
+The profile after the orbital change still showed substantial relation lookup
+work: `hasMany` accounted for 517 ms inclusive over 1,024 sampled frames.
+`hasOne` delegated to `hasMany().first()`, scanning the complete related table
+and allocating a collection on every access. Multiple matches also constructed
+models that the caller never used.
+
+`Model.hasOne` now finds and constructs the first matching record directly.
+It preserves strict key comparison, custom owner/primary keys, absent-owner
+handling and fresh reads on every call. `hasMany` is unchanged. Twelve new
+tests cover early stopping and model construction as well as key semantics,
+missing records, replacement, deletion and addition of data.
+
+The comparison switches only `Model.prototype.hasOne` between the exact
+`609ffca1` implementation and the new method; both paths retain the previous
+orbital optimization. Six original/production/original groups have matching
+camera, viewport, quality, resource counts and source generation. All 18
+intervals contain 1,024 valid non-disjoint samples balanced across 64 phases.
+Environment: RTX 5070 Ti, Chrome 155 native ANGLE/D3D11, 1920×1080/DPR 1.
+Values are milliseconds in original/production/original order.
+
+| Quality / view | CPU call mean | Scene update CPU mean | Frame-start interval p95 |
+| --- | --- | --- | --- |
+| High / day | 7.000 / 6.179 / 6.899 | 2.455 / 1.503 / 2.427 | 16.0 / 16.0 / 15.9 |
+| High / night | 7.068 / 5.999 / 6.947 | 2.343 / 1.389 / 2.315 | 10.0 / 9.1 / 9.5 |
+| Medium / day | 6.858 / 5.895 / 7.011 | 2.213 / 1.397 / 2.295 | 8.6 / 8.2 / 9.5 |
+| Medium / night | 7.116 / 6.363 / 7.146 | 2.113 / 1.291 / 2.145 | 8.6 / 8.2 / 9.0 |
+| Low / day | 6.938 / 6.096 / 7.123 | 2.156 / 1.284 / 2.228 | 8.9 / 8.1 / 9.3 |
+| Low / night | 7.063 / 6.377 / 7.100 | 2.162 / 1.311 / 2.158 | 8.8 / 8.5 / 9.0 |
+
+Relative to the average of both controls, CPU call mean fell another
+9.9–15.0%; scene update mean fell 38.0–41.4%. This releases roughly 0.9 ms of
+scene work per frame in these views. High/day remains GPU limited. CPU elapsed
+includes submission/waits, stages are nested, and frame-start intervals do not
+measure display presentation. Whole-frame GPU means changed by −4.8% to +0.1%;
+this is not a shader optimization. Compare variants within each group, rather
+than absolute timings from different profiling sessions.
+
+All five single relations for each of 159 shipped actors matched (795 relation
+results). Position, velocity and orientation at 65 epochs also matched exactly:
+10,335 states, 103,350 finite scalar values, zero `Object.is` differences.
+These checks validate the returned data and motion; they make no new claim
+about full near-endpoint pixel parity. The native browser run completed without
+unexpected runtime/WebGL errors.
+
+TypeScript/build and 5,868 local unit tests passed (four skipped, 596 files,
+including the two existing ignored audit fixtures). ESLint passed with the
+same exclusion for known errors in local `storage/local/**` scripts.
+Independent code and evidence reviews found no actionable issues.
+
+Ignored evidence is under `tmpscreenshots/cloud-tuning/cpu-after-orbits/`
+and `relation-lookup-integrated/` (`paired.json`, `parity.json`, `summary.json`).
+The runner is `.superpowers/cloud-tuning/relation-lookup-run.mjs`; its summary
+uses the existing `summarize-orbital-preparation.mjs` validator. Validation logs
+use `relation` prefixes in the same directory.

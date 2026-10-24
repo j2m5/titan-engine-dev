@@ -71,22 +71,23 @@ class KeplerianModel implements TKeplerianModel {
    * G — гауссова GM Солнца (k²), поэтому массы нормируются на массу Солнца.
    */
   public get mu(): number {
-    if (this.model.parent && this.model.parent.physicalObject && this.model.physicalObject) {
-      const parentMass: number | undefined = this.model.parent.physicalObject.getAttribute('mass')
-      const selfMass: number | undefined = this.model.physicalObject.getAttribute('mass')
+    const parentPhysical = this.model.parent?.physicalObject
+    if (!parentPhysical) return 0
+    const selfPhysical = this.model.physicalObject
+    if (!selfPhysical) return 0
 
-      // Отсутствие массы при наличии physicalObject — баг данных, а не значение
-      // по умолчанию: молчаливый дефолт дал бы NaN в среднем движении (политика §6.3)
-      if (parentMass === undefined || selfMass === undefined) {
-        throw new Error(
-          `[KeplerianModel] У актора "${this.model.getAttribute('name', '?')}" или его родителя отсутствует масса — период не вычислить`
-        )
-      }
+    const parentMass: number | undefined = parentPhysical.getAttribute('mass')
+    const selfMass: number | undefined = selfPhysical.getAttribute('mass')
 
-      return (G * (parentMass + selfMass)) / SolarMass
+    // Отсутствие массы при наличии physicalObject — баг данных, а не значение
+    // по умолчанию: молчаливый дефолт дал бы NaN в среднем движении (политика §6.3)
+    if (parentMass === undefined || selfMass === undefined) {
+      throw new Error(
+        `[KeplerianModel] У актора "${this.model.getAttribute('name', '?')}" или его родителя отсутствует масса — период не вычислить`
+      )
     }
 
-    return 0
+    return (G * (parentMass + selfMass)) / SolarMass
   }
 
   /**
@@ -100,8 +101,9 @@ class KeplerianModel implements TKeplerianModel {
 
   /** Среднее движение, рад/сутки (эпоха — юлианская дата в сутках) */
   public get meanMotion(): number {
-    if (this.dataPeriod > 0) {
-      return CIRCLE / this.dataPeriod
+    const dataPeriod: number = this.dataPeriod
+    if (dataPeriod > 0) {
+      return CIRCLE / dataPeriod
     }
 
     const a: number = Math.abs(this.semiMajorAxis)
@@ -160,6 +162,8 @@ class KeplerianModel implements TKeplerianModel {
   }
 
   public getEccentricAnomalyByMeanAnomaly(ma: number): number {
+    // Геттер запрашивает связанную модель; значение неизменно внутри одного расчёта.
+    const eccentricity: number = this.eccentricity
     const maxIter: number = 30
     const delta: number = 0.00000001
     let M: number = ma
@@ -167,30 +171,30 @@ class KeplerianModel implements TKeplerianModel {
       F,
       i: number = 0
 
-    if (this.isElliptic) {
+    if (eccentricity < 1) {
       M = M / (2.0 * Math.PI)
       M = 2.0 * Math.PI * (M - Math.floor(M))
 
-      E = this.eccentricity < 0.8 ? M : Math.PI
+      E = eccentricity < 0.8 ? M : Math.PI
 
-      F = E - this.eccentricity * Math.sin(E) - M
+      F = E - eccentricity * Math.sin(E) - M
 
       while (Math.abs(F) > delta && i < maxIter) {
-        E = E - F / (1.0 - this.eccentricity * Math.cos(E))
-        F = E - this.eccentricity * Math.sin(E) - M
+        E = E - F / (1.0 - eccentricity * Math.cos(E))
+        F = E - eccentricity * Math.sin(E) - M
         i = i + 1
       }
     } else {
       E =
-        (Math.log(2 * (Math.abs(M) + 1 / 3)) + 1) / this.eccentricity +
-        (1 - 1 / this.eccentricity) * Math.asinh(Math.abs(M) / this.eccentricity)
+        (Math.log(2 * (Math.abs(M) + 1 / 3)) + 1) / eccentricity +
+        (1 - 1 / eccentricity) * Math.asinh(Math.abs(M) / eccentricity)
       E *= Math.sign(M)
 
-      F = this.eccentricity * Math.sinh(E) - E - M
+      F = eccentricity * Math.sinh(E) - E - M
 
       while (Math.abs(F) > delta && i < maxIter) {
-        E = E - F / (this.eccentricity * Math.cosh(E) - 1)
-        F = this.eccentricity * Math.sinh(E) - E - M
+        E = E - F / (eccentricity * Math.cosh(E) - 1)
+        F = eccentricity * Math.sinh(E) - E - M
         i = i + 1
       }
     }
@@ -274,39 +278,43 @@ class KeplerianModel implements TKeplerianModel {
    * Возвращает векторы в системе координат Three.js (Y-up).
    */
   public getStateByEpoch(epoch: number): OrbitalState {
-    if (!this.semiMajorAxis) {
+    const semiMajorAxis: number = this.semiMajorAxis
+    if (!semiMajorAxis) {
       return {
         position: new Vector3(),
         velocity: new Vector3()
       }
     }
 
-    if (this.isElliptic) {
+    const eccentricity: number = this.eccentricity
+    if (eccentricity < 1) {
       const ea: number = this.getEccentricAnomalyByEpoch(epoch)
       const cos: number = Math.cos(ea)
       const sin: number = Math.sin(ea)
-      const kff: number = Math.sqrt(this.mu / this.semiMajorAxis) / (1 - this.eccentricity * cos)
+      const kff: number = Math.sqrt(this.mu / semiMajorAxis) / (1 - eccentricity * cos)
+      const minorAxisRatio: number = Math.sqrt(1 - eccentricity * eccentricity)
+      const orbitalQuat: Quaternion = this.getOrbitalFrameQuaternion()
 
       const pos: Vector3 = new Vector3(
-        this.semiMajorAxis * (cos - this.eccentricity),
-        this.semiMajorAxis * Math.sqrt(1 - this.eccentricity * this.eccentricity) * sin,
+        semiMajorAxis * (cos - eccentricity),
+        semiMajorAxis * minorAxisRatio * sin,
         0
       )
 
-      const vel: Vector3 = new Vector3(-kff * sin, kff * Math.sqrt(1 - this.eccentricity * this.eccentricity) * cos, 0)
+      const vel: Vector3 = new Vector3(-kff * sin, kff * minorAxisRatio * cos, 0)
 
       return {
-        position: pos.applyQuaternion(this.getOrbitalFrameQuaternion()),
-        velocity: vel.applyQuaternion(this.getOrbitalFrameQuaternion())
+        position: pos.applyQuaternion(orbitalQuat),
+        velocity: vel.applyQuaternion(orbitalQuat)
       }
     } else {
       const ta: number = this.getTrueAnomalyByEpoch(epoch)
       const orbitalQuat: Quaternion = this.getOrbitalFrameQuaternion()
       const pos: Vector3 = this.getOwnCoordsByTrueAnomaly(ta)
       const flightPathAngle: number = Math.atan(
-        (this.eccentricity * Math.sin(ta)) / (1 + this.eccentricity * Math.cos(ta))
+        (eccentricity * Math.sin(ta)) / (1 + eccentricity * Math.cos(ta))
       )
-      const vel: Vector3 = new Vector3(Math.sqrt(this.mu * (2 / pos.length() - 1 / this.semiMajorAxis)), 0, 0)
+      const vel: Vector3 = new Vector3(Math.sqrt(this.mu * (2 / pos.length() - 1 / semiMajorAxis)), 0, 0)
 
       vel.applyAxisAngle(new Vector3(0, 0, 1), ta + Math.PI / 2 - flightPathAngle)
 
