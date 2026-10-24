@@ -9,6 +9,30 @@ export function adaptSceneCloudSunShadow(shader: string): string {
     'scene cloud',
     'sun optical-depth call'
   )
+  shader = replaceExactlyOnce(
+    shader,
+    'float sunRayDistance = 0.0;',
+    `// Both terms of the reference direct-light mix are exactly zero below this limit.
+      // Keep the ambient light and primary density march, but avoid their unused solar shadows.
+      bool sceneCloudDirectSun = dot(surfaceNormal, sunDirection) > min(sceneCloudSunRampStart, 0.0);
+      float sunRayDistance = 0.0;`,
+    'scene cloud',
+    'direct sun eligibility'
+  )
+  shader = replaceExactlyOnce(
+    shader,
+    '        maxIterationCountToSun,',
+    '        sceneCloudDirectSun ? maxIterationCountToSun : 0,',
+    'scene cloud',
+    'night sun sample budget'
+  )
+  shader = replaceExactlyOnce(
+    shader,
+    'if (height < shadowTopHeight) {\n        // Obtain the optical depth from BSM at the ray position.',
+    'if (height < shadowTopHeight && sceneCloudDirectSun) {\n        // Obtain the optical depth from BSM at the ray position.',
+    'scene cloud',
+    'night sun shadow-map tail'
+  )
   return replaceExactlyOnce(
     shader,
     'vec4 marchClouds(',

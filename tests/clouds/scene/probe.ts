@@ -151,6 +151,7 @@ export const sceneCloudProbeRegistry: Partial<
       'medium-shadow-ray-intervals',
       'high-shadow-ray-intervals',
       'current-ray-intervals',
+      'linear-density-profile',
       'white-star',
       'colored-star',
       'zenith',
@@ -184,6 +185,7 @@ export const sceneCloudProbeRegistry: Partial<
       'giant-physical-source',
       'scene-reference-march-invariants',
       'scene-reference-sun-shadow-partition',
+      'scene-reference-sun-shadow-culling',
       'scene-reference-real-eclipse'
     ]
   },

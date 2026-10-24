@@ -39,11 +39,13 @@ import type { Actor } from '@/core/models/Actor'
 import type { SceneCloudProbeReport } from './probe'
 import { checkSceneCloudTemporalResolve } from './temporalResolve.gpu'
 import { checkSceneCloudSunShadow } from './sunShadow.gpu'
+import { checkSceneCloudSunShadowCulling } from './sunShadowCulling.gpu'
 import { checkSceneCloudReprojection } from './reprojection.gpu'
 import { checkSceneCloudCurrentOutput } from './currentOutput.gpu'
 import { checkSceneCloudShadowOutput } from './shadowOutput.gpu'
 import { checkSceneCloudShadowNumerics } from './shadowNumerics.gpu'
 import { checkSceneCloudCurrentNumerics } from './currentNumerics.gpu'
+import { checkSceneCloudDensityProfile } from './densityProfile.gpu'
 
 const SIZE = 33,
   UNIT = SpaceScale / 1000,
@@ -323,6 +325,8 @@ void main() {
     }
     checkSceneCloudCurrentNumerics(renderer, activeEffect().cloudsPass.currentMaterial.fragmentShader, check)
     report.cases.push('current-ray-intervals')
+    checkSceneCloudDensityProfile(activeEffect().cloudsPass.currentMaterial.fragmentShader, draw, check)
+    report.cases.push('linear-density-profile')
 
     // Exercise the actual resolve's clipping kernel. Changing RGB must not pull
     // opacity toward the current frame, while opacity still rejects stale edges.
@@ -736,6 +740,8 @@ void main() {
     shadowFrame.sceneLight = farReceiver.getLightSettings!()
     checkSceneCloudSunShadow(recreate(shadowFrame).cloudsPass.currentMaterial.fragmentShader, draw, check)
     report.cases.push('scene-reference-sun-shadow-partition')
+    checkSceneCloudSunShadowCulling(activeEffect().cloudsPass.currentMaterial.fragmentShader, draw, check)
+    report.cases.push('scene-reference-sun-shadow-culling')
 
     for (const sun of [new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, -1)]) {
       const f = frame(origin, endpoint, sun)

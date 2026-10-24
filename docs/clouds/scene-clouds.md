@@ -1276,3 +1276,265 @@ Final project verification passed: 5,692 unit tests in 587 files (four configure
 skips), production build including TypeScript, and project lint with the same
 documented local-tooling exclusion. Independent review found no actionable
 code or evidence issues. The task-owned probe server was stopped after testing.
+
+### Optimization follow-up after explicit density sampling (2026-10-24)
+
+The next disposable probe applied the same explicit base-level shape/detail
+reads to shadow current, keeping the numerical guard and all quality budgets.
+On RTX 5070 Ti, Chrome 155, native ANGLE/D3D11 at 1920 x 1080, DPR 1, above the
+same lit cloud edge (12 km, 8-degree pitch), each interval collected 181
+nondisjoint GPU samples after settling. Measurement order was original,
+explicit LOD, original repeat for each quality:
+
+| Quality | Original shadow median | Explicit LOD | Original repeat |
+| --- | --- | --- | --- |
+| High | 1.731 ms | 1.730 ms | 1.757 ms |
+| Medium | 0.697 ms | 0.697 ms | 0.697 ms |
+| Low | 0.170 ms | 0.170 ms | 0.170 ms |
+
+There was no meaningful speedup, including in the separately measured full
+frame. The shadow change was rejected before integration or expanded parity
+testing. The earlier main-pass improvement does not generalize to shadow
+sampling on this device.
+
+The same scene then refreshed High's main-pass sensitivity after commit
+`647710d8`. Each interval collected 121 nondisjoint GPU samples. These runs
+included image-changing diagnostic controls, which are not implementation
+candidates:
+
+| Variant, in measurement order | Current GPU median | Full-frame GPU median |
+| --- | --- | --- |
+| Production | 9.486 ms | 15.453 ms |
+| Disable local sun optical depth (diagnostic only) | 5.138 ms | 11.051 ms |
+| Replace multiple scattering with one exponential (diagnostic only) | 8.978 ms | 14.745 ms |
+| Disable shadow-map optical-depth tail (diagnostic only) | 8.600 ms | 14.478 ms |
+| Cache phase terms outside the march | 9.306 ms | 14.923 ms |
+| Skip zero-weather secondary sun samples | 9.500 ms | 15.695 ms |
+| Production repeat | 9.269 ms | 15.795 ms |
+
+Caching phase terms did not beat the repeated production current pass, and
+skipping clear sun samples did not improve it either. Neither rewrite is
+integrated. The local sun march remains the largest measured sensitivity;
+these compiler-altering controls are not additive cost estimates and do not
+justify removing lighting or reducing its sample budget. Stage and full-frame
+medians come from separate intervals, so they should not be subtracted from
+one another.
+
+One further candidate skipped the exponential part of the density profile when
+its coefficients are zero. Captured scene uniforms had zero `expTerms` and
+`exponents`, with linear/constant terms 0.75/0.25 in all four channels. An initial
+High run measured 10.096/10.110 ms for production before/after, 9.562 ms for an
+unconditional linear-only prototype, and 9.779 ms for a uniform branch checking
+zero exponential coefficients. Unconditional specialization needs an explicit
+configuration contract before it can be considered for integration.
+
+The generic follow-up retained the original formula as fallback and required
+both coefficients and exponents to be zero. A/B/A intervals collected 181
+nondisjoint samples each:
+
+| Quality / view | Original current median | Conditional linear path | Original repeat |
+| --- | --- | --- | --- |
+| High / above | 9.228 ms | 9.100 ms | 9.325 ms |
+| High / inside | 2.921 ms | 4.422 ms | 4.338 ms |
+| Medium / above | 3.297 ms | 3.275 ms | 3.287 ms |
+| Low / above | 0.692 ms | 0.691 ms | 0.692 ms |
+
+The conditional path matched every defined current output channel bit-for-bit
+at frames 0/1/63/64/121 for Low/Medium/High above, inside and at the transition,
+and the final resolved outputs after 128 frames above the layer for all three
+qualities. Intermediate resolved frames were not compared. Same-shader repeat
+controls also matched, with no nonfinite values. Its benefit was small and
+concentrated in High above the layer; the High inside timing was not repeatable,
+despite equal resource counts. This branch is also left out of production.
+This motivated the specialization investigated below, with its configuration
+contract and fresh parity/performance checks established before integration.
+No additional shader change was shipped by this exploratory follow-up.
+
+Local ignored evidence: `tmpscreenshots/cloud-tuning/shadow-density-prototype/`,
+`main-cost-after-density/`, `main-linear-profile/` and `main-profile-followup/`,
+with runner logs under `.superpowers/cloud-tuning/`. Other-hardware validation
+remains deferred.
+
+### Compile-time specialization of linear density profiles (2026-10-24)
+
+The scene appearance binding already supports exactly one authored layer. A
+disposable rewrite of weather/media density into scalar arithmetic did not beat
+the smaller linear-profile specialization, so the broader rewrite was rejected.
+The integrated `sceneCloudDensityProfile` checks all four packed layer profiles
+once during effect creation. Only when every `expTerm` and `exponent` is zero
+does it omit the exponential summand from `getLayerDensity`. Linear and constant
+coefficients remain uniforms; any nonlinear profile keeps the full upstream
+formula. The owned profiles are fixed for the effect's lifetime, and effect
+recreation repeats this choice before packed output preparation and warmup.
+There is no per-sample branch or hardcoded density ramp in the shader.
+
+The change affects scene current shaders, including the physical giant path.
+Shadow and lab shaders, authored profiles, sample budgets, quality scales,
+texture allocations, draw counts and history filtering are unchanged.
+
+The permanent `linear-density-profile` GPU case executes the installed function
+against literal expected values and counts its exponential evaluations. It
+failed on the original formula's unnecessary evaluation, then passed with the
+specialization. Additional cases execute the emitted fallback with a nonzero
+term alone, exponent alone and a nonlinear last channel, protecting the check
+across all four profiles.
+
+Integrated comparisons used RTX 5070 Ti, Chrome 155, native ANGLE/D3D11 at
+1920 x 1080, DPR 1, fixed Solar epoch and the same lit cloud edge. Each High
+interval collected exactly 512 nondisjoint GPU samples; Medium/Low collected
+256. All 64 noise phases occurred equally often. The table reports mean
+current-pass time, with the original measured before and after production:
+
+| Quality / view | Original before / after | Specialized production |
+| --- | --- | --- |
+| High / above | 9.460 / 9.422 ms | 8.895 ms |
+| High / inside | 3.820 / 3.539 ms | 3.498 ms |
+| Medium / above | 3.336 / 3.330 ms | 3.233 ms |
+| Low / above | 0.695 / 0.694 ms | 0.678 ms |
+
+Above the layer, this saves about 6% of High current time, 3% of Medium and 2%
+of Low on the tested device. The separately measured High full-frame mean
+fell from 15.540/15.561 ms to 15.115 ms (about 3%). Medium full-frame controls
+varied noticeably, so its stage saving is not a claim of equal whole-frame
+acceleration. Texture/geometry counts, terrain/water population and source
+generation matched within each quality. Comparative High screenshots showed
+no obvious visual regression.
+
+High inside-layer timing remained variable, including original-to-original
+repeats: an earlier balanced run measured original 3.825/3.690 ms and prototype
+3.811 ms. Shorter 181-sample medians had misleadingly suggested a large
+regression. Equal noise-phase counts and mean timings removed that conclusion;
+they do not establish noise phase as the sole cause of variability or justify
+a specific inside-layer speedup claim.
+
+The integrated shader matched all seven defined current channels bit-for-bit
+at frames 0/1/63/64/121 for Low/Medium/High above, inside and at the transition.
+Same-source repeat controls matched too. The final resolved output after 128
+frames above the layer matched for each quality; intermediate resolved frames
+were not compared in this static check. No nonfinite values were found.
+
+Motion comparisons recreated independent original/production effects, warmed
+128 frames, then captured 64 frames of a six-degree camera turn above and inside
+the layer at Medium and High. Every RGBA value sampled into the 320 x 180
+overlay target matched in all four scenarios, with no nonfinite values.
+
+One fresh-browser High activation per variant at 1280 x 800 measured first
+main-cloud GPU work at 1.931/1.662 ms (original/production). The interval from
+first hidden cloud GPU submission to visible contribution was 26.5/24.7 ms,
+and the gap before the first visible frame was 11.4/9.8 ms. These individual
+trials do not establish a startup speedup. The total instrumented interval
+was longer in production (original 6.934 seconds, production 10.374 seconds to visible contribution),
+with most additional delay before backend creation, including source
+preparation at 3.330 versus 6.112 seconds.
+
+Lighting, pipeline and lifecycle passed 2,507 GPU checks across 74 cases, all
+reporting resource release. Seven WebGL warnings occurred inside intentional
+failure windows; no unexpected runtime/WebGL errors were reported. Independent
+code review found no actionable issues.
+
+Final project verification passed: 5,692 unit tests in 587 files (four configured
+skips), production build including TypeScript, and project lint using the same
+documented local-tooling exclusion. The task-owned probe server was stopped.
+
+Local ignored evidence under `tmpscreenshots/cloud-tuning/`:
+`single-layer-prototype/`, `linear-profile-prototype/`, `linear-profile-cycles/`,
+`linear-profile-integrated/`, `linear-profile-motion/` and
+`linear-profile-cold-{baseline,integrated}/`. Runner and validation logs use
+the `linear-profile-*` prefix under `.superpowers/cloud-tuning/`.
+Other-hardware validation remains deferred.
+
+## Night-side solar sampling (2026-10-24)
+
+The terrestrial reference light mixes a smooth sunrise ramp with
+`max(muS, 0)`. Both direct terms are exactly zero at `muS <= -0.08`;
+ambient radiance can still be nonzero. The source now uses the existing
+zero-budget exit for its local sun march and skips the complementary BSM
+lookup in that region. Primary density, ambient, opacity, resolve and shadow-map
+generation retain their existing paths. This optimization does not infer
+darkness from eclipse visibility and does not change physical giant/lab lighting.
+
+The ramp start is shared with the lighting formula. Eligibility uses
+`muS > min(sceneCloudSunRampStart, 0)`, so both direct-light terms must be
+zero before work is omitted. Lit and twilight samples retain the configured
+1/2/4 local samples and the original BSM partition. The local integrator itself
+is unchanged.
+
+The permanent `scene-reference-sun-shadow-culling` GPU case executes the
+installed solar call block and march against an analytic medium. It checks
+actual density/BSM sample counts, optical depth and tail offset at both sides
+of the twilight boundary, all three budgets, and with/without a BSM layer.
+It also executes the shared light split to check exact zero direct light and
+preserved ambient. Before implementation, a night fixture produced optical
+depth 2 with one local and one BSM sample; it failed the expected zero-work
+contract. The integrated lighting probe then passed 1,958 checks in 43 cases.
+
+The earlier attempt to batch independent weather reads in the solar ray was
+rejected. On High above the layer, groups of two/four increased mean current
+time to 9.497/9.818 ms versus original repeats of 8.905/8.878 ms. No batching
+was incorporated into the production shader.
+
+The integrated shader matched all seven defined current channels bit-for-bit
+at frames 0/1/63/64/121 for Low/Medium/High, day/twilight/night, and views above,
+inside and at the transition (27 combinations). Same-source repeats matched.
+The final resolved output after 128 frames above the layer matched in all nine
+quality/lighting combinations; this static check does not compare intermediate
+resolved frames. No nonfinite values were found.
+
+Motion checks recreated independent original/production effects, warmed 128
+frames, and captured 64 frames of a six-degree camera turn into a 320 x 180
+floating-point overlay target. All sampled RGBA values matched for Medium/High
+above and inside on the day/night sides, plus both qualities above at twilight
+(ten sequences). Cloud coverage remained nonzero in every case.
+
+Final timing used RTX 5070 Ti, Chrome 155, native ANGLE/D3D11, 1920 x 1080,
+DPR 1 and a fixed Solar epoch. Each interval collected exactly 512 nondisjoint
+GPU samples on High, or 256 on Medium/Low, with all 64 noise phases equally
+represented. Original controls bracketed each production measurement. These
+are mean times in milliseconds; current and full-frame intervals were measured
+separately and are not additive:
+
+| Quality / light / view | Original current before / after | Production current | Original frame before / after | Production frame |
+| --- | --- | --- | --- | --- |
+| Low / day / above | 0.667 / 0.667 | 0.664 | 7.487 / 7.365 | 7.343 |
+| Low / night / above | 0.664 / 0.667 | 0.440 | 7.210 / 7.286 | 7.124 |
+| Medium / day / above | 3.244 / 3.240 | 3.237 | 10.264 / 10.263 | 10.433 |
+| Medium / night / above | 3.120 / 3.123 | 1.919 | 10.265 / 10.049 | 8.828 |
+| High / day / above | 8.900 / 8.948 | 9.211 | 15.227 / 15.192 | 15.245 |
+| High / day / inside | 4.159 / 4.109 | 4.201 | 10.852 / 10.736 | 10.578 |
+| High / night / above | 8.364 / 8.336 | 5.723 | 12.430 / 12.465 | 10.861 |
+| High / night / inside | 4.820 / 4.828 | 1.805 | 10.776 / 10.910 | 8.279 |
+| High / twilight / above | 8.295 / 8.303 | 6.058 | 12.809 / 12.823 | 10.545 |
+
+Night current time above the layer fell about 34%/39%/32% at Low/Medium/High.
+The separately measured High night frame fell about 13% above and 24% inside;
+inside current time fell about 63%. The twilight view is centered at
+`muS = -0.08349`, close to the cutoff, so its gain includes visible cloud
+points with exactly zero direct light. Samples with a nonzero twilight ramp
+retain their original shadow work.
+
+There is a daytime tradeoff: High current time above increased about 3.2%,
+with full-frame mean within 0.4% of both controls. Low/Medium daytime current
+time stayed close to the original, but Medium full-frame mean increased about
+1.7% in this run. This is a conditional night-side optimization, not a general
+daytime acceleration. Earlier prototype full-frame gains were larger; the
+table reports the final integrated measurements. Camera, viewport, cloud source
+generation, terrain/water population and GPU texture/geometry counts matched
+within every original/production/original group. High daytime screenshots showed
+no obvious visual regression; exact cloud comparisons are described above.
+
+The full-frame gain is a mean-time claim: High above at night had p95
+13.385 ms in production versus 12.898/12.980 ms in the original controls.
+This run does not establish an improvement in every frame-time percentile.
+
+Final lighting, pipeline, receiver and lifecycle probes passed 2,993 GPU checks
+across 94 cases, all reporting resource release. Seven WebGL warnings belonged
+to intentional failure windows; no unexpected runtime/WebGL errors were reported.
+Project verification passed 5,692 tests in 587 files (four configured skips),
+production build including TypeScript, and lint with the documented local-tooling
+exclusion. Independent code and evidence review found no actionable issues.
+The task-owned probe server was stopped. Other-hardware validation remains deferred.
+
+Local ignored evidence: `tmpscreenshots/cloud-tuning/sun-density-batches/`,
+`sun-night-prototype/`, `sun-night-budget/`, `sun-night-parity/`,
+`sun-culling-integrated/` and `sun-culling-timing/`. Runners and validation logs
+are under `.superpowers/cloud-tuning/`, using the same prefixes.

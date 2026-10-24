@@ -30,6 +30,7 @@ import { prepareCloudCurrentOutput } from './prepareCloudCurrentOutput'
 import { prepareCloudShadowOutput } from './prepareCloudShadowOutput'
 import { adaptSceneCloudShadowNumerics } from './sceneCloudShadowNumerics'
 import { adaptSceneCloudDensitySampling } from './sceneCloudDensitySampling'
+import { adaptSceneCloudDensityProfile } from './sceneCloudDensityProfile'
 import { installSceneCloudPatches, type SceneCloudPatchBinding } from './sceneCloudLighting'
 import {
   appendProgramCacheKey,
@@ -135,6 +136,7 @@ export class SceneCloudBackend {
       setCloudQuality(effect, this.profile, this.quality)
       const current = effect.cloudsPass.currentMaterial
       current.fragmentShader = adaptSceneCloudDensitySampling(current.fragmentShader)
+      current.fragmentShader = adaptSceneCloudDensityProfile(current.fragmentShader, effect.cloudLayers)
       current.needsUpdate = true
       const shadow = effect.shadowPass.currentMaterial
       shadow.fragmentShader = adaptSceneCloudShadowNumerics(shadow.fragmentShader)
