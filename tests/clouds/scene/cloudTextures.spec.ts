@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LinearFilter, type Mesh } from 'three'
+import { LinearFilter, RedFormat, UnsignedByteType, type Mesh } from 'three'
 import { createCloudTextures } from '@/core/clouds/takram/cloudTextures'
 
 describe('owned pinned procedural cloud textures', () => {
@@ -10,6 +10,9 @@ describe('owned pinned procedural cloud textures', () => {
         expect(texture.minFilter).toBe(LinearFilter)
         expect(texture.magFilter).toBe(LinearFilter)
         expect(texture.generateMipmaps).toBe(false)
+        // Zero coarse density stays empty only with normalized, nonnegative erosion.
+        expect(texture.format).toBe(RedFormat)
+        expect(texture.type).toBe(UnsignedByteType)
       }
     } finally {
       textures.dispose()

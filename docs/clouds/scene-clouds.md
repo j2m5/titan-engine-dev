@@ -1834,3 +1834,172 @@ and `relation-lookup-integrated/` (`paired.json`, `parity.json`, `summary.json`)
 The runner is `.superpowers/cloud-tuning/relation-lookup-run.mjs`; its summary
 uses the existing `summarize-orbital-preparation.mjs` validator. Validation logs
 use `relation` prefixes in the same directory.
+
+## Stationary weather evolution (2026-10-24)
+
+The scene backend creates a private effect with zero local weather offset and
+velocity. The upstream density sampler still normalizes its planetary position
+and calculates radial evolution from that zero offset at every primary/solar
+sample. `sceneCloudStationaryWeather` selects a zero evolution vector at effect
+creation when both vectors are zero. Nonzero components retain the original
+formula, including an initially zero offset with nonzero velocity. The owned
+effect keeps these parameters for its lifetime; adding runtime weather motion
+requires recreating the specialized effect. Generic appearance bindings and lab
+effects are not specialized. Density textures, their offsets, layer profiles,
+quality/sample budgets, lighting, shadow generation and temporal resolve retain
+their existing behavior.
+
+This is a small improvement inside the layer, not a solution to the remaining
+High daytime cost above it. A fresh prototype A/B/A run with 1,024 balanced
+current samples measured 2.721 / 2.616 / 2.735 ms inside: a 4.1% reduction
+against the mean controls. Its separate 512-sample whole-frame intervals were
+8.345 / 8.253 / 8.369 ms, a 1.2% reduction. The initial shorter run's full-frame
+controls varied substantially; it is not used to claim a larger gain.
+
+Final integrated measurements used RTX 5070 Ti, Chrome 155, native ANGLE/D3D11,
+1920 x 1080, DPR 1 and Solar epoch 2451545. The control restores only the original
+weather evolution formula. Each interval contains 512 nondisjoint GPU samples
+on High or 256 on Medium/Low, equally covering all 64 noise phases. Controls
+bracket production; camera, quality, visible terrain/water, texture/geometry
+counts and source generation match within every group. Current and full-frame
+intervals are measured separately and are not additive. Values are GPU means:
+
+| Quality / view | Current original / production / original | Full frame original / production / original |
+| --- | --- | --- |
+| High / above | 8.363 / 8.313 / 8.376 ms | 14.270 / 14.178 / 14.373 ms |
+| High / inside | 2.750 / 2.633 / 2.714 ms | 8.241 / 8.076 / 8.252 ms |
+| Medium / above | 2.824 / 2.771 / 2.769 ms | 7.509 / 7.463 / 7.484 ms |
+| Low / above | 0.673 / 0.672 / 0.673 ms | 6.876 / 6.856 / 6.874 ms |
+
+The integrated High inside pass improves 3.6%, and its whole GPU interval 2.1%.
+The other views show small or negligible changes; no general acceleration of
+High above, Medium or Low is claimed. Other-hardware validation remains deferred.
+
+All seven defined current channels matched bit for bit at frames 0/1/63/64/121
+for Low/Medium/High, day/night, and above/inside/transition views (18 combinations).
+Same-source repeats also matched, with no nonfinite values. Independent
+128-frame histories above the layer matched at their final resolved output
+in all six quality/lighting combinations. Moving-camera checks used independent
+effects, 128 warmup frames and 64 captures of a six-degree turn at 320 x 180,
+sampled from the 1080p overlay. High above and inside matched all sampled RGBA
+values with nonzero cloud coverage. This is not full-resolution motion parity.
+
+The permanent `stationary-weather-evolution` GPU case executes the installed
+evolution block at Earth/Jupiter radii and counts normalization calls. Before
+the adapter it failed with one call; afterward it verifies zero evolution and
+zero calls. Nonzero X/Y offset and velocity fixtures execute the original
+formula, including evolution after an initially zero offset begins moving.
+Lighting, pipeline and lifecycle probes passed 2,845 checks across 77 cases,
+all reporting resources released, with no unexpected runtime/WebGL errors.
+The local unit suite passed 5,868 tests (four configured skips) in 596 files,
+including the two existing ignored audit fixtures. TypeScript/production build
+and ESLint passed with the existing `storage/local/**` tooling exclusion.
+Independent code/evidence review found no actionable issues.
+
+Two other daylight candidates were discarded: sharing the local solar/BSM
+top-sphere distance measured 9.105 / 9.135 / 9.127 ms above the layer, and a
+single-layer ambient-height specialization measured 9.035 / 8.991 / 9.115 ms.
+Neither established a useful improvement over its bracketing controls, so
+neither enters the production shader.
+
+Ignored evidence: `tmpscreenshots/cloud-tuning/day-gpu-{stationary,shared-top,ambient}/`,
+`day-gpu-stationary-confirm/` and `stationary-weather-integrated/` (timings,
+current/history comparisons, motion captures, screenshots and validated summary).
+The runners and summary validator use `day-gpu-*` / `stationary-weather-*`
+under `.superpowers/cloud-tuning/`.
+
+## Avoiding detail sampling in empty coarse density (2026-10-24)
+
+The main current pass still sampled the erosion volume after coarse shape
+sampling had reduced all four density channels to zero. Normalized R8 detail
+and validated erosion strengths in [0, 1] cannot add density to that sample.
+`sceneCloudDensitySampling` now keeps the existing distance/jitter LOD condition
+and also requires a nonzero coarse density channel before sampling detail.
+It uses exact zero, with no new threshold for faint edges. The later density
+profile, normalization and coefficient arithmetic keep their original order.
+Ray positions, integration budgets, texture data/filtering, lighting, resolve
+and shadow generation are unchanged. This applies to the private scene current
+shader, including its primary and solar density samples; shared lab shaders
+are unaffected.
+
+The permanent `empty-density-detail-sampling` GPU case executes the installed
+branch with an instrumented normalized texture lookup and the real debug sample
+counter. It covers texture/erosion-strength endpoints, each contributing channel,
+positive density of 1e-8, and both sides of the distance/jitter LOD boundary.
+It failed before implementation because an empty sample still performed one
+lookup. Afterward empty samples perform none, while positive samples retain
+their expected erosion. The texture characterization test also pins RedFormat
+and UnsignedByteType for the owned normalized volumes.
+
+Final 1080p measurement uses RTX 5070 Ti, Chrome 155, native ANGLE/D3D11, DPR 1
+and Solar epoch 2451545. The control removes only this new density condition,
+retaining the preceding stationary-weather optimization. Each interval has
+512 nondisjoint GPU samples on High, or 256 on Medium/Low, with all 64 noise
+phases equally represented. Original controls bracket production. Current
+and full-frame intervals are measured separately; their means are not additive.
+
+| Quality / view | Current original / production / original | Full frame original / production / original |
+| --- | --- | --- |
+| High / above | 9.069 / 8.182 / 9.008 ms | 15.246 / 14.411 / 15.259 ms |
+| High / inside | 2.725 / 2.626 / 2.610 ms | 8.242 / 8.270 / 8.268 ms |
+| Medium / above | 2.692 / 2.506 / 2.694 ms | 7.392 / 7.163 / 7.405 ms |
+| Low / above | 0.673 / 0.674 / 0.675 ms | 6.851 / 6.840 / 6.834 ms |
+
+High above improves about 9.5% in the current pass and 5.5% over the whole GPU
+interval. Medium above improves about 6.9% / 3.2%. No consistent High-inside
+gain is claimed; its current-pass control spread is larger than the production
+change. Low already disables detail and shows no material change. An earlier
+independent prototype above measured 8.993 / 8.139 / 8.995 ms for current and
+14.832 / 13.894 / 14.797 ms for the full GPU interval, supporting the gain.
+
+At 1080p, all seven defined current channels matched bit for bit at frames
+0/1/63/64/121 for Low/Medium/High, day/night, and above/inside/transition views
+(18 combinations). Same-source repeats matched, with no nonfinite values.
+Independent 128-frame histories matched at their final resolved output above
+the layer for all six quality/lighting combinations. High moving-camera
+comparisons above and inside also matched: independent effects, 128 warmup
+frames, then 64 captures of a six-degree turn into a 320 x 180 floating-point
+target sampled from the 1080p overlay. This is not full-resolution motion parity.
+
+The same native GPU/backend at 2560 x 1440, DPR 1, used 512 samples per interval
+on High. Above the layer, current measured 12.690 / 10.777 / 12.732 ms, and the
+whole GPU frame 21.113 / 19.285 / 21.289 ms: about 15.2% / 9.0% reductions.
+Inside changes were small (about 1.2% / 0.8%). All timing groups retained camera,
+quality, terrain/water counts, texture/geometry counts and source generation;
+effective cloud weight was one and all 64 phases were equally represented.
+
+At 1440p, the five current-frame comparisons and repeats matched above and
+inside; the final 128-frame history above also matched. The initial inside
+history comparison failed strict equality on two color-channel values, each
+differing by 0.0001220703125 (one half-float step at those values), with exact
+opacity and no nonfinite values. A fresh inside run compared all 128 current
+frames and independent original/production/original 128-frame histories; all
+matched exactly. The first discrepancy remains in the evidence, its cause is
+unresolved, and complete bit-for-bit 1440p equivalence is not claimed. The
+initial strict runner stopped after the saved timings/parity, so that run has
+no completed `scene.json`; the follow-up run completed normally.
+
+Cost probes first separated solar geography and erosion sensitivity. Reusing
+one solar UV measured 8.738 ms and disabling solar erosion 7.813 ms against
+9.036 / 9.159 ms controls; both alter the image and remain diagnostics only.
+Replacing the solar sixth power with explicit products measured 9.076 ms,
+and solar-only empty-shape rejection measured 9.083 ms against 9.046 / 9.085 ms;
+neither established a useful current-pass gain. A shared zero-shape early
+return did help, but the shipped condition only skips detail, preserving the
+later density arithmetic rather than adding assumptions about its result.
+
+Lighting, pipeline and lifecycle probes passed 2,880 checks across 78 cases,
+all reporting resources released. The local unit suite passed 5,868 tests
+(four configured skips, 596 files including the two existing ignored audit
+fixtures). TypeScript/production build and ESLint passed with the existing
+`storage/local/**` tooling exclusion. Independent code/evidence review found
+no actionable issue and agreed that the 1440p limitation must remain recorded.
+Other-hardware and full-resolution motion validation remain outside this step.
+
+Ignored evidence is under `tmpscreenshots/cloud-tuning/density-empty-detail/`,
+`empty-density-integrated/`, `empty-density-1440/` and
+`empty-density-history-1440/`. The `empty-density-*` runners/summary validator
+and `solar-density-progress.md` under `.superpowers/cloud-tuning/` retain the
+measurements, exact comparisons, observed discrepancy and follow-up. The
+summary reports that discrepancy explicitly; it does not turn the initial
+strict comparison into a passing run.

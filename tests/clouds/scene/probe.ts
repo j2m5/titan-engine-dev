@@ -153,6 +153,8 @@ export const sceneCloudProbeRegistry: Partial<
       'high-shadow-ray-intervals',
       'current-ray-intervals',
       'linear-density-profile',
+      'stationary-weather-evolution',
+      'empty-density-detail-sampling',
       'white-star',
       'colored-star',
       'zenith',

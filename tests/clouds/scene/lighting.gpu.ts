@@ -46,6 +46,8 @@ import { checkSceneCloudShadowOutput } from './shadowOutput.gpu'
 import { checkSceneCloudShadowNumerics } from './shadowNumerics.gpu'
 import { checkSceneCloudCurrentNumerics } from './currentNumerics.gpu'
 import { checkSceneCloudDensityProfile } from './densityProfile.gpu'
+import { checkSceneCloudStationaryWeather } from './stationaryWeather.gpu'
+import { checkSceneCloudEmptyDensityDetail } from './emptyDensityDetail.gpu'
 
 const SIZE = 33,
   UNIT = SpaceScale / 1000,
@@ -327,6 +329,10 @@ void main() {
     report.cases.push('current-ray-intervals')
     checkSceneCloudDensityProfile(activeEffect().cloudsPass.currentMaterial.fragmentShader, draw, check)
     report.cases.push('linear-density-profile')
+    checkSceneCloudStationaryWeather(activeEffect().cloudsPass.currentMaterial.fragmentShader, draw, check)
+    report.cases.push('stationary-weather-evolution')
+    checkSceneCloudEmptyDensityDetail(activeEffect().cloudsPass.currentMaterial.fragmentShader, draw, check)
+    report.cases.push('empty-density-detail-sampling')
 
     // Exercise the actual resolve's clipping kernel. Changing RGB must not pull
     // opacity toward the current frame, while opacity still rejects stale edges.
