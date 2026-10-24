@@ -1538,3 +1538,48 @@ Local ignored evidence: `tmpscreenshots/cloud-tuning/sun-density-batches/`,
 `sun-night-prototype/`, `sun-night-budget/`, `sun-night-parity/`,
 `sun-culling-integrated/` and `sun-culling-timing/`. Runners and validation logs
 are under `.superpowers/cloud-tuning/`, using the same prefixes.
+
+### Frame-tail investigation after master integration (2026-10-24)
+
+After integrating the audit fixes from master, a fresh High/1080p comparison
+repeated the same day/night cloud-edge poses on RTX 5070 Ti and Chrome 155,
+native ANGLE/D3D11. Each original/production/original group used 512 current-pass
+samples and 1,024 whole-frame samples with balanced 64-phase coverage. Camera,
+viewport, source generation, terrain/water and GPU resource counts matched
+within each group. Other hardware remains untested.
+
+The diagnostic records elapsed CPU-side `Engine.renderFrame` call time,
+including command submission and any waits, and intervals between successive
+frame-call starts. The latter are browser scheduling measurements, not display
+presentation timestamps. CPU stage intervals can overlap and are not additive.
+
+| View / variant | Current GPU mean | Whole-frame GPU p95 | CPU call p95 | Frame-start interval p95 |
+| --- | --- | --- | --- | --- |
+| Day / original | 8.045 ms | 14.457 ms | 13.7 ms | 14.9 ms |
+| Day / production | 8.085 ms | 14.464 ms | 12.2 ms | 14.9 ms |
+| Day / original repeat | 7.998 ms | 14.375 ms | 11.8 ms | 14.6 ms |
+| Night / original | 7.450 ms | 11.996 ms | 12.7 ms | 13.2 ms |
+| Night / production | 5.263 ms | 12.713 ms | 12.6 ms | 12.9 ms |
+| Night / original repeat | 7.426 ms | 11.950 ms | 12.5 ms | 12.9 ms |
+
+The earlier approximately 3% daytime current-pass cost did not recur at that
+size in this run: production was 0.5–1.1% above the two controls. Night current
+time remained about 29% lower. Its whole-frame GPU p95 increased, but the
+frame-start p95 matched the repeated original control. In the night production
+interval, CPU-call/GPU-interval correlation was 0.888, versus 0.138/0.064 for
+the controls. This points to investigating CPU submission and scheduling before
+attributing the full-frame tail to slower cloud GPU work; it does not prove
+the absence of presentation stalls.
+
+A separate same-shader experiment moved the GPU query from the whole frame to
+`Postprocessing.render`, then restored the original boundary. With 1,024 samples
+per interval, GPU p95 was 13.080/12.539/13.955 ms, while CPU-call p95 also varied
+(13.0/12.5/14.7 ms). Changing the query boundary did not isolate the cause.
+Mean elapsed scene-update calls were 3.26–3.47 ms and postprocessing calls
+6.32–6.62 ms; nested stages are included in these values. Further CPU profiling
+is needed before selecting a specific implementation change.
+
+No additional cloud shader rewrite resulted from this investigation. Local
+ignored evidence is in `tmpscreenshots/cloud-tuning/frame-tail-merged/` and
+`frame-tail-scope/`; runner logs use those prefixes under
+`.superpowers/cloud-tuning/`.
