@@ -147,6 +147,7 @@ export const sceneCloudProbeRegistry: Partial<
     requiredCases: [
       'packed-current-output',
       'single-output-shadows',
+      'high-shadow-ray-intervals',
       'white-star',
       'colored-star',
       'zenith',

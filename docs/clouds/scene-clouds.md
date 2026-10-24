@@ -835,15 +835,17 @@ seven half-float channels to a reusable RGBA32UI scratch texture; a small pass
 writes the color and velocity back into their original array layers. Resolve
 then writes each original history layer directly. Cascade coordinates, map size,
 noise frame, raymarch parameters and temporal accumulation remain unchanged.
-High uses only the split resolve: its original current material, compile hook,
-cache key and render callback are retained. The backend chooses this explicitly
+At this stage High used only the split resolve: its original current material, compile hook,
+cache key and render callback were retained. The backend chose this explicitly
 by quality; cascade count is not a quality discriminator (medium also has three).
+This High fallback is superseded by
+[High shadow numerical stability](#high-shadow-numerical-stability-2026-10-24).
 
 The native high-quality production comparison did not consistently reproduce the
 original half-float values after splitting the raymarch. A constant-index branch
 experiment also increased medium shadow GPU time from about 0.85 to 2.44 ms and
-was rejected. Neither experimental high-current variant is enabled. Splitting
-high's current pass remains deferred; its first-draw MRT cost still exists. The
+was rejected. Neither experimental high-current variant was enabled. Splitting
+High's current pass was deferred at this stage, retaining its first-draw MRT cost. The
 observations do not establish a particular driver or floating-point root cause.
 
 The unpack shader joins parallel warmup. Source strings stay intact and the
@@ -851,8 +853,8 @@ compile hooks retain prior patches and diagnostic injections. Cache keys separat
 the new variants and retain retry epochs. Cleanup restores borrowed render and
 compile hooks and releases only the owned scratch target and unpack material.
 The scratch target costs 16 bytes per shadow-map pixel regardless of cascade
-count: 1 MiB on low/medium (256 x 256). High never renders into this scratch target
-and does not allocate a full-size packed shadow texture.
+count: 1 MiB on low/medium (256 x 256). At this stage High did not render into this
+scratch target or allocate a full-size packed shadow texture.
 
 Switching a previously used MRT array target to individual layers also requires
 detaching its auxiliary attachments. Otherwise a layer can remain attached twice
@@ -968,7 +970,7 @@ MRT first-draw specialization. These intervals exclude source preparation and
 earlier Solar/terrain loading. Raw captures:
 `tmpscreenshots/cloud-tuning/startup-shadow-paired-{before,after}/`.
 
-The High current-splitting investigation remains separate. A synchronous capture
+The High current-splitting investigation was separate at this stage. A synchronous capture
 with unchanged inputs reproduced differences even between some repeated original
 draws. Retained-kernel low-byte float traces matched for the inspected
 matrix/clip/point/sun-position/direction components, with differences appearing at
@@ -982,7 +984,7 @@ For the nearest cascade, a sweep of the actual cloud transmittance formula at
 fixed receiver depths of 2/4/8/16 km reached a 0.052 absolute difference at 2 km.
 This is a shadow-data diagnostic, not a screen-space image metric or a surface
 receiver measurement. It does not justify relaxing the equivalence requirement,
-so High's split current remains disabled. Raw diagnostics are in
+so High's split current remained disabled until the numerical fix below. Raw diagnostics are in
 `tmpscreenshots/cloud-tuning/high-shadow-2026-10-24-{full-trace,input-trace,direction-trace,independent-history}/`.
 
 The suspected duplicate uniform upload was also rejected: Three's material
@@ -1002,3 +1004,84 @@ five failing ring-audit experiments under `.superpowers/full-audit-2026-10-21/`,
 and `npm run lint` found 28 `no-explicit-any` errors in ignored DEM tooling under
 `storage/local/textures/dem-rebuild-2026-10-21/tooling/`. Those files were preserved;
 the scoped project checks above are the passing verification for this change.
+
+### High shadow numerical stability (2026-10-24)
+
+High now uses the packed current pass and paired unpack as well as split resolve.
+`sceneCloudShadowNumerics` first adapts its shared cascade kernel to return neutral
+shadow color and velocity when either ray interval endpoint is NaN. The live
+`isnan` check also requests IEEE-strict compilation on the tested ANGLE/D3D11
+path: ANGLE's [HLSL translator](https://github.com/google/angle/blob/main/src/compiler/translator/hlsl/OutputHLSL.cpp)
+sets the strict marker, which reaches the
+[D3D11 compile flags](https://github.com/google/angle/blob/main/src/libANGLE/renderer/d3d/d3d11/Renderer11.cpp).
+The check remains inside the cascade before either output layout is applied.
+Low and Medium do not receive this numerical adaptation.
+
+An A/B/A experiment kept the material, targets, textures and all queried GPU
+uniform values fixed, changing only the cache key to force a separate GL program.
+Identical GLSL produced different High shadow values in program B; returning to
+program A restored A's values exactly. This establishes program-associated
+numerical behavior, without identifying a specific driver defect or internal
+specialization mechanism. With the NaN check, captured translated HLSL included
+the strict marker and separately linked MRT/packed kernels agreed. An otherwise
+equivalent `isinf` control did not request strict compilation and retained the
+original discrepancy. Earlier low-byte traces were not proof that the full input
+coordinates matched; the later GPU uniform inspection included every array element.
+
+Final production checks used the integrated backend, without intercepting shader
+source. All seven defined current channels and all four resolved channels matched
+bit for bit between the guarded original MRT and guarded packed path: frames 0
+and 121, eight draws of each path per frame, and two independent 128-frame history
+sequences per path. The repeated draws/sequences also matched themselves. Original
+velocity alpha remains undefined and is excluded. These checks establish parity
+between the two guarded paths; they do not claim identical values to the previous
+unguarded High shader. Comparative screenshots showed no obvious visual regression.
+
+The quality preset retains three 512 x 512 cascades, raymarch steps, optical-depth
+tail and temporal filtering. High now uses nine shadow draws per frame (three
+current, three paired unpack, three resolve), versus four previously, and adds
+one reusable 4 MiB RGBA32UI scratch texture. The two-attachment unpack retains the
+existing four-attachment compatibility contract.
+
+Paired prototype measurements used RTX 5070 Ti, Chrome 155, native ANGLE/D3D11,
+1280 x 800 at DPR 1, fixed Solar epoch and the same lit cloud edge. Each steady
+measurement collected 181 GPU samples:
+
+| High variant | Shadow GPU median | Full-frame GPU median |
+| --- | --- | --- |
+| Previous MRT current / split resolve | 1.692 ms | 15.355 ms |
+| Guarded MRT current / split resolve | 1.771 ms | 15.664 ms |
+| Guarded packed current / paired unpack / split resolve | 1.878 ms | 15.529 ms |
+
+This pays about 0.19 ms in steady shadow GPU time on the tested device. The benefit
+is first activation and repeatable numerical behavior, not a steady FPS increase.
+Fresh-profile startup measurements distinguish the prototype from the integrated
+code:
+
+| High variant | First shadow GPU work | Gap before first visible cloud frame | First hidden cloud GPU submission to visible contribution |
+| --- | --- | --- | --- |
+| Previous implementation | 350.8 ms | 336.8 ms | 359.6 ms |
+| Guarded packed prototype | 13.4 ms | 8.5 ms | 24.1 ms |
+| Integrated backend | 48.9 ms | 41.5 ms | 56.9 ms |
+
+These are individual runs with visible first-draw variability, not guarantees.
+The activation interval excludes source preparation and earlier terrain/shader
+work; total Solar loading time did not improve. Other-hardware testing remains
+deferred.
+
+The permanent `high-shadow-ray-intervals` GPU case consumes the actual High backend
+source, isolates ray setup and checks hand-derived radial intervals at planetary
+scale in both MRT and packed paths. Its NaN case failed before the adaptation and
+now verifies neutral color and defined velocity channels. This small regression
+does not substitute for the full production march/history comparison above.
+Lighting, pipeline and lifecycle probes passed 2,427 checks across 70 cases, each
+reporting resource release, with no unexpected runtime/WebGL errors.
+The project unit suite passed 5,691 tests in 587 files (four configured skips).
+The production build, including TypeScript, and scoped project lint passed; the
+same exclusions for unrelated local experiments/tooling described above apply.
+
+Local ignored evidence: `tmpscreenshots/cloud-tuning/high-shadow-fresh-program/`
+for A/B/A, `high-shadow-strict-perf/` for prototype timings and screenshots,
+`high-shadow-integrated-parity/` for final current/history readbacks, and
+`high-shadow-{cold-baseline,cold-strict-split,integrated-startup}/` for fresh-profile
+activation. Runner logs are under `.superpowers/cloud-tuning/high-shadow-*`.

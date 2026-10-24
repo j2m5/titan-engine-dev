@@ -42,6 +42,7 @@ import { checkSceneCloudSunShadow } from './sunShadow.gpu'
 import { checkSceneCloudReprojection } from './reprojection.gpu'
 import { checkSceneCloudCurrentOutput } from './currentOutput.gpu'
 import { checkSceneCloudShadowOutput } from './shadowOutput.gpu'
+import { checkSceneCloudShadowNumerics } from './shadowNumerics.gpu'
 
 const SIZE = 33,
   UNIT = SpaceScale / 1000,
@@ -229,9 +230,9 @@ export async function run(): Promise<SceneCloudProbeReport> {
     }
   }
   const activeEffect = (): CloudsEffect => (backend as unknown as { effect: CloudsEffect }).effect
-  const recreate = (f: CloudFrame): CloudsEffect => {
+  const recreate = (f: CloudFrame, quality: 'low' | 'high' = 'low'): CloudsEffect => {
     backend?.dispose()
-    backend = new SceneCloudBackend(f, entry, prepared, 'terrestrial', 'low')
+    backend = new SceneCloudBackend(f, entry, prepared, 'terrestrial', quality)
     const effect = activeEffect()
     // Fixture target size keeps real current/resolve draws small; production quality remains unchanged.
     effect.shadowMaps.mapSize.set(32, 32)
@@ -310,6 +311,13 @@ void main() {
     surface.needsUpdate = true
     const origin = new Vector3(0, 0, RADIUS + 50000),
       endpoint = new Vector3(0, 0, RADIUS + 6000)
+
+    checkSceneCloudShadowNumerics(
+      renderer,
+      recreate(frame(origin, endpoint), 'high').shadowPass.currentMaterial.fragmentShader,
+      check
+    )
+    report.cases.push('high-shadow-ray-intervals')
 
     // Exercise the actual resolve's clipping kernel. Changing RGB must not pull
     // opacity toward the current frame, while opacity still rejects stale edges.

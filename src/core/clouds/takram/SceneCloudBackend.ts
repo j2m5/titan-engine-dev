@@ -28,6 +28,7 @@ import { setCloudQuality } from './cloudQuality'
 import { prepareCloudTargets } from './prepareCloudTargets'
 import { prepareCloudCurrentOutput } from './prepareCloudCurrentOutput'
 import { prepareCloudShadowOutput } from './prepareCloudShadowOutput'
+import { adaptSceneCloudShadowNumerics } from './sceneCloudShadowNumerics'
 import { installSceneCloudPatches, type SceneCloudPatchBinding } from './sceneCloudLighting'
 import {
   appendProgramCacheKey,
@@ -131,14 +132,15 @@ export class SceneCloudBackend {
       )
       this.restoreTargets = prepareCloudTargets(effect)
       setCloudQuality(effect, this.profile, this.quality)
+      if (this.quality === 'high') {
+        const shadow = effect.shadowPass.currentMaterial
+        shadow.fragmentShader = adaptSceneCloudShadowNumerics(shadow.fragmentShader)
+        shadow.needsUpdate = true
+      }
       effect.haze = false
       effect.lightShafts = false
       this.packedOutput = prepareCloudCurrentOutput(effect.cloudsPass.currentPass, this.programCacheSuffix())
-      // High's planetary raymarch did not retain numerical parity after splitting.
-      // Preserve its current shader; temporal resolve can still use single outputs.
-      this.shadowOutput = prepareCloudShadowOutput(effect.shadowPass, this.programCacheSuffix(), {
-        splitCurrent: this.quality !== 'high'
-      })
+      this.shadowOutput = prepareCloudShadowOutput(effect.shadowPass, this.programCacheSuffix())
       effect.skipRendering = true
       effect.shapeTexture = this.noise.shape
       effect.shapeDetailTexture = this.noise.detail
