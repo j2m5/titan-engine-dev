@@ -80,11 +80,23 @@ void main(){color=texelFetch(source,ivec3(gl_FragCoord.xy,layer),0);}`
       return pixels
     })
   }
-  const render = (frame: number): Uint16Array[] => {
+  const render = (frame: number, splitCurrent = false): Uint16Array[] => {
     material.uniforms.sampleFrame.value = frame
-    material.uniformsNeedUpdate = true
-    shadow.currentPass.render(renderer, null, current)
-    shadow.resolvePass.render(renderer, null, resolved)
+    const gl = renderer.getContext(),
+      originalDraw = gl.drawArrays
+    let draws = 0
+    gl.drawArrays = function (...args) {
+      draws++
+      return originalDraw.apply(this, args)
+    }
+    try {
+      shadow.currentPass.render(renderer, null, current)
+      shadow.resolvePass.render(renderer, null, resolved)
+    } finally {
+      gl.drawArrays = originalDraw
+    }
+    if (splitCurrent)
+      check(draws === resolved.depth * 3, 'one current, paired unpack and resolve draw per shadow cascade')
     return [...read(current), ...read(resolved)]
   }
   try {
@@ -102,11 +114,11 @@ void main(){color=texelFetch(source,ivec3(gl_FragCoord.xy,layer),0);}`
         history.type = FloatType
         history.needsUpdate = true
         shadow.resolveMaterial.uniforms.historyBuffer.value = history
-        const ordinary = [0, 1].map(render)
+        const ordinary = [0, 1].map((frame) => render(frame))
         for (const splitCurrent of [true, false]) {
           binding = prepareCloudShadowOutput(shadow, undefined, { splitCurrent })
           for (const frame of [0, 1]) {
-            render(frame).forEach((pixels, layer) => {
+            render(frame, splitCurrent).forEach((pixels, layer) => {
               const reference = ordinary[frame][layer]
               // The pinned vec3 velocity output does not define its fourth channel.
               const velocity = layer >= count && layer < count * 2

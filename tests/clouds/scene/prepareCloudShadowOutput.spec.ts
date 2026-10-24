@@ -25,25 +25,34 @@ function fixture(attachmentLimit = 8) {
     layer: number
     material: RawShaderMaterial
     cascade?: number
+    velocityLayer?: number
     size: number[]
   }> = []
   let target: WebGLRenderTarget,
-    layer = 0
+    layer = 0,
+    velocityLayer: number | undefined
+  const texture = {}
   const gl = {
     COLOR_ATTACHMENT0: 0x8ce0,
+    COLOR_ATTACHMENT1: 0x8ce1,
     FRAMEBUFFER: 0x8d40,
     MAX_COLOR_ATTACHMENTS: 0x8cdf,
     getParameter: vi.fn(() => attachmentLimit),
-    framebufferTextureLayer: (_target: number, attachment: number) => {
+    framebufferTextureLayer: (_target: number, attachment: number, value: unknown, _mip: number, face: number) => {
       if (attachment >= 0x8ce0 + attachmentLimit) throw new Error('Unsupported color attachment')
+      if (value !== null) expect(value).toBe(texture)
+      if (attachment === 0x8ce1) velocityLayer = value === null ? undefined : face
     },
-    drawBuffers: (buffers: number[]) => expect(buffers).toEqual([0x8ce0])
+    drawBuffers: (buffers: number[]) =>
+      expect(buffers).toEqual(velocityLayer === undefined ? [0x8ce0] : [0x8ce0, 0x8ce1])
   }
   const renderer = {
     setRenderTarget: (value: WebGLRenderTarget, face = 0) => {
       target = value
       layer = face
+      velocityLayer = undefined
     },
+    properties: { get: () => ({ __webglTexture: texture }) },
     getContext: () => gl,
     render: (scene: Scene) => {
       const mesh = scene.children.find((object) => object instanceof Mesh) as Mesh
@@ -53,6 +62,7 @@ function fixture(attachmentLimit = 8) {
         layer,
         material,
         cascade: material.uniforms.sceneCloudShadowCascade?.value,
+        velocityLayer,
         size: [target.width, target.height]
       })
     }
@@ -97,13 +107,24 @@ describe('single-output shadow cascades', () => {
       binding = prepareCloudShadowOutput(f.shadow)
     try {
       f.shadow.currentPass.render(f.renderer, null, f.current)
-      expect(f.draws.filter((draw) => draw.target === f.current).map((draw) => draw.layer)).toEqual([0, 3, 1, 4, 2, 5])
+      expect(
+        f.draws.filter((draw) => draw.target === f.current).map((draw) => [draw.layer, draw.velocityLayer])
+      ).toEqual([
+        [0, 3],
+        [1, 4],
+        [2, 5]
+      ])
       f.shadow.setSize(7, 5, 4)
       f.current.setSize(7, 5, 8)
       f.draws.length = 0
       f.shadow.currentPass.render(f.renderer, null, f.current)
-      expect(f.draws.filter((draw) => draw.target === f.current).map((draw) => draw.layer)).toEqual([
-        0, 4, 1, 5, 2, 6, 3, 7
+      expect(
+        f.draws.filter((draw) => draw.target === f.current).map((draw) => [draw.layer, draw.velocityLayer])
+      ).toEqual([
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7]
       ])
       expect(f.gl.getParameter).toHaveBeenCalledOnce()
       expect(f.gl.getParameter).toHaveBeenCalledWith(f.gl.MAX_COLOR_ATTACHMENTS)
@@ -124,7 +145,13 @@ describe('single-output shadow cascades', () => {
       expect(march.every((draw) => draw.target === march[0].target)).toBe(true)
       expect(march[0].target.texture.type).toBe(UnsignedIntType)
       expect(march[0].target.textures).toHaveLength(1)
-      expect(f.draws.filter((draw) => draw.target === f.current).map((draw) => draw.layer)).toEqual([0, 3, 1, 4, 2, 5])
+      expect(
+        f.draws.filter((draw) => draw.target === f.current).map((draw) => [draw.layer, draw.velocityLayer])
+      ).toEqual([
+        [0, 3],
+        [1, 4],
+        [2, 5]
+      ])
       f.shadow.resolvePass.render(f.renderer, null, f.resolved)
       expect(f.draws.filter((draw) => draw.target === f.resolved).map((draw) => [draw.layer, draw.cascade])).toEqual([
         [0, 0],
@@ -137,7 +164,12 @@ describe('single-output shadow cascades', () => {
       f.shadow.currentPass.render(f.renderer, null, f.current)
       expect(f.draws[0].target).toBe(march[0].target)
       expect(f.draws[0].size).toEqual([13, 9])
-      expect(f.draws.filter((draw) => draw.target === f.current).map((draw) => draw.layer)).toEqual([0, 2, 1, 3])
+      expect(
+        f.draws.filter((draw) => draw.target === f.current).map((draw) => [draw.layer, draw.velocityLayer])
+      ).toEqual([
+        [0, 2],
+        [1, 3]
+      ])
     } finally {
       binding.dispose()
       f.dispose()

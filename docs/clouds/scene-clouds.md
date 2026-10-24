@@ -918,3 +918,87 @@ checks across 148 cases, with every probe reporting resource release. Its 17
 WebGL warnings were confined to the existing intentional shader-failure windows;
 there were no unexpected WebGL errors. The final shadow implementation also
 passed independent code review. Testing on other hardware remains deferred.
+
+### Paired shadow unpack (2026-10-24)
+
+The small shadow unpack pass now writes color and velocity together through two
+framebuffer attachments. The expensive packed current shader still has a single
+output; resolve still writes one history layer at a time. This removes one draw
+and one packed-texture read per cascade without changing the raymarch, resolution,
+half-float values or scratch memory. Low uses two cascades in the pinned preset.
+
+Before paired unpack, the existing cleanup detaches stale auxiliary attachments
+from a previously used MRT target. Each unpack then attaches the selected color
+and velocity layers to slots 0/1. Resolve performs the single-attachment cleanup
+again. Eight array layers therefore still require only two color attachments for
+unpack; the four-attachment context contract remains covered.
+
+The real GPU fixture first failed the new three-draw budget against the previous
+four-draw implementation. With paired unpack it passes, including exact comparison
+of all defined channels against original MRT, 1–4 cascades, two frames, resize,
+reused targets and resource release. The fixture no longer forces a uniform
+refresh before the current pass, so changing frame values exercises Three's normal
+render-target refresh behavior. Independent code review found no issues.
+
+Production A/B measurement used the previous and new adapters in the same Solar
+scene: RTX 5070 Ti, native ANGLE/D3D11, Chrome 155, 1280 x 800, DPR 1, fixed epoch
+2451545, above the same lit cloud edge. Each variant has 360 instrumented frames
+for submission counts and 181 GPU samples per timing. Current/resolved production
+arrays and repeated draws matched exactly on all three qualities; High retained
+its original current pass.
+
+| Quality | Shadow draws/frame before → after | Uniform calls/frame before → after | Shadow GPU median before → after | Frame GPU median before → after |
+| --- | --- | --- | --- | --- |
+| Low | 8 → 6 | 13 → 9 | 0.206 → 0.196 ms | 6.486 → 6.418 ms |
+| Medium | 12 → 9 | 19 → 13 | 0.866 → 0.868 ms | 10.355 → 10.319 ms |
+| High | 4 → 4 | 6 → 6 | 1.690 → 1.691 ms | 15.132 → 15.133 ms |
+
+This is a reduction in submissions and unpack bandwidth, not a demonstrated
+general FPS increase. Medium GPU time is effectively unchanged in this run.
+Instrumented mean shadow CPU time was 0.138 → 0.124 ms on Low and 0.172 → 0.151 ms
+on Medium, but the unchanged High control also varied (0.066 → 0.056 ms); these
+small CPU differences do not establish a portable percentage gain. Artifacts:
+`tmpscreenshots/cloud-tuning/shadow-paired-production-clean/` (local, ignored).
+
+Two fresh-profile Medium starts measured a maximum cloud-activation frame gap of
+31.9 ms before and 29.9 ms after. First hidden GPU work to visible contribution
+was 17.9 → 28.1 ms, so this change does not claim faster activation. The large
+heavy-kernel MRT pause did not recur in this check; the tiny unpack now has its own
+MRT first-draw specialization. These intervals exclude source preparation and
+earlier Solar/terrain loading. Raw captures:
+`tmpscreenshots/cloud-tuning/startup-shadow-paired-{before,after}/`.
+
+The High current-splitting investigation remains separate. A synchronous capture
+with unchanged inputs reproduced differences even between some repeated original
+draws. Retained-kernel low-byte float traces matched for the inspected
+matrix/clip/point/sun-position/direction components, with differences appearing at
+the sphere intersection and ray origin. This narrows further investigation; it
+does not prove full-coordinate equality or establish a particular driver cause.
+Overwriting shadow alpha during tracing removes the optical-depth-tail calculation
+and hides the discrepancy; the later trace preserved all color channels instead.
+
+A 128-frame original/split comparison used independently accumulated histories.
+For the nearest cascade, a sweep of the actual cloud transmittance formula at
+fixed receiver depths of 2/4/8/16 km reached a 0.052 absolute difference at 2 km.
+This is a shadow-data diagnostic, not a screen-space image metric or a surface
+receiver measurement. It does not justify relaxing the equivalence requirement,
+so High's split current remains disabled. Raw diagnostics are in
+`tmpscreenshots/cloud-tuning/high-shadow-2026-10-24-{full-trace,input-trace,direction-trace,independent-history}/`.
+
+The suspected duplicate uniform upload was also rejected: Three's material
+refresh already clears `uniformsNeedUpdate`, and instrumenting actual GL calls
+found no duplicate uploads before a draw. No performance claim or shader change
+is based on that hypothesis.
+
+Verification: `vitest run tests` passed 5,691 tests (four skipped, 587 files),
+production build including TypeScript passed, and project lint passed with
+`eslint . --ignore-pattern 'storage/local/**'`. Lighting, pipeline and lifecycle
+GPU probes passed 2,522 checks across 69 cases, all reporting resource release.
+Their seven WebGL warnings were inside intentional shader-failure windows;
+there were no unexpected WebGL errors. Other-hardware tests remain deferred.
+
+Unscoped commands also collect unrelated local files: `vitest run` picked up
+five failing ring-audit experiments under `.superpowers/full-audit-2026-10-21/`,
+and `npm run lint` found 28 `no-explicit-any` errors in ignored DEM tooling under
+`storage/local/textures/dem-rebuild-2026-10-21/tooling/`. Those files were preserved;
+the scoped project checks above are the passing verification for this change.

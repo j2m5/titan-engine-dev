@@ -66,6 +66,24 @@ class ShadowOutputDraw extends ShaderPass {
     renderer.setRenderTarget(target, layer)
     renderer.render(this.scene, this.camera)
   }
+
+  public drawPair(
+    renderer: WebGLRenderer,
+    target: WebGLArrayRenderTarget,
+    colorLayer: number,
+    velocityLayer: number
+  ): void {
+    renderer.setRenderTarget(target, colorLayer)
+    const gl = renderer.getContext()
+    if (!('framebufferTextureLayer' in gl)) throw new Error('Scene cloud shadows require WebGL2')
+    // setRenderTarget initializes and attaches the color layer. The pinned array
+    // target uses the same texture for the velocity layer, in the second slot.
+    const texture = (renderer.properties.get(target.texture) as { __webglTexture?: WebGLTexture }).__webglTexture
+    if (!texture) throw new Error('Scene cloud shadow target is not initialized')
+    gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, texture, 0, velocityLayer)
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1])
+    renderer.render(this.scene, this.camera)
+  }
 }
 
 function selectSingleAttachment(
@@ -127,16 +145,16 @@ export function prepareCloudShadowOutput(
     depthTest: false,
     depthWrite: false,
     blending: NoBlending,
-    uniforms: { packedShadow: { value: packed.texture }, channel: { value: 0 } },
+    uniforms: { packedShadow: { value: packed.texture } },
     vertexShader: 'precision highp float;in vec3 position;void main(){gl_Position=vec4(position,1.0);}',
     fragmentShader: `precision highp float;precision highp int;
 uniform highp usampler2D packedShadow;
-uniform int channel;
 layout(location = 0) out vec4 color;
+layout(location = 1) out vec4 depthVelocity;
 void main() {
   uvec4 p = texelFetch(packedShadow, ivec2(gl_FragCoord.xy), 0);
-  color = channel == 0 ? vec4(unpackHalf2x16(p.x), unpackHalf2x16(p.y)) :
-    vec4(unpackHalf2x16(p.z), unpackHalf2x16(p.w).x, 0.0);
+  color = vec4(unpackHalf2x16(p.x), unpackHalf2x16(p.y));
+  depthVelocity = vec4(unpackHalf2x16(p.z), unpackHalf2x16(p.w).x, 0.0);
 }`
   })
   appendProgramCacheKey(unpackMaterial, programCacheKey)
@@ -176,11 +194,7 @@ void main() {
         indices[0].value = cascade
         materials[0].uniformsNeedUpdate = true
         draws[0].draw(renderer, packed)
-        for (let channel = 0; channel < 2; channel++) {
-          unpackMaterial.uniforms.channel.value = channel
-          unpackMaterial.uniformsNeedUpdate = true
-          unpack.draw(renderer, output, cascade + channel * count)
-        }
+        unpack.drawPair(renderer, output, cascade, cascade + count)
       }
     }
   shadow.resolvePass.render = function (renderer, _input, output) {
