@@ -26,6 +26,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'crab far plane', path: 'crab/farPlane', name: 'checkCrabFarPlane' },
   { title: 'nebula incremental baking', path: 'nebula/rendering', name: 'checkNebulaIncrementalBaking' },
   { title: 'atmosphere terminator', path: 'atmosphere/terminator', name: 'checkAtmosphereTerminator' },
+  { title: 'atmosphere sky visibility', path: 'atmosphere/skyVisibility', name: 'checkAtmosphereSkyVisibility' },
   { title: 'black hole depth (0 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [0] },
   { title: 'black hole depth (4 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [4] },
   { title: 'star LOD photometry', path: 'star/lodPhotometry', name: 'checkStarLodPhotometry' },
