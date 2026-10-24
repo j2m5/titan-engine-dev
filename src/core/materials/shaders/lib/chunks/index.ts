@@ -19,14 +19,22 @@ import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materi
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { skySampleFunctions, skySampleUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
-import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
+import {
+  sunTransmittanceFunctions,
+  sunTransmittanceUniforms
+} from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { giantDetailFunctions, giantDetailUniforms } from '@/core/materials/shaders/lib/chunks/GiantDetail'
-import { terrainMacroDetailFunctions, terrainMacroDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
-import { terrainShadowMarchFunctions, terrainShadowMarchUniforms } from '@/core/materials/shaders/lib/chunks/TerrainShadowMarch'
+import {
+  terrainMacroDetailFunctions,
+  terrainMacroDetailUniforms
+} from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
+import {
+  terrainShadowMarchFunctions,
+  terrainShadowMarchUniforms
+} from '@/core/materials/shaders/lib/chunks/TerrainShadowMarch'
 import { terrainNearShadowFunctions } from '@/core/materials/shaders/lib/chunks/TerrainNearShadow'
 import { waterOctavesFunctions } from '@/core/materials/shaders/lib/chunks/WaterOctaves'
 import { waterGlintFunctions } from '@/core/materials/shaders/lib/chunks/WaterGlint'
-import { cloudLayerFunctions, cloudLayerUniforms } from '@/core/materials/shaders/lib/chunks/CloudLayer'
 import { eclipseFunctions, eclipseHostFunctions } from '@/core/materials/shaders/lib/chunks/Eclipse'
 import { ringGapFunctions, ringGapUniforms, ringGapUniformValues } from '@/core/materials/shaders/lib/chunks/RingGap'
 import { IUniform, Uniform } from 'three'
@@ -85,8 +93,6 @@ export const AppShaderChunk: Record<string, string> = {
   terrainNearShadowFunctions,
   waterOctavesFunctions,
   waterGlintFunctions,
-  cloudLayerUniforms,
-  cloudLayerFunctions,
   eclipseFunctions,
   eclipseHostFunctions
 }

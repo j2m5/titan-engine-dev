@@ -5,6 +5,8 @@ import { ATMOSPHERE_SLOTS, slotUniformName } from '@/core/graphic/effects/atmosp
 import { AtmosphereRegistry, AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import { AtmosphereConfig, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { SpaceScale } from '@/core/constants'
+import { captureAtmosphereFrame } from '@/core/graphic/effects/atmosphere/atmosphereFrame'
+import type { SceneCloudOutput } from '@/core/clouds/takram/SceneCloudBackend'
 
 function config(bottom: number, top: number): AtmosphereConfig {
   return {
@@ -33,6 +35,8 @@ function entry(actorId: number, positionKm: Vector3, bottom: number, top: number
   object.updateMatrixWorld(true)
   return {
     actorId,
+    generation: 0,
+    ready: true,
     name: `A${actorId}`,
     object,
     config: config(bottom, top),
@@ -51,6 +55,65 @@ const renderer = {} as WebGLRenderer
 const buffer = {} as WebGLRenderTarget
 
 describe('AtmosphereEffect', () => {
+  it('binds an overlay only to the captured ready slot and rejects serial, generation and removal changes', () => {
+    const registry = new AtmosphereRegistry()
+    const atmosphere = entry(1, new Vector3(0, 0, -10000), 6360, 6420)
+    registry.register(atmosphere)
+    const camera = cameraAtOrigin(),
+      effect = new AtmosphereEffect(camera, registry)
+    const snapshot = captureAtmosphereFrame(camera, registry, 42)
+    const overlay = new Texture()
+    const output = {
+      frame: { serial: 42 },
+      atmosphereActorId: 1,
+      atmosphereGeneration: atmosphere.generation,
+      overlay
+    } as SceneCloudOutput
+    effect.setFrame(snapshot)
+    effect.setCloudOverlay(output)
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('sceneCloudSlot')!.value).toBe(0)
+    expect(effect.uniforms.get('sceneCloudOverlay')!.value).toBe(overlay)
+    effect.setCloudOverlay({ ...output, frame: { ...output.frame, serial: 41 } })
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('sceneCloudSlot')!.value).toBe(-1)
+    effect.setCloudOverlay(output)
+    registry.markPending(1)
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('sceneCloudSlot')!.value).toBe(-1)
+    expect(effect.uniforms.get('uCount')!.value).toBe(0)
+    registry.markReady(1)
+    effect.setFrame(captureAtmosphereFrame(camera, registry, 42))
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('sceneCloudSlot')!.value).toBe(-1)
+    effect.setCloudOverlay({ ...output, atmosphereGeneration: atmosphere.generation })
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('sceneCloudSlot')!.value).toBe(0)
+    registry.unregister(1)
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('sceneCloudSlot')!.value).toBe(-1)
+    expect(effect.uniforms.get(slotUniformName(0, 'transmittance'))!.value).toBeNull()
+    effect.dispose()
+    overlay.dispose()
+  })
+  it('suppresses cloud overlay in atmosphere debug views with a diagnostic reason', () => {
+    const registry = new AtmosphereRegistry(),
+      camera = cameraAtOrigin()
+    const atmosphere = entry(1, new Vector3(0, 0, -10000), 6360, 6420)
+    registry.register(atmosphere)
+    const effect = new AtmosphereEffect(camera, registry, { debugView: 1 })
+    effect.setFrame(captureAtmosphereFrame(camera, registry, 7))
+    effect.setCloudOverlay({
+      frame: { serial: 7 },
+      atmosphereActorId: 1,
+      atmosphereGeneration: atmosphere.generation,
+      overlay: new Texture()
+    } as SceneCloudOutput)
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('sceneCloudSlot')!.value).toBe(-1)
+    expect(effect.cloudFallbackReason).toBe('atmosphere-debug-view')
+    effect.dispose()
+  })
   it('атрибут DEPTH и K троек сэмплеров в юниформах', () => {
     const effect = new AtmosphereEffect(cameraAtOrigin(), new AtmosphereRegistry())
     expect(effect.getAttributes() & EffectAttribute.DEPTH).toBeTruthy()

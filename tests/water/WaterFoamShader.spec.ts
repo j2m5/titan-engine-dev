@@ -18,7 +18,16 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     expect((u.uSlopeTexelMeters.value as { x: number; y: number }).y).toBe(0)
     expect((u.uSlopeTexel.value as { x: number; y: number }).x).toBe(0)
     expect((u.uSlopeTexel.value as { x: number; y: number }).y).toBe(0)
-    for (const name of ['uFoamStrength', 'uFoamShoreMeters', 'uFoamSurfStrength', 'uFoamSurfMeters', 'uFoamWavelengthMeters', 'uFoamPeriod', 'uFoamNoiseScale', 'uFoamRadiusMeters']) {
+    for (const name of [
+      'uFoamStrength',
+      'uFoamShoreMeters',
+      'uFoamSurfStrength',
+      'uFoamSurfMeters',
+      'uFoamWavelengthMeters',
+      'uFoamPeriod',
+      'uFoamNoiseScale',
+      'uFoamRadiusMeters'
+    ]) {
       expect(frag).toContain(`uniform float ${name};`)
     }
     expect(frag).toContain('uniform vec3 uFoamColor;')
@@ -30,11 +39,15 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     expect((frag.match(/texture2D\(uSlopeMap/g) ?? []).length).toBe(3)
     expect(frag).toContain('float aE = texture2D(uSlopeMap, uv + vec2(uSlopeTexel.x, 0.0)).a;')
     // aS — юг (terrainUv растёт на север, uv - vec2(0, texel.y) шагает на юг)
-    expect(frag).toContain('float aS = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a; // юг = −v; нужна только длина')
+    expect(frag).toContain(
+      'float aS = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a; // юг = −v; нужна только длина'
+    )
     expect(frag).toContain('float cosLat = max(sqrt(max(1.0 - dirLocal.y * dirLocal.y, 0.0)), 0.05);')
     expect(frag).toContain('vec2 texelM = vec2(uSlopeTexelMeters.x * cosLat, uSlopeTexelMeters.y);')
     expect(frag).toContain('vec2 gradM = vec2(aE - a0, aS - a0) / texelM;                 // прирост A на метр')
-    expect(frag).toContain('float gradLen = max(length(gradM), 1e-4 / uSlopeTexelMeters.y); // пол: 1e-4 на тексель, как раньше')
+    expect(frag).toContain(
+      'float gradLen = max(length(gradM), 1e-4 / uSlopeTexelMeters.y); // пол: 1e-4 на тексель, как раньше'
+    )
     expect(frag).toContain('float dist = a0 / gradLen;')
     expect(frag).toContain('float texelAlong = gradLen / max(length(gradM / texelM), 1e-12);')
     // смещение уреза: суша клампит канал A в 0, скат начинается на полтекселя раньше берега (спека §1.1)
@@ -67,34 +80,45 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     // гейт стоит ДО первой выборки градиента — fwidth и все сэмплы внутри него, поток однородный
     expect(gate).toBeLessThan(aE)
     expect(footprint).toBeGreaterThan(aE)
-    expect(frag).toContain('float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade;')
+    expect(frag).toContain(
+      'float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade;'
+    )
     expect(frag).not.toContain('step(1e-6, uSlopeTexelMeters)')
     expect(frag).toContain('foam *= uFoamStrength * foamWeight;')
   })
 
   it('три слоя: кайма с пульсом, накаты с фазой к берегу (гребни бегут к берегу), рвань шумом волн без нового сэмплера', () => {
     expect(frag).toContain('float t = uTime / uFoamPeriod;')
-    expect(frag).toContain('float shore = 1.0 - smoothstep(0.0, uFoamShoreMeters * (1.0 + 0.15 * sin(6.2832 * t)), dist);')
+    expect(frag).toContain(
+      'float shore = 1.0 - smoothstep(0.0, uFoamShoreMeters * (1.0 + 0.15 * sin(6.2832 * t)), dist);'
+    )
     expect(frag).toContain('float phase = dist / uFoamWavelengthMeters + t;')
     expect(frag).toContain('float crest = pow(1.0 - abs(fract(phase) * 2.0 - 1.0), 6.0);')
     // накаты — отдельная сила (дефолт 0: на текселе 5–9 км параллельные гребни читались полосами)
     expect(frag).toContain('float surf = crest * surfEnv * uFoamSurfStrength;')
     // шум: период вдвое шире каймы, вдали стягивается к среднему по экранному следу домена (нет крупы)
-    expect(frag).toContain('vec3 pNoise = dirLocal * (uFoamRadiusMeters / max(2.0 * uFoamShoreMeters * uFoamNoiseScale, 1e-3)) + vec3(0.05 * t);')
+    expect(frag).toContain(
+      'vec3 pNoise = dirLocal * (uFoamRadiusMeters / max(2.0 * uFoamShoreMeters * uFoamNoiseScale, 1e-3)) + vec3(0.05 * t);'
+    )
     expect(frag).toContain('float noiseWeight = 1.0 - smoothstep(0.5, 1.0, length(fwidth(pNoise)));')
     expect(frag).toContain('float noise = mix(0.5, foamNoise(dirLocal, pNoise), noiseWeight);')
-    expect(frag).toContain('noise = clamp((noise - 0.5) * FOAM_NOISE_CONTRAST + 0.5, 0.0, 1.0); // канал .x нормалей узкий вокруг 0.5')
+    expect(frag).toContain(
+      'noise = clamp((noise - 0.5) * FOAM_NOISE_CONTRAST + 0.5, 0.0, 1.0); // канал .x нормалей узкий вокруг 0.5'
+    )
     expect(frag).toContain('#define FOAM_NOISE_CONTRAST 1.5')
     // рвань — модуляция плотности, не вырезание до нуля
     expect(frag).toContain('#define FOAM_TEAR 0.5')
     expect(frag).toContain('foam *= mix(1.0 - FOAM_TEAR, 1.0, smoothstep(0.3, 0.7, noise + 0.3 * foam));')
     // шум пены — из той же текстуры нормалей волн, других сэмплеров в шаблоне нет
-    expect((frag.match(/uniform sampler2D /g) ?? []).length).toBe(3) // uSlopeMap + uWaterNormalMap + uWaterCloudMap (облачный слой)
+    const colorFrag = frag.replace(/#ifdef SCENE_CLOUD_WATER_DEPTH[\s\S]*?#endif/g, '')
+    expect((colorFrag.match(/uniform sampler2D /g) ?? []).length).toBe(2) // uSlopeMap + uWaterNormalMap; scene cloud samplers belong to the receiver
     expect(frag).toContain('float foamNoise(vec3 dirLocal, vec3 p) {')
   })
 
   it('пена освещена так же, как wavesColor — не сырой цвет поверх ночной тьмы', () => {
-    const sunTintBlock = frag.match(/#ifdef USE_SUN_TINT\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), sunTintFactor \* eclipse, waveDayFactor\);\s*\n\s*#else\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), eclipse, waveDayFactor\);\s*\n\s*#endif/)
+    const sunTintBlock = frag.match(
+      /#ifdef USE_SUN_TINT\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), sunTintFactor \* eclipse, waveDayFactor\);\s*\n\s*#else\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), eclipse, waveDayFactor\);\s*\n\s*#endif/
+    )
     expect(sunTintBlock).not.toBeNull()
     expect(frag).toContain('color = mix(color, foamLit, foam);')
   })

@@ -23,7 +23,7 @@ describe('SphereSurfaceShaderTemplate: блик воды на сфере тем 
     expect(block).toContain('waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2)')
     expect(block).toContain('* uWaterGlintGain')
     expect(block).toContain('smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow')
-    expect(block).toContain('* (1.0 - cloudAlphaSlant) * sunTintMix')
+    expect(block).toContain('* sunTintMix')
     expect(block).not.toContain('blinnPhongGlint')
     expect(frag).not.toContain('uSpecularStrength')
   })
@@ -85,7 +85,14 @@ describe('паритет дальней шероховатости на гейт
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('тело с заданной waterRoughness: uWaterFarAlpha2 и gain у SphereSurfaceShader и WaterShader совпадают', () => {
-    const data = { emission: 1, bumpScale: 1, waterLevelMeters: 0, waterRoughness: 0.08, waterRippleStrength: 0.6, waterGlintGain: 2 }
+    const data = {
+      emission: 1,
+      bumpScale: 1,
+      waterLevelMeters: 0,
+      waterRoughness: 0.08,
+      waterRippleStrength: 0.6,
+      waterGlintGain: 2
+    }
     const actor = stubBodyActor(data)
     const planet = new SphereSurfaceShader(actor)
     const water = new WaterShader(actor)

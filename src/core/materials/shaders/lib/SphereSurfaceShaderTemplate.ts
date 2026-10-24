@@ -66,10 +66,6 @@ export const SphereSurfaceShaderTemplate: ShaderProps = {
     ${planetSurfaceVaryings}
     varying vec2 vUv;
 
-    // Развёртка из направления — точка облачного слоя не вершина, vUv ей не годится
-    #ifdef USE_CLOUD
-      #include <terrainUvFunctions>
-    #endif
 
     ${planetSurfaceFragmentFunctions}
 
@@ -116,8 +112,8 @@ export const SphereSurfaceShaderTemplate: ShaderProps = {
         // облаками, тонируется закатным солнцем (как у водной оболочки).
         float specularIntensity = texture2D(specularMap, uv).r;
         finalColor += specularIntensity * waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2) * uWaterGlintGain
-                    * (1.0 - cloudAlphaSlant) * sunTintMix
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
+                    * sunTintMix
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * sceneCloudSunVisibility * eclipse;
       #endif
 
       ${planetSurfaceFragmentOutput}

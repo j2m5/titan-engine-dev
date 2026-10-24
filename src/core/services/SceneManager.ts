@@ -94,6 +94,7 @@ class SceneManager {
    */
   public dispose(): void {
     this.crosshair.removeFromParent()
+    this.factory.cloudRegistry?.clear()
 
     for (const child of [...this.scene.children]) {
       disposeSceneTree(child)
@@ -113,6 +114,7 @@ class SceneManager {
 
     this.scene.traverse((object: Object3D): void => object.updateObject(ctx))
     this.factory.eclipses.update()
+    this.factory.syncCloudRegistrations?.()
   }
 
   public updateMarkers(): void {

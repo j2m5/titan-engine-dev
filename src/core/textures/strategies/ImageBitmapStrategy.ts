@@ -17,7 +17,7 @@ class ImageBitmapStrategy implements TextureLoadStrategy {
     return request.paths.length === 1 && RASTER_EXTENSIONS.has(extensionOf(request.paths[0]))
   }
 
-  public async load(request: TextureRequest, signal?: AbortSignal): Promise<Texture> {
+  public async load(request: TextureRequest, signal?: AbortSignal): Promise<Texture<ImageBitmap>> {
     checkAborted(signal)
     // ImageBitmap ignores texture.flipY/premultiplyAlpha at GPU upload time.
     const bitmap = await this.loader.loadAsync(Storage.url(request.paths[0]), signal, {

@@ -10,7 +10,7 @@ import {
   skySampleFunctions,
   skySampleUniforms
 } from '@/core/materials/shaders/lib/chunks/SkySample'
-import { createGaiaSkyUniforms, gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
+import { gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
 
 const RESERVED =
   /\b(centroid|sample|patch|filter|input|output|active|common|partition|resource|half|fixed|attribute|varying|superp)\b/
@@ -50,7 +50,9 @@ describe('SkySample: общий чанк неба', () => {
     })
 
     it('у gaiaStars один выход: ранний return перед динамическим циклом ANGLE считает неинициализированным', () => {
-      const body = stripComments(functions.slice(functions.indexOf('vec3 gaiaStars('), functions.indexOf('vec3 sampleSkyLensed(')))
+      const body = stripComments(
+        functions.slice(functions.indexOf('vec3 gaiaStars('), functions.indexOf('vec3 sampleSkyLensed('))
+      )
       expect(body.match(/\breturn\b/g)).toHaveLength(1)
     })
 
@@ -101,18 +103,24 @@ describe('SkySample: общий чанк неба', () => {
       expect(uniforms).not.toMatch(RESERVED)
     })
 
-    it('объявленные юниформы = ключи createGaiaSkyUniforms', () => {
+    it('объявленные юниформы = ключи createSkyUniforms', () => {
       const declared = Array.from(uniforms.matchAll(/uniform\s+(?:highp\s+)?\w+\s+(\w+)\s*;/g))
         .map((m) => m[1])
         .sort()
-      expect(declared).toEqual(Object.keys(createGaiaSkyUniforms()).sort())
+      expect(declared).toEqual(Object.keys(createSkyUniforms('gaia')).sort())
     })
   })
 
   describe('ветка cubemap', () => {
-    it('sampleSky зовёт прежнюю sampleSkyboxHdr; юниформы — прежний набор', () => {
-      expect(buildSkySampleFunctions('cubemap')).toContain('return sampleSkyboxHdr(skybox, dir, uSkyFlipX);')
-      expect(buildSkySampleUniforms('cubemap')).toBe(skyboxSampleUniforms)
+    it('sampleSky использует общий коэффициент видимости поверх HDR-выборки кубмапы', () => {
+      expect(buildSkySampleFunctions('cubemap')).toContain(
+        'return sampleSkyboxHdr(skybox, dir, uSkyFlipX) * uSkyAtmosphereVisibility;'
+      )
+      expect(buildSkySampleUniforms('cubemap')).toContain(skyboxSampleUniforms)
+      const declared = Array.from(buildSkySampleUniforms('cubemap').matchAll(/uniform\s+\w+\s+(\w+)\s*;/g))
+        .map((m) => m[1])
+        .sort()
+      expect(declared).toEqual(Object.keys(createSkyUniforms('cubemap')).sort())
     })
 
     it('sampleSkyLensed — явные производные: в ветвлениях и цикле линзы неявный texture() дал бы нулевой мип', () => {

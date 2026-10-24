@@ -10,7 +10,17 @@ import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 
-const on = resolveFrostParams({ frostStrength: 1, frostLineMeters: 2000, frostLineWidthMeters: 200, frostPolarDropMeters: 1000, frostAspectMeters: 300, frostSlopeMax: 0.6 }, 'x')
+const on = resolveFrostParams(
+  {
+    frostStrength: 1,
+    frostLineMeters: 2000,
+    frostLineWidthMeters: 200,
+    frostPolarDropMeters: 1000,
+    frostAspectMeters: 300,
+    frostSlopeMax: 0.6
+  },
+  'x'
+)
 
 describe('frostMath: CPU-зеркало маски инея', () => {
   it('сила 0 — маски нет', () => {
@@ -61,19 +71,33 @@ describe('Шейдер: иней', () => {
   const vert = TerrainShaderTemplate.vertexShader
 
   it('высота карты доступна под USE_TERRAIN_FROST в обоих шейдерах', () => {
-    expect((vert.match(/defined\(USE_TERRAIN_MACRO_DETAIL\) \|\| defined\(USE_WATER_EDGE\) \|\| defined\(USE_TERRAIN_FROST\)/g) ?? []).length).toBe(2)
-    expect(frag).toContain('#if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)')
+    expect(
+      (
+        vert.match(
+          /defined\(USE_TERRAIN_MACRO_DETAIL\) \|\| defined\(USE_WATER_EDGE\) \|\| defined\(USE_TERRAIN_FROST\)/g
+        ) ?? []
+      ).length
+    ).toBe(2)
+    expect(frag).toContain(
+      '#if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)'
+    )
   })
 
   it('маска как у зеркала; альбедо смешивается с цветом инея до света; окклюзия не тронута', () => {
     const start = frag.indexOf('vec3 surfaceAlbedo = diffuseSample * albedoMul;')
-    const end = frag.indexOf('dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);')
+    const end = frag.indexOf(
+      'dayColor = surfaceAlbedo * mix(sunTintMix * eclipse * sceneCloudSunVisibility, lit, uTerrainLambert);'
+    )
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
     const block = frag.slice(start, end)
     expect(block).toContain('float frostPole = frostSinLat >= 0.0 ? 1.0 : -1.0;')
-    expect(block).toContain('float frostFacing = terrainSlopeTan > 1e-6 ? dot(-terrainMapSlopeVec / terrainSlopeTan, vec2(0.0, frostPole)) * smoothstep(0.0, 0.1, terrainSlopeTan) : 0.0;')
-    expect(block).toContain('float frostLineH = uFrostLine.x - uFrostLine.z * abs(frostSinLat) - uFrostLine.w * max(frostFacing, 0.0);')
+    expect(block).toContain(
+      'float frostFacing = terrainSlopeTan > 1e-6 ? dot(-terrainMapSlopeVec / terrainSlopeTan, vec2(0.0, frostPole)) * smoothstep(0.0, 0.1, terrainSlopeTan) : 0.0;'
+    )
+    expect(block).toContain(
+      'float frostLineH = uFrostLine.x - uFrostLine.z * abs(frostSinLat) - uFrostLine.w * max(frostFacing, 0.0);'
+    )
     // перенос строки внутри выражения — с любым отступом
     expect(block.replace(/\s+/g, ' ')).toContain(
       'float frostMask = uFrostStrength * smoothstep(frostLineH - 0.5 * uFrostLine.y, frostLineH + 0.5 * uFrostLine.y, vHeightMeters)' +

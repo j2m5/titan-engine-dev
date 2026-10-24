@@ -1,6 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
 import { shippedSnapshot } from './helpers/shippedSnapshot'
+import { validCloudConfig } from './clouds/cloudFixtures'
+
+it('validates explicit clouds against actor resource links and reports actor and cloud field', () => {
+  const db = baseSnapshot()
+  db.actors.push(planet(11, 10))
+  const clouds = validCloudConfig()
+  db.renderingObjects.push({ id: 91, actorId: 11, data: { clouds } } as never)
+  db.resources.push({ id: 32, resourceType: 'diffuse', lifecycle: 'resident', path: 'cloud.png' })
+  db.actorResource.push({ id: 1, actorId: 10, resourceId: 32 })
+  expect(validateDatabase(db).errors).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ entity: 11, message: expect.stringContaining('clouds.layers[0].pattern.map') })
+    ])
+  )
+  db.actorResource.push({ id: 2, actorId: 11, resourceId: 32 })
+  expect(validateDatabase(db).errors.filter((issue) => issue.message.includes('clouds.'))).toEqual([])
+})
 
 /**
  * Минимальный валидный снимок: один анкор-актор (barycenter) без обязательных связей.
@@ -526,10 +543,7 @@ describe('validateDatabase — режимы позиционирования', (
   /** Снимок с полным набором категорий, включая статическую туманность */
   function positioningSnapshot(): DatabaseSnapshot {
     const db = baseSnapshot()
-    db.categories.push(
-      { id: 4, alias: 'atmosphere', name: 'Atmosphere' },
-      { id: 5, alias: 'nebula', name: 'Nebula' }
-    )
+    db.categories.push({ id: 4, alias: 'atmosphere', name: 'Atmosphere' }, { id: 5, alias: 'nebula', name: 'Nebula' })
     // планета (кеплерова), туманность (статическая), атмосфера (примонтированная)
     db.actors.push(
       planet(11, 10),
@@ -765,7 +779,14 @@ describe('validateDatabase — лунки колец', () => {
   function ringSnapshot(m: Record<string, unknown>): DatabaseSnapshot {
     const db = baseSnapshot()
     db.categories.push({ id: 6, alias: 'ring', name: 'Ring' })
-    db.actors.push(planet(11, 10), { id: 12, categoryId: 6, parentId: 11, name: 'Ring', description: '', color: '#fff' })
+    db.actors.push(planet(11, 10), {
+      id: 12,
+      categoryId: 6,
+      parentId: 11,
+      name: 'Ring',
+      description: '',
+      color: '#fff'
+    })
     db.renderingObjects.push({ id: 1, actorId: 12, data: { innerRadius: 75000, outerRadius: 126000, moonlets: [m] } })
     return db
   }
@@ -780,7 +801,9 @@ describe('validateDatabase — лунки колец', () => {
     const errors = validateDatabase(ringSnapshot({ ...moonlet, radiusKm: 130000 })).errors
 
     expect(
-      errors.some((e) => e.collection === 'renderingObjects' && e.entity === 1 && e.message.includes('moonlets[0].radiusKm'))
+      errors.some(
+        (e) => e.collection === 'renderingObjects' && e.entity === 1 && e.message.includes('moonlets[0].radiusKm')
+      )
     ).toBe(true)
   })
 })

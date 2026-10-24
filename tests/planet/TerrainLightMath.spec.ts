@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  cloudShadowUvOffset,
   composeTerrain,
   terrainLit,
   terrainSkyTerm,
@@ -11,33 +10,73 @@ const grey = (v: number): [number, number, number] => [v, v, v]
 
 describe('terrainLit: CPU-зеркало lit = mix(ambient·occ, directGain, max(N·L,0)), directGain = mix(1, occ, k)·cloudShadow', () => {
   it('полдень, occ = 1, без тени → ровно 1 (яркость тела не меняется)', () => {
-    expect(terrainLit({ ndotl: 1, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 0.35, cloudShadow: 1, lambert: 1 })).toEqual(grey(1))
+    expect(
+      terrainLit({ ndotl: 1, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 0.35, cloudShadow: 1, lambert: 1 })
+    ).toEqual(grey(1))
   })
 
   it('полдень, яма occ = 0.4, k = 0 → 1: окклюзия не гасит прямой свет', () => {
-    expect(terrainLit({ ndotl: 1, ambient: 0.15, skyTerm: grey(1), occlusion: 0.4, kDirect: 0, cloudShadow: 1, lambert: 1 })).toEqual(grey(1))
+    expect(
+      terrainLit({ ndotl: 1, ambient: 0.15, skyTerm: grey(1), occlusion: 0.4, kDirect: 0, cloudShadow: 1, lambert: 1 })
+    ).toEqual(grey(1))
   })
 
   it('тень (N·L ≤ 0) → ambient·skyTerm·occ покомпонентно', () => {
     // 0.2·0.75·0.5 не представимо в float64 ни при каком порядке множителей —
     // сверка покомпонентная, а не toEqual на литералы
-    const lit = terrainLit({ ndotl: -0.2, ambient: 0.2, skyTerm: [0.5, 0.75, 1], occlusion: 0.5, kDirect: 0.35, cloudShadow: 1, lambert: 1 })
+    const lit = terrainLit({
+      ndotl: -0.2,
+      ambient: 0.2,
+      skyTerm: [0.5, 0.75, 1],
+      occlusion: 0.5,
+      kDirect: 0.35,
+      cloudShadow: 1,
+      lambert: 1
+    })
     for (const [i, expected] of [0.05, 0.075, 0.1].entries()) expect(lit[i]).toBeCloseTo(expected, 12)
   })
 
   it('k = 1 и серое небо — прежняя формула mix(ambientFloor, 1, N·L)·occ на прямом', () => {
     const ndotl = 0.6
-    const prev = (0.15 * 1 + (1 - 0.15 * 1) * ndotl) // прежний множитель при occ = 1
-    expect(terrainLit({ ndotl, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 1, cloudShadow: 1, lambert: 1 })[0]).toBeCloseTo(prev, 12)
+    const prev = 0.15 * 1 + (1 - 0.15 * 1) * ndotl // прежний множитель при occ = 1
+    expect(
+      terrainLit({ ndotl, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 1, cloudShadow: 1, lambert: 1 })[0]
+    ).toBeCloseTo(prev, 12)
   })
 
   it('lambert = 0 → множитель 1 при любых входах (легаси-вид)', () => {
-    expect(terrainLit({ ndotl: 0.3, ambient: 0.15, skyTerm: grey(0.2), occlusion: 0.1, kDirect: 0.35, cloudShadow: 0.2, lambert: 0 })).toEqual(grey(1))
+    expect(
+      terrainLit({
+        ndotl: 0.3,
+        ambient: 0.15,
+        skyTerm: grey(0.2),
+        occlusion: 0.1,
+        kDirect: 0.35,
+        cloudShadow: 0.2,
+        lambert: 0
+      })
+    ).toEqual(grey(1))
   })
 
   it('тень облаков множит только прямой свет', () => {
-    const noon = terrainLit({ ndotl: 1, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 0.35, cloudShadow: 0.4, lambert: 1 })
-    const shade = terrainLit({ ndotl: 0, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 0.35, cloudShadow: 0.4, lambert: 1 })
+    const noon = terrainLit({
+      ndotl: 1,
+      ambient: 0.15,
+      skyTerm: grey(1),
+      occlusion: 1,
+      kDirect: 0.35,
+      cloudShadow: 0.4,
+      lambert: 1
+    })
+    const shade = terrainLit({
+      ndotl: 0,
+      ambient: 0.15,
+      skyTerm: grey(1),
+      occlusion: 1,
+      kDirect: 0.35,
+      cloudShadow: 0.4,
+      lambert: 1
+    })
     expect(noon).toEqual(grey(0.4))
     expect(shade).toEqual(grey(0.15))
   })
@@ -58,49 +97,54 @@ describe('закатный тинт суши: пропускание к солн
   })
 
   it('в тени (N·L ≤ 0) суша видит только небо — без второго тинта', () => {
-    const lit = terrainLit({ ndotl: 0, ambient: 0.15, skyTerm: skyLut, occlusion: 1, kDirect: 0.35, cloudShadow: 1, lambert: 1, sunTint: tint })
+    const lit = terrainLit({
+      ndotl: 0,
+      ambient: 0.15,
+      skyTerm: skyLut,
+      occlusion: 1,
+      kDirect: 0.35,
+      cloudShadow: 1,
+      lambert: 1,
+      sunTint: tint
+    })
     for (const c of [0, 1, 2]) expect(lit[c]).toBeCloseTo(0.15 * skyLut[c], 12)
   })
 
   it('прямой свет несёт тинт', () => {
-    const lit = terrainLit({ ndotl: 1, ambient: 0.15, skyTerm: skyLut, occlusion: 1, kDirect: 0.35, cloudShadow: 1, lambert: 1, sunTint: tint })
+    const lit = terrainLit({
+      ndotl: 1,
+      ambient: 0.15,
+      skyTerm: skyLut,
+      occlusion: 1,
+      kDirect: 0.35,
+      cloudShadow: 1,
+      lambert: 1,
+      sunTint: tint
+    })
     for (const c of [0, 1, 2]) expect(lit[c]).toBeCloseTo(tint[c], 12)
   })
 
   it('lambert = 0 — прежний вид: тинт на всём диффузе', () => {
-    expect(terrainLit({ ndotl: 0.3, ambient: 0.15, skyTerm: skyLut, occlusion: 0.1, kDirect: 0.35, cloudShadow: 0.2, lambert: 0, sunTint: tint })).toEqual(tint)
+    expect(
+      terrainLit({
+        ndotl: 0.3,
+        ambient: 0.15,
+        skyTerm: skyLut,
+        occlusion: 0.1,
+        kDirect: 0.35,
+        cloudShadow: 0.2,
+        lambert: 0,
+        sunTint: tint
+      })
+    ).toEqual(tint)
   })
 })
 
-describe('composeTerrain: облака своим светом, огни гаснут под облаками, суша под ламбертом самогасится', () => {
-  const base = { night: [0.1, 0.1, 0.1] as Vec3, cloudColor: [0.3, 0.3, 0.3] as Vec3, cloudAlpha: 0.5, dayColor: [0.6, 0.6, 0.6] as Vec3 }
+describe('composeTerrain: base surface preserves night and day lighting', () => {
+  const base = { night: [0.1, 0.1, 0.1] as Vec3, dayColor: [0.6, 0.6, 0.6] as Vec3 }
 
-  it('lambert = 1 — суша не множится на dayFactor, облако не гейтится им, огни гаснут под облаком', () => {
+  it('lambert = 1 keeps day albedo independent of dayFactor', () => {
     const out = composeTerrain({ ...base, dayFactor: 0.5, lambert: 1 })
-    expect(out[0]).toBeCloseTo(0.1 * 0.5 * 0.5 + 0.3 + 0.6 * 0.5 * 1, 12)
-  })
-})
-
-describe('cloudShadowUvOffset: сдвиг тени облака по солнцу', () => {
-  it('солнце в зените — смещения нет', () => {
-    expect(cloudShadowUvOffset([0, 0], 1, 0.003, 3.19, 1)).toEqual({ du: 0, dv: 0 })
-  })
-
-  it('солнце на востоке под 45°: du = h/(2πR cosφ), dv = 0', () => {
-    const s = Math.SQRT1_2
-    const { du, dv } = cloudShadowUvOffset([s, 0], s, 0.003, 3.19, 1)
-    expect(du).toBeCloseTo(0.003 / (2 * Math.PI * 3.19), 12)
-    expect(dv).toBe(0)
-  })
-
-  it('солнце на севере под 45°: dv = h/(πR), du = 0 — знак и знаменатель v-оси', () => {
-    const s = Math.SQRT1_2
-    const { du, dv } = cloudShadowUvOffset([0, s], s, 0.003, 3.19, 1)
-    expect(du).toBe(0)
-    expect(dv).toBeCloseTo(0.003 / (Math.PI * 3.19), 12)
-  })
-
-  it('у терминатора tan θ ограничен: μ_s = 0.01 даёт то же, что 0.15', () => {
-    expect(cloudShadowUvOffset([1, 0], 0.01, 0.003, 3.19, 1)).toEqual(cloudShadowUvOffset([1, 0], 0.15, 0.003, 3.19, 1))
+    expect(out[0]).toBeCloseTo(0.1 * 0.5 + 0.6, 12)
   })
 })

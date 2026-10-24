@@ -1,3 +1,7 @@
+import { CloudRegistry, type CloudBodyEntry } from '@/core/services/CloudRegistry'
+import { resolveSceneClouds } from '@/core/clouds/resolveSceneClouds'
+import type { SceneCloudReceiver } from '@/core/clouds/receivers/SceneCloudReceiver'
+import { resolveLightTint } from '@/core/helpers/lightSource'
 import { LOD, Object3D, WebGLRenderer } from 'three'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { Actor } from '@/core/models/Actor'
@@ -81,6 +85,7 @@ class RenderableFactory {
     /** Реестр гравитационных линз для экранного прохода дальнего поля; без него дыра лензирует только внутри меша */
     private readonly lensRegistry: LensRegistry | null = null,
     private readonly asteroidImpostors: AsteroidImpostorLibrary | null = null,
+    public readonly cloudRegistry: CloudRegistry = new CloudRegistry(),
     private readonly nebulaBakes = new NebulaBakeQueue()
   ) {
     this.eclipses = new EclipseSystem(this.atmosphereRegistry)
@@ -88,6 +93,41 @@ class RenderableFactory {
 
   /** Узлы, чей рельеф построен не до конца: легаси-сфера на экране, свап ждёт готовности. */
   private readonly pendingUpgrades = new Map<DynamicNode, TerrainSphere>()
+  private readonly cloudBodies = new Map<DynamicNode, { entry: CloudBodyEntry; signature: string }>()
+  private bindCloudReceivers(node: DynamicNode): void {
+    const releases: Array<() => void> = []
+    node.renderable?.traverse((object) => {
+      const receiver = (object as Object3D & { sceneCloudReceiver?: SceneCloudReceiver }).sceneCloudReceiver
+      if (receiver) releases.push(this.cloudRegistry.bindReceiver(node.model.getAttribute('id')!, receiver))
+    })
+    node.setCloudReceivers(releases)
+  }
+  public syncCloudRegistrations(): void {
+    for (const [node, record] of this.cloudBodies) {
+      const data = readRenderingData<IPlanetRenderingObject>(node.model)
+      const paths = new Map<number, string>()
+      for (const resource of node.model.resources)
+        paths.set(resource.getAttribute('id')!, resource.getAttribute('path')!)
+      const descriptor = resolveSceneClouds(node.model.getAttribute('id')!, data?.clouds, new Set(paths.keys()))
+      const signature = JSON.stringify([descriptor, [...paths]])
+      record.entry.lightColor.copy(resolveLightTint(node.model).color)
+      record.entry.lambert = data?.terrainLambert ?? 1
+      if (signature === record.signature) continue
+      record.entry.descriptor = descriptor
+      record.signature = signature
+      if (JSON.stringify([...record.entry.resourcePaths]) !== JSON.stringify([...paths])) {
+        node.clearCloudReceivers()
+        record.entry = { ...record.entry, resourcePaths: paths }
+        const release = this.cloudRegistry.register(record.entry)
+        node.setCloudRegistration(() => {
+          release()
+          this.cloudBodies.delete(node)
+        })
+        this.cloudBodies.set(node, record)
+        this.bindCloudReceivers(node)
+      }
+    }
+  }
 
   public make(actor: Actor): Object3D {
     switch (actor.getAttribute('categoryId', -1)) {
@@ -224,7 +264,11 @@ class RenderableFactory {
    */
   private createPulsar(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
-    const lod = new ApparentSizeLod(actor.physicalObject!.getAttribute('radius')!, this.renderer, WHITE_DWARF_IMPOSTOR_PIXELS)
+    const lod = new ApparentSizeLod(
+      actor.physicalObject!.getAttribute('radius')!,
+      this.renderer,
+      WHITE_DWARF_IMPOSTOR_PIXELS
+    )
     const body = new WhiteDwarf(actor)
     const impostor = new WhiteDwarfImpostor(body, this.renderer)
 
@@ -379,8 +423,10 @@ class RenderableFactory {
     lod.add(next)
     node.renderable = next
 
+    node.clearCloudReceivers()
     disposeSceneTree(previous)
     syncRenderableMaterials(next)
+    if (this.cloudBodies.has(node)) this.bindCloudReceivers(node)
   }
 
   /**
@@ -512,7 +558,11 @@ class RenderableFactory {
     // Порог в пикселях (planetImpostor.lodPixels — прежний фактический порог):
     // дистанцию ApparentSizeLod пересчитывает каждый кадр по живым fov и
     // высоте вьюпорта
-    const lod = new ApparentSizeLod(actor.physicalObject!.getAttribute('radius')!, this.renderer, config('planetImpostor.lodPixels'))
+    const lod = new ApparentSizeLod(
+      actor.physicalObject!.getAttribute('radius')!,
+      this.renderer,
+      config('planetImpostor.lodPixels')
+    )
     const lodl1: RenderableObject3D = this.buildPlanetSurface(actor)
     const lodl2 = new FakePlanet(actor)
 
@@ -526,6 +576,35 @@ class RenderableFactory {
 
     node.add(lod)
     this.eclipses.register(node)
+
+    const paths = new Map<number, string>()
+    for (const resource of actor.resources) paths.set(resource.getAttribute('id')!, resource.getAttribute('path')!)
+    const data = readRenderingData<IPlanetRenderingObject>(actor)
+    const descriptor = resolveSceneClouds(actor.getAttribute('id')!, data?.clouds, new Set(paths.keys()))
+    if (
+      descriptor.far !== null ||
+      descriptor.volume !== null ||
+      descriptor.state === 'off' ||
+      descriptor.state === 'invalid'
+    ) {
+      const entry: CloudBodyEntry = {
+        actorId: actor.getAttribute('id')!,
+        object: node,
+        getSurface: () => node.renderable,
+        datumRadiusMeters: actor.physicalObject!.getAttribute('radius')! * 1000,
+        descriptor,
+        resourcePaths: paths,
+        lightColor: resolveLightTint(actor).color,
+        lambert: data?.terrainLambert ?? 1
+      }
+      this.cloudBodies.set(node, { entry, signature: JSON.stringify([descriptor, [...paths]]) })
+      const release = this.cloudRegistry.register(entry)
+      node.setCloudRegistration(() => {
+        release()
+        this.cloudBodies.delete(node)
+      })
+      this.bindCloudReceivers(node)
+    }
 
     return node
   }
@@ -547,7 +626,9 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    const registration = this.asteroidImpostors ? AsteroidRingSystem.registerImpostors(actor, {}, this.asteroidImpostors, true) : null
+    const registration = this.asteroidImpostors
+      ? AsteroidRingSystem.registerImpostors(actor, {}, this.asteroidImpostors, true)
+      : null
     detailed.add(new AsteroidRingSystem(actor, {}, this.depthVolumeRegistry, shapeModelStorage, registration))
 
     const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)

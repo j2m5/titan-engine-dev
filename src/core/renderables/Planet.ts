@@ -53,6 +53,10 @@ class Planet extends Mesh {
    * снятие атмосферы гасит эффект). Вызов пустой, пока запись та же — тот же
    * хук, что TerrainSphere.onVisibleUpdate у рельефных тел.
    */
+  public get sceneCloudReceiver() {
+    return this.planetMaterial.sceneCloudReceiver
+  }
+
   public updateObject(ctx: UpdateContext): void {
     this.sphereDetail.update(ctx.camera)
     this.planetMaterial.syncSunTint()

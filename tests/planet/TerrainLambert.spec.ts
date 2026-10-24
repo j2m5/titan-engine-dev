@@ -6,7 +6,6 @@ import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShade
 import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 /**
  * Конструктор шейдера поверхности читает 'default.png'/'night.jpg' (diffuse/night
@@ -40,9 +39,9 @@ describe.each([
     expect(frag).toContain('uniform float uTerrainAmbient;')
     const occlusionIdx = frag.indexOf('float occlusion = 1.0;')
     const lambertIdx = frag.indexOf(
-      'dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);'
+      'dayColor = surfaceAlbedo * mix(sunTintMix * eclipse * sceneCloudSunVisibility, lit, uTerrainLambert);'
     )
-    const dayIdx = frag.indexOf('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
+    const dayIdx = frag.indexOf('vec3 day = dayColor * landGate;')
     expect(occlusionIdx).toBeGreaterThan(-1)
     expect(lambertIdx).toBeGreaterThan(occlusionIdx)
     expect(dayIdx).toBeGreaterThan(lambertIdx)
@@ -118,12 +117,10 @@ describe.each([
     expect(make(stubActor({ terrainAmbientSunRef: 0 })).uniforms.uTerrainAmbientSunRef.value).toBe(1e-3)
   })
 
-  it('ручки света: дефолты 0.35 / 1 / 0.6 / 6 км в юнитах; из data доезжают', () => {
+  it('ручки света: дефолты 0.35 / 1; из data доезжают', () => {
     const shader = make(stubActor({}))
     expect(shader.uniforms.uTerrainOcclusionDirect.value).toBe(0.35)
     expect(shader.uniforms.uSkyAmbientStrength.value).toBe(1)
-    expect(shader.uniforms.uCloudShadowStrength.value).toBe(0.6)
-    expect(shader.uniforms.uCloudHeightUnits.value).toBeCloseTo(toThreeJSUnits(6), 12)
     expect(shader.uniforms.uAtmoIrradiance.value).toBeNull()
     const tuned = make(stubActor({ terrainOcclusionDirect: 1, skyAmbientStrength: 0 }))
     expect(tuned.uniforms.uTerrainOcclusionDirect.value).toBe(1)

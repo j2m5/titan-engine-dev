@@ -1,5 +1,5 @@
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
-import { Color, CubeTexture, Texture, Uniform } from 'three'
+import { Color, CubeTexture, Texture, Uniform, ShaderMaterial, Vector2, NoBlending } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
@@ -8,6 +8,12 @@ import { applyEclipseUniforms, type EclipseUniformData } from '@/core/eclipse/ec
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
+import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
+import {
+  bindSceneCloudReceiver,
+  sceneCloudReceiverDefines,
+  type SceneCloudReceiver
+} from '@/core/clouds/receivers/SceneCloudReceiver'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 import { WaterSkyBinding } from './WaterSkyBinding'
 
@@ -41,6 +47,51 @@ const WATER_REFLECTION_ENABLED_BY_OWNER: boolean = false
  * вода за рельефом (с обратной стороны тела) не рисуется поверх него.
  */
 class WaterMaterial extends AbstractShaderMaterial {
+  public readonly sceneCloudReceiver: SceneCloudReceiver
+  private sceneCloudDepthMaterial: ShaderMaterial | null = null
+  private sceneCloudDepthDefines = ''
+
+  /** Separate program; uniforms are borrowed from the current color material. */
+  public getSceneCloudDepthMaterial(opaqueDepth: Texture, viewport: Vector2): ShaderMaterial {
+    if (!this.sceneCloudDepthMaterial) {
+      // ShaderMaterial.copy clones Texture uniforms and advances their shared Source version.
+      // Copy the program/state without uniforms; below we explicitly borrow the owner's uniforms.
+      const source: ShaderMaterial = Object.create(this)
+      Object.defineProperties(source, {
+        uniforms: { value: {} },
+        uniformsGroups: { value: [] },
+        userData: { value: {} }
+      })
+      this.sceneCloudDepthMaterial = new ShaderMaterial().copy(source)
+      this.sceneCloudDepthMaterial.uniformsGroups = this.uniformsGroups
+      this.sceneCloudDepthMaterial.transparent = false
+      this.sceneCloudDepthMaterial.depthWrite = true
+      this.sceneCloudDepthMaterial.colorWrite = false
+      this.sceneCloudDepthMaterial.blending = NoBlending
+    }
+    const depth = this.sceneCloudDepthMaterial
+    depth.visible = this.visible
+    const signature = JSON.stringify(this.defines)
+    if (signature !== this.sceneCloudDepthDefines) {
+      depth.defines = { ...this.defines, SCENE_CLOUD_WATER_DEPTH: 1 }
+      depth.needsUpdate = true
+      this.sceneCloudDepthDefines = signature
+    }
+    depth.uniforms = {
+      ...this.uniforms,
+      sceneCloudOpaqueDepth: new Uniform(opaqueDepth),
+      sceneCloudViewport: new Uniform(viewport)
+    }
+    return depth
+  }
+
+  public override dispose(): void {
+    this.sceneCloudReceiver.dispose()
+    this.sceneCloudDepthMaterial?.dispose()
+    this.sceneCloudDepthMaterial = null
+    this.sceneCloudDepthDefines = ''
+    super.dispose()
+  }
   public model: Actor
 
   /** Снимок дефайнов конструирования — см. PlanetSurfaceMaterial.baseDefines, тот же приём. */
@@ -85,9 +136,6 @@ class WaterMaterial extends AbstractShaderMaterial {
 
   /** Последний известный гейт USE_WATER_WAVES — тот же приём, что hasWaterDepth (needsUpdate только на фактической смене). */
   private hasWaterWaves = false
-
-  /** Есть ли облачный слой у рельефа-родителя (USE_WATER_CLOUD), см. syncClouds. */
-  private hasWaterCloud = false
 
   /**
    * Проводка закатного тинта из реестра атмосфер — ТА ЖЕ, что у палубы
@@ -175,6 +223,10 @@ class WaterMaterial extends AbstractShaderMaterial {
       ...(lightTint.active && { USE_LIGHT_TINT: '1' })
     }
     this.defines = { ...this.baseDefines }
+    this.sceneCloudReceiver = bindSceneCloudReceiver(this, 'water')
+    const data = terrainDataOf(model)
+    this.uniforms.sceneCloudAmbient.value = data.terrainAmbient ?? 0.15
+    this.uniforms.sceneCloudAmbientSunRef.value = data.terrainAmbientSunRef ?? 0.3
   }
 
   private static resolveSlopePath(model: Actor): string | undefined {
@@ -240,7 +292,10 @@ class WaterMaterial extends AbstractShaderMaterial {
     if (image?.width && image.height) {
       const radiusMeters = this.uniforms.uFoamRadiusMeters.value
       this.uniforms.uSlopeTexel.value.set(1 / image.width, 1 / image.height)
-      this.uniforms.uSlopeTexelMeters.value.set((2 * Math.PI * radiusMeters) / image.width, (Math.PI * radiusMeters) / image.height)
+      this.uniforms.uSlopeTexelMeters.value.set(
+        (2 * Math.PI * radiusMeters) / image.width,
+        (Math.PI * radiusMeters) / image.height
+      )
     } else {
       this.uniforms.uSlopeTexel.value.set(0, 0)
       this.uniforms.uSlopeTexelMeters.value.set(0, 0)
@@ -271,29 +326,12 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.rebuildDefines()
   }
 
-  /**
-   * Облачный слой над водой — карта и высотный fade материала рельефа-родителя,
-   * каждый видимый кадр (WaterSphere.onVisibleUpdate): облака рисует шейдер
-   * рельефа под водой, без своего слоя вода закрывала бы их над океаном.
-   * Перекомпиляция — только на появлении или уходе карты.
-   */
-  public syncClouds(cloudMap: Texture | null, opacity: number): void {
-    this.uniforms.uWaterCloudMap.value = cloudMap
-    this.uniforms.uWaterCloudOpacity.value = opacity
-
-    const useWaterCloud = cloudMap !== null
-    if (useWaterCloud === this.hasWaterCloud) return
-
-    this.hasWaterCloud = useWaterCloud
-    this.rebuildDefines()
-  }
-
   private rebuildDefines(): void {
     this.defines = {
       ...this.baseDefines,
+      ...sceneCloudReceiverDefines(this),
       ...(this.hasWaterDepth && { USE_WATER_DEPTH: '1' }),
       ...(this.hasWaterWaves && { USE_WATER_WAVES: '1' }),
-      ...(this.hasWaterCloud && { USE_WATER_CLOUD: '1' }),
       // Пересборка от снимка стирает и дефайн тинта — он не про карты и живёт
       // своей синхронизацией (см. syncSunTint), поэтому восстанавливается
       // здесь же по текущей записи реестра.
@@ -335,10 +373,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.uniforms.uWaterNormalMap.value = null
     this.hasWaterDepth = false
     this.hasWaterWaves = false
-    // облака вернёт ближайший syncClouds
-    this.hasWaterCloud = false
-    this.uniforms.uWaterCloudMap.value = null
-    this.defines = { ...this.baseDefines }
+    this.defines = { ...this.baseDefines, ...sceneCloudReceiverDefines(this) }
     // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
     // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.
     this.sunTint.reset()

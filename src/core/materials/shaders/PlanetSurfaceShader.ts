@@ -25,8 +25,6 @@ export interface PlanetSurfaceUniforms {
   lightPosition: Vector3
   diffuseMap: Texture | null
   nightMap: Texture | null
-  cloudMap: Texture | null
-  uCloudOpacity: number
   uRegolithMix: number
   uOppositionSurge: number
   uEclipseCount: number
@@ -42,10 +40,6 @@ export interface PlanetSurfaceUniforms {
   uTerrainAmbientSunRef: number
   uTerrainOcclusionDirect: number
   uSkyAmbientStrength: number
-  uCloudShadowStrength: number
-  uCloudHeightUnits: number
-  uCloudHeightKm: number
-  uCloudLightSoftness: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
@@ -113,9 +107,6 @@ abstract class PlanetSurfaceShader<K extends string> extends AbstractShader<K> {
       lightPosition: new Uniform(new Vector3()),
       diffuseMap: new Uniform(resourceStorage.getTextureOrMake('default.png')),
       nightMap: new Uniform(resourceStorage.getTextureOrMake('night.jpg')),
-      cloudMap: new Uniform(null),
-      // Высотный fade: 1 — слой виден целиком, кадровое значение ставит материал (updateCloudOpacity)
-      uCloudOpacity: new Uniform(1),
       uRegolithMix: new Uniform(regolith.regolithMix),
       uOppositionSurge: new Uniform(regolith.oppositionSurge),
       // Затмения: без тел — 0, данные кладёт EclipseSystem (setEclipse материала)
@@ -125,14 +116,11 @@ abstract class PlanetSurfaceShader<K extends string> extends AbstractShader<K> {
       uNightSoftness: new Uniform(0.18),
       uTerrainLambert: new Uniform(planetData.terrainLambert ?? DEFAULT_TERRAIN_LAMBERT),
       uTerrainAmbient: new Uniform(planetData.terrainAmbient ?? DEFAULT_TERRAIN_AMBIENT),
-      uTerrainAmbientSunRef: new Uniform(Math.max(planetData.terrainAmbientSunRef ?? DEFAULT_TERRAIN_AMBIENT_SUN_REF, 1e-3)),
+      uTerrainAmbientSunRef: new Uniform(
+        Math.max(planetData.terrainAmbientSunRef ?? DEFAULT_TERRAIN_AMBIENT_SUN_REF, 1e-3)
+      ),
       uTerrainOcclusionDirect: new Uniform(light.terrainOcclusionDirect),
       uSkyAmbientStrength: new Uniform(light.skyAmbientStrength),
-      uCloudShadowStrength: new Uniform(light.cloudShadowStrength),
-      // Высота облачного слоя — тень облаков и параллакс слоя (чанк CloudLayer); км — для LUT атмосферы
-      uCloudHeightUnits: new Uniform(toThreeJSUnits(light.cloudHeightKm)),
-      uCloudHeightKm: new Uniform(light.cloudHeightKm),
-      uCloudLightSoftness: new Uniform(light.cloudLightSoftness),
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       shadowRingsTexture: new Uniform(ringMap),

@@ -79,7 +79,7 @@ export const lensFlareEffectOptionsDefaults = {
   resolutionScale: 0.5,
   width: Resolution.AUTO_SIZE,
   height: Resolution.AUTO_SIZE,
-  intensity: 0.1,
+  intensity: 0.14,
   ghostAmount: 1,
   ghostVignette: 2,
   ghostChromatic: 1,

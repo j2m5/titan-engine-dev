@@ -1,5 +1,10 @@
 import { PerspectiveCamera } from 'three'
-import { BLOOM_OPTIONS, Postprocessing, readAtmosphereDebugView, TONE_MAPPING_OPTIONS } from '@/core/graphic/Postprocessing'
+import {
+  BLOOM_OPTIONS,
+  Postprocessing,
+  readAtmosphereDebugView,
+  TONE_MAPPING_OPTIONS
+} from '@/core/graphic/Postprocessing'
 import { BlendFunction, Effect, EffectPass, RenderPass, ToneMappingMode } from 'postprocessing'
 import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
 import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
@@ -89,7 +94,7 @@ describe('Postprocessing: пасс атмосферы', () => {
     // Атмосфера — за ним: она тонирует и пыль, а блум считает яркость по входу
     // СВОЕГО пасса и обязан видеть уже затуманенный кадр
     const passes = new Postprocessing(
-      null as never,
+      { domElement: document.createElement('canvas') } as never,
       null as never,
       new PerspectiveCamera(),
       new AtmosphereRegistry(),

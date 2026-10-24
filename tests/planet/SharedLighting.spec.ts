@@ -54,7 +54,7 @@ describe('общая композиция света: один чанк в об�
       'vec3 ambient = ',
       'float directGain = ',
       'vec3 lit = mix(ambient',
-      'vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);',
+      'vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse * sceneCloudSunVisibility, lit, uTerrainLambert);',
       'float landGate = ',
       'vec3 day = ',
       'vec3 finalColor = '
@@ -70,8 +70,8 @@ describe('общая композиция света: один чанк в об�
     expect(main).not.toMatch(/\bday \*=/)
     expect(main.match(/vec3 day = /g)).toHaveLength(1)
     expect(main.match(/vec3 finalColor = /g)).toHaveLength(1)
-    expect(main).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
-    expect(main).toContain('vec3 finalColor = night * (1.0 - dayFactor) * (1.0 - cloudAlphaSlant) + day;')
+    expect(main).toContain('vec3 day = dayColor * landGate;')
+    expect(main).toContain('vec3 finalColor = night * (1.0 - dayFactor) + day;')
   })
 
   it.each(templates)('%s: тинт солнца считается один раз, только под USE_SUN_TINT', (_path, template) => {
@@ -91,7 +91,6 @@ describe('общая композиция света: один чанк в об�
     const frag = TerrainShaderTemplate.fragmentShader
     const sphere = SphereSurfaceShaderTemplate.fragmentShader
     expect(guardsAt(frag, 'vec3 sunLocal = ')).toEqual([])
-    expect(guardsAt(frag, 'cloudShadow = cloudShadowAt(')).toEqual(['USE_CLOUD_SHADOW'])
     expect(guardsAt(frag, 'terrainShadow = mix(1.0, terrainShadowMarch(')).toEqual(['USE_TERRAIN_SHADOW'])
     expect(guardsAt(frag, 'surfaceAlbedo = mix(surfaceAlbedo, uFrostColor, frostMask);')).toEqual(['USE_TERRAIN_FROST'])
     for (const needle of ['vec3 sunLocal = ', 'cloudShadowAt(', 'terrainShadowMarch(', 'uFrostColor']) {
@@ -102,8 +101,16 @@ describe('общая композиция света: один чанк в об�
 
 describe('CPU-зеркало: сфера под ламбертом', () => {
   it('гигант при N·L = 0.5 больше не залит в полную силу: ламберт + пол вместо 1', () => {
-    const lit = terrainLit({ ndotl: 0.5, ambient: 0.15, skyTerm: [1, 1, 1], occlusion: 1, kDirect: 0, cloudShadow: 1, lambert: 1 })
-    const color = composeTerrain({ night: [0, 0, 0], cloudColor: [0, 0, 0], cloudAlpha: 0, dayColor: lit, dayFactor: 1, lambert: 1 })
+    const lit = terrainLit({
+      ndotl: 0.5,
+      ambient: 0.15,
+      skyTerm: [1, 1, 1],
+      occlusion: 1,
+      kDirect: 0,
+      cloudShadow: 1,
+      lambert: 1
+    })
+    const color = composeTerrain({ night: [0, 0, 0], dayColor: lit, dayFactor: 1, lambert: 1 })
     for (const c of [0, 1, 2]) expect(color[c]).toBeCloseTo(0.575, 12)
   })
 })

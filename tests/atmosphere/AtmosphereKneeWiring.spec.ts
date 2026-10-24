@@ -31,6 +31,8 @@ function entryWith(extra: Partial<AtmosphereConfig> = {}): AtmosphereEntry {
   object.updateMatrixWorld(true)
   return {
     actorId: 1,
+    generation: 0,
+    ready: true,
     name: 'StubPlanet',
     object,
     config: config(extra),

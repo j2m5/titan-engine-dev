@@ -91,9 +91,7 @@ describe('WaterShaderTemplate: дисторсия Water.js — единицы м
   })
 
   it('дисторсия — тангенциальная проекция waveLocalNormal на плоскость к waveDirLocal (dev), не worldNormal.xy', () => {
-    expect(frag).toContain(
-      'vec3 dev = waveLocalNormal - waveDirLocal * dot(waveLocalNormal, waveDirLocal);'
-    )
+    expect(frag).toContain('vec3 dev = waveLocalNormal - waveDirLocal * dot(waveLocalNormal, waveDirLocal);')
     expect(frag).toContain('vec3 worldDev = mat3(modelMatrix) * dev;')
     expect(frag).not.toContain('worldNormal.xy')
     expect(frag).not.toContain('reflectDir.xy')
@@ -266,7 +264,16 @@ describe('CPU-зеркало skyColorGradient: зенит темнее гори�
     const sunColor: Vec3 = [1, 1, 1]
     const nightFloor = 0.08
 
-    const nightColor = wavesColor(baseColor, brightReflection, brightReflection, waveNormal, viewDir, nightLightDir, sunColor, nightFloor)
+    const nightColor = wavesColor(
+      baseColor,
+      brightReflection,
+      brightReflection,
+      waveNormal,
+      viewDir,
+      nightLightDir,
+      sunColor,
+      nightFloor
+    )
     const brightest = Math.max(nightColor[0], nightColor[1], nightColor[2])
 
     // Верхняя оценка: без ночного пола reflectance·0.9·[1,1,1] уже даёт
@@ -478,7 +485,6 @@ const BASELINE_FRAGMENT_SHADER = `
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
       // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
       vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
-      // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
       float cloudShadow = 1.0;
       color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);
 
@@ -516,9 +522,15 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
     // USE_SUN_TINT снимается вторым (арка «тинт солнца для воды») — весь её
     // вклад во фрагментник под своим гейтом, вне гейта только варьинг.
     // USE_WATER_CLOUD (облачный слой над водой) — весь под своим гейтом, снимается до тинта.
-    const stripped = stripGuardedBlock(stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'), 'USE_SUN_TINT')
+    const colorFrag = stripGuardedBlock(stripGuardedBlock(frag, 'SCENE_CLOUD_WATER_DEPTH'), 'SCENE_CLOUD_RECEIVER')
+    const stripped = stripGuardedBlock(
+      stripGuardedBlock(stripGuardedBlock(colorFrag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'),
+      'USE_SUN_TINT'
+    )
 
-    expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER)))
+    expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(
+      normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER))
+    )
   })
 
   // Находка ревью фикс-раунда 1 №4 (блайндспот): мутация «закрыть гейт
@@ -617,7 +629,7 @@ const BASELINE_VERTEX_SHADER = `
       vDetailPos = position + detailOrigin;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
-      // Взгляд в системе тела (облачный слой) — из view-space, как у суши (TerrainShaderTemplate)
+      // Взгляд в системе тела нужен для отражения неба на ближнем океане.
       vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
