@@ -54,12 +54,11 @@ describe('cloud endpoint composition', () => {
       prepareVolume: () => true,
       diagnostics: { state: 'prepared' },
       getPreparationMaterialBindings: () => new Map(),
-      getEndpointMaterialOwners: () => new Map(),
+      getEndpointMaterials: () => ({ bindings: new Map(), owners: new Map() }),
       recordPasses: () => {},
       useEndpoint: () => {},
       invalidate: vi.fn(),
-      renderVolume: () => ({}),
-      getEndpointMaterialBindings: () => new Map()
+      renderVolume: () => ({})
     }
     const target = new WebGLRenderTarget()
     const composition = new SceneCloudComposition(renderer as never, scene, camera, runtime as never, () => ({

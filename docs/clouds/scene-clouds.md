@@ -1583,3 +1583,134 @@ No additional cloud shader rewrite resulted from this investigation. Local
 ignored evidence is in `tmpscreenshots/cloud-tuning/frame-tail-merged/` and
 `frame-tail-scope/`; runner logs use those prefixes under
 `.superpowers/cloud-tuning/`.
+
+### Avoiding healthy-frame retry signatures (2026-10-24)
+
+Finer CPU intervals and a separate Chrome sampling profile identified an
+unconditional retry-boundary calculation in `SceneCloudRuntime.beginFrame`.
+The boundary serializes receiver program signatures, including shader sources,
+even when `CloudCompilationFailures.retry` immediately returns because no
+failure exists. In the High/night diagnostic, `beginFrame` averaged 1.717 ms;
+the separate 1,024-frame CPU profile attributed about 1,735 ms inclusively to
+`retryBoundary` out of 9,345 ms recorded. These are separate measurements,
+and the sampling profiler itself adds overhead.
+
+The runtime now checks for a latched compilation failure before constructing
+the retry boundary and live receiver list. Failure recovery still examines the
+current layout and context generation. Normal preparation continues to check
+material changes independently. A regression test first observed four program
+key reads across four healthy frames, then zero with the guard; existing
+owned-program and context recovery tests also pass.
+
+The matched comparison uses the exact original `beginFrame` from `472c12a6`
+and the guarded implementation on the same runtime, in original/production/
+original order. All other code, including night solar-shadow culling, is the
+same. RTX 5070 Ti, Chrome 155 native ANGLE/D3D11, 1920×1080/DPR 1; each interval
+has 1,024 non-disjoint GPU samples with balanced 64-phase coverage. Camera,
+resources, terrain/water counts and source generation match within each group.
+Values below follow that original/production/original order, in milliseconds.
+
+| Quality / view | CPU call mean | Whole-frame GPU mean | Frame-start interval p95 |
+| --- | --- | --- | --- |
+| High / day | 10.502 / 8.816 / 10.273 | 15.172 / 15.296 / 15.345 | 16.4 / 16.3 / 16.4 |
+| High / night | 10.673 / 8.893 / 10.873 | 10.688 / 8.988 / 10.845 | 13.7 / 11.1 / 14.8 |
+| Medium / day | 10.566 / 8.788 / 10.422 | 10.436 / 8.932 / 10.325 | 13.8 / 11.8 / 13.4 |
+| Medium / night | 10.609 / 8.783 / 10.514 | 8.456 / 8.580 / 8.384 | 13.5 / 11.0 / 12.9 |
+| Low / day | 10.511 / 8.570 / 10.618 | 7.423 / 7.767 / 7.505 | 14.4 / 11.0 / 14.2 |
+| Low / night | 10.648 / 8.764 / 10.859 | 6.976 / 6.947 / 6.959 | 13.3 / 11.2 / 14.7 |
+
+`beginFrame` mean fell from 1.81–1.92 ms to 0.107–0.122 ms. Whole-frame CPU
+call mean was 15.1–18.9% lower than the average of the two controls. High/day
+frame-start timing remained essentially unchanged with its longer GPU work.
+These CPU elapsed calls include submission/waits, and frame-start intervals
+are not display presentation timestamps. GPU interval changes do not represent
+a cloud shader speedup; this change only removes CPU preparation work.
+
+Six independent motion comparisons cover all three qualities, day and night:
+128 warmup frames followed by 64 frames of a 6° camera turn, with a fresh cloud
+history for each variant. The resolved cloud buffer, sampled at 320×180 from
+the 1080p render, matched exactly in all four floating-point RGBA channels.
+Other hardware remains deferred. Repeated near-material synchronization is
+the next measured CPU candidate; it is unchanged here.
+
+Validation: TypeScript and production build passed; the full local Vitest run
+passed 5,842 tests with four skipped across 594 files (including two ignored
+local audit fixtures). GPU lifecycle passed 147 checks/14 cases and pipeline
+706 checks/18 cases, with resources released and only six expected WebGL messages
+from deliberate shader failures. ESLint passed with `storage/local/**`
+excluded; bare `npm run lint` reports 28 existing `no-explicit-any` errors in
+ignored `storage/local/textures/dem-rebuild-2026-10-21/tooling/` scripts.
+
+Local ignored evidence: `tmpscreenshots/cloud-tuning/cpu-prep-baseline/`
+(stage intervals and `night.cpuprofile`) and `cpu-retry-integrated/`
+(`paired.json`, `parity.json`); runners and logs are under
+`.superpowers/cloud-tuning/` with the same prefixes.
+
+### Acquiring endpoint materials and owners together (2026-10-24)
+
+Each selected receiver previously synchronized its near material four times
+per active frame: once for preparation and three times while separately
+building bindings and draw-attribution owners. `getEndpointMaterials` now
+returns both maps from one acquisition. Preparation and acquisition immediately
+before the near draw remain separate, so live owner changes after preparation
+are still observed. No material state is cached across frames.
+
+The native pipeline regression counts actual `ShaderMaterial.copy` calls.
+It first failed with four copies instead of two, then passed with two for the
+Earth sphere, terrain/water receivers and Jupiter at the eligible blend
+weights. Runtime checks cover current-output ownership, live uniforms, defines
+and opacity after preparation, stale plans and shader-failure recovery.
+
+These measurements compare the previous material path **with the healthy-frame
+retry guard already enabled** against the combined acquisition. High was run
+in one fresh browser, Medium/Low in another; each original/production/original
+group shares its runtime, pose, resource counts and source generation. All
+18 intervals contain 1,024 valid GPU samples balanced across 64 phases.
+Environment: RTX 5070 Ti, Chrome 155 native ANGLE/D3D11, 1920×1080/DPR 1.
+Values are milliseconds in original/production/original order.
+
+| Quality / view | CPU call mean | Cloud composition CPU mean | Frame-start interval p95 |
+| --- | --- | --- | --- |
+| High / day | 8.586 / 8.063 / 8.808 | 3.571 / 3.052 / 3.707 | 16.2 / 16.4 / 16.4 |
+| High / night | 8.922 / 8.214 / 8.824 | 4.054 / 3.323 / 4.020 | 11.4 / 10.7 / 10.8 |
+| Medium / day | 9.091 / 8.043 / 8.617 | 3.996 / 3.282 / 3.800 | 12.2 / 10.2 / 11.1 |
+| Medium / night | 8.959 / 8.260 / 8.973 | 4.097 / 3.493 / 4.098 | 11.5 / 10.3 / 11.8 |
+| Low / day | 9.140 / 8.791 / 9.305 | 4.074 / 3.541 / 4.088 | 11.7 / 11.3 / 12.8 |
+| Low / night | 9.184 / 8.280 / 8.873 | 4.111 / 3.442 / 3.986 | 12.4 / 10.9 / 11.6 |
+
+Relative to the average of both controls, CPU call mean fell another
+4.7–9.2%; cloud composition CPU mean fell 13.2–17.7%. High/day remains GPU
+limited. CPU elapsed includes command submission/waits, stage intervals are
+nested, and frame-start intervals do not measure display presentation.
+Cloud shaders and ray-marching budgets are unchanged.
+
+Full near-endpoint comparison is **not bit-exact**. Independently reset motion
+sequences also differed when comparing an implementation with itself; one
+initial same-version control was substantially non-equivalent, with no proven
+cause. A narrower replay therefore holds actual cloud overlay/shadow textures,
+frame serial and wave time fixed while rendering original/production/original
+endpoints at each of 64 poses in a 6° turn. It samples the complete near HDR
+endpoint, including surface and water, at 320×180 from the 1080p render.
+
+The stated diagnostic limit was one RGBA16F step per changed channel and
+0.01% changed channels. Daytime replay passed at all three qualities (3–39
+changed channel values out of 14,745,600; maximum 0.000244141). Night replay
+failed that limit for both production and unchanged controls: production had
+16,468–17,112 changed values, maximum 0.0000152588 and two half-float steps;
+controls had 15,899–23,732, maximum up to 0.000038147 and twelve steps.
+Those failures remain recorded. This comparison is inconclusive about strict
+pixel parity and does not prove identical independent temporal histories.
+
+TypeScript/build, 5,843 local unit tests (four skipped, 594 files including the
+two existing ignored audit fixtures) and ESLint excluding the known local
+`storage/local/**` scripts passed. The native pipeline passed 665 checks across
+19 cases, including the new copy budget and existing failure recovery.
+Lifecycle also passed 147 checks/14 cases. Both GPU probes released their
+resources; six expected WebGL messages came from deliberate shader failures.
+
+Ignored evidence is under `tmpscreenshots/cloud-tuning/material-sync-final/`
+(High) and `material-sync-remaining/` (Medium/Low), with `paired.json`,
+`parity.json` and `summary.json`. Earlier independent-history controls and
+strict replay attempts remain in `material-sync-integrated/`,
+`material-parity-controls/` and `material-sync-replay/`. Runners and validation
+logs are under `.superpowers/cloud-tuning/` with `material-sync` prefixes.

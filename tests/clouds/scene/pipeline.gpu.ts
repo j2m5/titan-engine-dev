@@ -518,7 +518,21 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
           await settlePrograms()
         }
         const before = runtime.diagnostics
-        post.render(0)
+        const syncs = (weight > 0 ? registry.receivers(actorId) : []).map((receiver) => {
+          const material = receiver.getEndpointMaterial('near'),
+            copy = material.copy
+          let copies = 0
+          material.copy = function (source) {
+            copies++
+            return copy.call(this, source)
+          }
+          return { material, copy, copies: () => copies }
+        })
+        try {
+          post.render(0)
+        } finally {
+          for (const { material, copy } of syncs) material.copy = copy
+        }
         const after = runtime.diagnostics
         check(after.finalRenders - before.finalRenders === 1, 'one final render')
         check(
@@ -535,6 +549,13 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
             after.nearRenders - before.nearRenders === (weight > 0 ? 1 : 0),
           'exact far/near draw schedule'
         )
+        for (const sync of syncs)
+          check(
+            sync.copies() === 2,
+            `near material sync only at preparation and draw: ${actorId}/${weight}, copies=${sync.copies()}`
+          )
+        if (syncs.length && !report.cases.includes('bounded-near-material-sync'))
+          report.cases.push('bounded-near-material-sync')
         if (weight > 0)
           close(
             mixed,

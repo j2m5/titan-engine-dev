@@ -346,7 +346,9 @@ export class SceneCloudRuntime {
     const weight = cloudVolumeOpacity(candidate.shellDistanceMeters, config.lod)
     this.stats.requestedWeight = weight
     const key = JSON.stringify([body.descriptor, this.quality, slot.entry.actorId, slot.generation])
+    // Retry signatures include receiver shader sources; only build them for a latched failure.
     if (
+      this.compilationFailures.current &&
       !this.compilationFailures.retry(
         this.retryBoundary(key),
         this.registry.entries().flatMap((entry) => this.registry.receivers(entry.actorId))
@@ -557,13 +559,10 @@ export class SceneCloudRuntime {
   private retryBoundary(key = this.key): string {
     return JSON.stringify([key, this.generation, this.receiverLayout()])
   }
-  public getEndpointMaterialOwners(plan: CloudFramePlan): ReadonlyMap<ShaderMaterial, SceneCloudReceiver> {
-    this.getEndpointMaterialBindings(plan)
-    return new Map(
-      this.registry.receivers(plan.frame.actorId).map((receiver) => [receiver.getEndpointMaterial('near'), receiver])
-    )
-  }
-  public getEndpointMaterialBindings(plan: CloudFramePlan): ReadonlyMap<ShaderMaterial, ShaderMaterial> {
+  public getEndpointMaterials(plan: CloudFramePlan): {
+    bindings: ReadonlyMap<ShaderMaterial, ShaderMaterial>
+    owners: ReadonlyMap<ShaderMaterial, SceneCloudReceiver>
+  } {
     if (
       this.compilationFailures.current ||
       plan !== this.plan ||
@@ -571,11 +570,16 @@ export class SceneCloudRuntime {
       this.selected?.actorId !== plan.frame.actorId
     )
       throw new Error('Near materials require the accepted current cloud output')
-    return new Map(
-      this.registry
-        .receivers(this.selected.actorId)
-        .map((receiver) => [receiver.getEndpointMaterial('far'), receiver.getEndpointMaterial('near')])
-    )
+    const bindings = new Map<ShaderMaterial, ShaderMaterial>(),
+      owners = new Map<ShaderMaterial, SceneCloudReceiver>()
+    // Acquisition refreshes live material state. Share it with draw attribution.
+    for (const receiver of this.registry.receivers(this.selected.actorId)) {
+      const far = receiver.getEndpointMaterial('far'),
+        near = receiver.getEndpointMaterial('near')
+      bindings.set(far, near)
+      owners.set(near, receiver)
+    }
+    return { bindings, owners }
   }
   public invalidate(reason: CloudFallbackReason, cause?: unknown, compilation?: CloudCompilationEvidence): void {
     this.activationSeconds = 0

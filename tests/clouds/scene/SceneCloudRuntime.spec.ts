@@ -22,6 +22,7 @@ import type { AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import type { AtmosphereFrameSnapshot } from '@/core/graphic/effects/atmosphere/atmosphereFrame'
 import { SpaceScale } from '@/core/constants'
 import type { CloudFrame } from '@/core/clouds/scene/CloudFrame'
+import { bindSceneCloudReceiver } from '@/core/clouds/receivers/SceneCloudReceiver'
 const size = new Vector2(16, 8)
 function fixture(pending = false) {
   const registry = new CloudRegistry(),
@@ -141,6 +142,63 @@ function fixture(pending = false) {
 }
 afterEach(() => resourceStorage.deleteAllTextures())
 describe('scene cloud runtime', () => {
+  it('refreshes near material state after preparation while retaining receiver attribution', () => {
+    const f = fixture(),
+      target = new WebGLRenderTarget(),
+      material = new ShaderMaterial({ fragmentShader: 'void main() {}' }),
+      receiver = bindSceneCloudReceiver(material, 'sphere'),
+      unbind = f.registry.bindReceiver(7, receiver)
+    try {
+      const plan = f.begin()!
+      expect(f.runtime.prepareVolume({} as never, target, plan)).toBe(true)
+      const prepared = f.runtime.getPreparationMaterialBindings(plan).get(material)!
+      const version = prepared.version
+      // A depth draw or streaming callback can change the owner after warmup.
+      material.opacity = 0.4
+      material.defines.LIVE_LAYOUT = 1
+      material.uniforms.live = { value: 7 }
+      f.runtime.renderVolume({} as never, target, plan, {
+        serial: plan.frame.serial,
+        viewport: size,
+        texture: new Texture(),
+        sceneLogFarFactor: 1,
+        sceneUnitsToMeters: 1
+      })
+      const endpoint = f.runtime.getEndpointMaterials(plan)
+      expect(endpoint.bindings.size).toBe(2)
+      expect(endpoint.bindings.get(material)).toBe(prepared)
+      expect(endpoint.owners.get(prepared)).toBe(receiver)
+      expect(prepared.opacity).toBe(0.4)
+      expect(prepared.defines.LIVE_LAYOUT).toBe(1)
+      expect(prepared.uniforms.live).toBe(material.uniforms.live)
+      expect(prepared.version).toBe(version + 1)
+      material.uniforms.live = { value: 9 }
+      expect(f.runtime.getEndpointMaterials(plan).bindings.get(material)?.uniforms.live).toBe(material.uniforms.live)
+      f.begin()
+      expect(() => f.runtime.getEndpointMaterials(plan)).toThrow('accepted current')
+    } finally {
+      f.runtime.dispose()
+      unbind()
+      receiver.dispose()
+      material.dispose()
+      target.dispose()
+    }
+  })
+  it('does not inspect receiver program keys for retry while no compilation failure is latched', () => {
+    const f = fixture()
+    const owner = f.receiver.getEndpointMaterial('far')
+    let programKeyReads = 0
+    owner.customProgramCacheKey = () => {
+      programKeyReads++
+      return 'healthy-receiver'
+    }
+    try {
+      for (let i = 0; i < 4; i++) expect(f.begin()).not.toBeNull()
+      expect(programKeyReads).toBe(0)
+    } finally {
+      f.runtime.dispose()
+    }
+  })
   it('fades successful frames in without consuming preparation time or advancing twice per output', () => {
     const f = fixture()
     const input = new WebGLRenderTarget()
@@ -571,7 +629,7 @@ describe('scene cloud runtime', () => {
     const f = fixture(),
       plan = f.begin()!
     const target = new WebGLRenderTarget()
-    expect(() => f.runtime.getEndpointMaterialBindings(plan)).toThrow('accepted current')
+    expect(() => f.runtime.getEndpointMaterials(plan)).toThrow('accepted current')
     f.runtime.renderVolume({} as never, target, plan, {
       serial: plan.frame.serial,
       viewport: size,
@@ -579,9 +637,13 @@ describe('scene cloud runtime', () => {
       sceneLogFarFactor: 1,
       sceneUnitsToMeters: 1
     })
-    expect(f.runtime.getEndpointMaterialBindings(plan).size).toBe(1)
+    const endpoint = f.runtime.getEndpointMaterials(plan)
+    expect(endpoint.bindings.size).toBe(1)
+    const near = endpoint.bindings.get(f.receiver.getEndpointMaterial('far'))!
+    expect(endpoint.owners.get(near)).toBe(f.receiver)
     const failure = Error('near receiver link')
     f.runtime.invalidate('error', failure, { stage: 'near', recovery: 'owned-near', receivers: [f.receiver] })
+    expect(() => f.runtime.getEndpointMaterials(plan)).toThrow('accepted current')
     expect(f.begin()).toBeNull()
     expect(f.runtime.error).toBe(failure)
     expect(f.receiver.retryEndpointMaterial).not.toHaveBeenCalled()

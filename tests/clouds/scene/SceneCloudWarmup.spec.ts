@@ -47,8 +47,7 @@ function fixture() {
     prepareVolume: () => true,
     diagnostics: { state: 'prepared', effectiveWeight: 0 },
     getPreparationMaterialBindings: () => new Map(),
-    getEndpointMaterialOwners: () => new Map(),
-    getEndpointMaterialBindings: () => new Map(),
+    getEndpointMaterials: () => ({ bindings: new Map(), owners: new Map() }),
     recordPasses: vi.fn(),
     useEndpoint: vi.fn((plan, _output, activate) => {
       if (plan && activate) runtime.diagnostics.effectiveWeight = 0.05

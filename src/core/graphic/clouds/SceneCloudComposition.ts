@@ -166,11 +166,12 @@ export class SceneCloudComposition {
       this.near.atmosphere.setCloudOverlay(output)
       this.runtime.recordPasses({ nearRenders: 1 })
       stage = 'near'
-      const owners = this.runtime.getEndpointMaterialOwners(plan)
+      const endpoint = this.runtime.getEndpointMaterials(plan)
+      const owners = endpoint.owners
       ownedReceivers = [...new Set(owners.values())]
       withSceneCloudMaterials(
         this.scene,
-        this.runtime.getEndpointMaterialBindings(plan),
+        endpoint.bindings,
         () => {
           this.near!.composer.render(plan.frame.deltaSeconds)
         },

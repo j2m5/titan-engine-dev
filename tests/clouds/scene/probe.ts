@@ -96,6 +96,7 @@ export const sceneCloudProbeRegistry: Partial<
       'responsive-large-source',
       'linear-hdr-mix',
       'single-frame-schedule',
+      'bounded-near-material-sync',
       'equal-hdr-endpoints',
       'terrain-water-main-composition',
       'near-failure-restoration',
