@@ -1,8 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import type { Mesh } from 'three'
+import { LinearFilter, type Mesh } from 'three'
 import { createCloudTextures } from '@/core/clouds/takram/cloudTextures'
 
 describe('owned pinned procedural cloud textures', () => {
+  it('keeps the single-level density sampling contract for both owned volumes', () => {
+    const textures = createCloudTextures()
+    try {
+      for (const texture of [textures.shape.texture, textures.detail.texture]) {
+        expect(texture.minFilter).toBe(LinearFilter)
+        expect(texture.magFilter).toBe(LinearFilter)
+        expect(texture.generateMipmaps).toBe(false)
+      }
+    } finally {
+      textures.dispose()
+    }
+  })
   it('disposes both distinct instance geometries and noise exactly once', () => {
     const textures = createCloudTextures()
     const shapeGeometry = (textures.shape as unknown as { mesh: Mesh }).mesh.geometry

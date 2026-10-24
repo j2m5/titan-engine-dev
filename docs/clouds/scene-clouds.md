@@ -1015,7 +1015,8 @@ path: ANGLE's [HLSL translator](https://github.com/google/angle/blob/main/src/co
 sets the strict marker, which reaches the
 [D3D11 compile flags](https://github.com/google/angle/blob/main/src/libANGLE/renderer/d3d/d3d11/Renderer11.cpp).
 The check remains inside the cascade before either output layout is applied.
-Low and Medium do not receive this numerical adaptation.
+At this stage Low and Medium did not receive this numerical adaptation; the
+follow-up below extends it to every scene quality.
 
 An A/B/A experiment kept the material, targets, textures and all queried GPU
 uniform values fixed, changing only the cache key to force a separate GL program.
@@ -1085,3 +1086,193 @@ for A/B/A, `high-shadow-strict-perf/` for prototype timings and screenshots,
 `high-shadow-integrated-parity/` for final current/history readbacks, and
 `high-shadow-{cold-baseline,cold-strict-split,integrated-startup}/` for fresh-profile
 activation. Runner logs are under `.superpowers/cloud-tuning/high-shadow-*`.
+
+### Explicit density sampling in the scene current pass (2026-10-24)
+
+Stage profiling at 1080p and 1440p identified the main density march as the
+remaining steady High bottleneck. Above the layer it cost 20.18/32.00 ms,
+versus 0.034/0.058 ms for temporal resolve. Disposable ablations localized most
+of the sensitivity to secondary sun density sampling. Caching phase terms did
+not improve timings, and skipping clear sun samples slowed them down; neither
+change is shipped.
+
+`sceneCloudDensitySampling` changes just the shape and detail reads in the scene
+current shader to `textureLod(..., 0.0)`. Both owned procedural volumes (128³
+and 32³) have identical linear min/mag filtering and no mipmaps. Explicit LOD
+therefore retains their texels and filtering while avoiding implicit derivatives
+inside the nested marches. See the texture lookup functions in the
+[GLSL ES specification](https://registry.khronos.org/OpenGL/specs/es/3.2/GLSL_ES_Specification_3.20.html).
+The adapter validates each unique source anchor and runs before packed output
+and warmup on every effect creation. Quality presets, shape data, density,
+lighting, ray/sample budgets, render sizes, temporal filtering, draw counts and
+GPU texture allocation are unchanged. Shared labs and shadow sampling are
+unaffected.
+
+The current pass also returns neutral outputs when a ray interval endpoint is
+NaN, before entering density sampling or writing temporal depth/velocity data.
+As with the High shadow guard above, the live `isnan` check requests strict
+compilation on the tested ANGLE/D3D11 path. Unguarded implicit/explicit programs
+had sometimes disagreed, including repeated original draws; inspecting all
+active GL uniform values and adding warmup did not explain or remove the
+differences. Guarded implicit/explicit prototypes agreed across all three
+qualities and independent histories. This supports the bounded guard and
+sampling change; it does not identify a driver defect or promise bit identity
+with the previous unguarded arithmetic.
+
+Final paired measurements used the integrated backend on RTX 5070 Ti,
+Chrome 155, native ANGLE/D3D11, DPR 1 and fixed Solar epoch 2451545. Each cell
+below is a GPU median from 181 nondisjoint samples. Above/inside/transition use
+altitudes 12/6/110 km and pitches 8/0/14 degrees at the same lit cloud edge.
+Each pair had identical camera, visible terrain/water counts, renderer texture
+and geometry counts, and source generation. Variant order was reversed inside
+the layer. The control reverses both this adapter's LOD reads and NaN guard;
+the candidate is the actual production shader.
+
+| Viewport / quality / view | Current GPU, previous → production | Full-frame GPU, previous → production |
+| --- | --- | --- |
+| 1080p / Medium / above | 5.093 → 3.341 ms | 11.459 → 11.368 ms |
+| 1080p / Medium / inside | 1.222 → 1.073 ms | 8.619 → 8.527 ms |
+| 1080p / Medium / transition | 3.145 → 1.915 ms | 12.999 → 12.539 ms |
+| 1080p / High / above | 22.447 → 10.289 ms | 28.460 → 16.502 ms |
+| 1080p / High / inside | 4.920 → 4.658 ms | 11.460 → 11.512 ms |
+| 1080p / High / transition | 16.813 → 7.778 ms | 25.588 → 15.707 ms |
+| 1080p / Low / above | 0.660 → 0.694 ms | 7.959 → 8.158 ms |
+| 1440p / Medium / above | 6.882 → 4.199 ms | 14.211 → 11.561 ms |
+| 1440p / Medium / inside | 1.698 → 1.650 ms | 11.400 → 11.593 ms |
+| 1440p / Medium / transition | 4.497 → 2.744 ms | 14.920 → 13.156 ms |
+| 1440p / High / above | 32.894 → 13.606 ms | 41.158 → 22.544 ms |
+| 1440p / High / inside | 4.162 → 4.132 ms | 12.268 → 12.250 ms |
+| 1440p / High / transition | 24.561 → 11.089 ms | 36.050 → 23.133 ms |
+| 1440p / Low / above | 1.043 → 1.043 ms | 11.161 → 10.677 ms |
+
+High above saves 54%/59% in the current pass and 42%/45% across the full GPU
+frame at 1080p/1440p. Current and full-frame measurements use separate intervals;
+their medians should not be subtracted to attribute other stages. Dense inside
+views and the already cheap Low pass show little or no benefit. Low's 1080p
+current median rose by 0.034 ms; no Low acceleration is claimed. A guarded
+implicit control for High above measured 22.831/33.777 ms, versus
+22.447/32.894 ms unguarded, making the small guard cost visible separately from
+the LOD benefit. These local timings do not establish performance on other
+hardware, and the hardware-dependent threshold is not a CI test.
+
+The permanent `current-ray-intervals` GPU case executes the actual installed
+interval gate with hand-derived finite and NaN fixtures, checking direct and
+packed outputs. Its NaN fixture failed before the guard and passed afterward.
+It covers the gate, not the full density march. A texture characterization test
+checks the actual owned volumes' linear/no-mipmap contract. Final paired
+screenshots above and inside the layer showed no obvious appearance regression;
+no appearance preset was changed for this optimization.
+
+Integrated numerical comparisons retained the NaN guard in both the implicit
+control and explicit production path. At 1080p, all seven defined current
+channels matched bit for bit for Low/Medium/High above, inside and in transition,
+at frames 0/1/63/64/121; original repeats also matched. Independent 128-frame
+histories above the layer matched on every quality. The harness updated camera
+jitter each frame, used equal initial history and separate accumulation targets,
+and found no nonfinite values. Undefined velocity alpha is excluded. This is
+parity between guarded paths, not a bitwise comparison to the former shader.
+
+Motion checks used the full engine pipeline, independent fresh effects warmed
+for 128 actual cloud frames, and 64-frame sequences above/inside at total camera
+rotations of 0, 1.5 and 6 degrees. Resolved RGBA was sampled at 320 x 180;
+these are sampled overlay comparisons, not full-resolution motion readbacks.
+High matched exactly in all six cases. Medium alpha also matched exactly;
+its largest RGB difference was 0.0007324, with maximum per-channel mean absolute
+error 0.00002877. Repeated same-shader Medium controls also differed: implicit
+above reached 0.0004883 and production inside reached 0.0006104. Thus the full
+Medium pipeline was not bit-repeatable in this diagnostic even without changing
+sampling. This records the variability before the shadow follow-up below rather
+than claiming exact Medium motion parity or assigning it to a specific driver
+mechanism.
+
+Lighting, pipeline and lifecycle GPU probes passed 2,541 checks across 71 cases,
+all reporting resource release. Seven WebGL warnings occurred only in expected
+shader-failure windows; there were no unexpected runtime/WebGL errors.
+`vitest run tests` passed 5,692 tests in 587 files (four configured skips).
+The production build including TypeScript and project lint with
+`eslint . --ignore-pattern 'storage/local/**'` passed. The previously documented
+exclusions for unrelated local experiments and DEM tooling still apply.
+Independent code and evidence reviews found no actionable defects.
+Local ignored evidence is under `tmpscreenshots/cloud-tuning/`: initial
+`main-profile-{1080,1440}`, final paired timings and screenshots in
+`main-sampling-final-{1080,1440}`, integrated current/history readbacks in
+`main-sampling-integrated-parity-1080`, and motion results in
+`main-sampling-final-motion` and `main-sampling-medium-motion-repeat`.
+Runner logs and the before/after performance acceptance are under
+`.superpowers/cloud-tuning/main-sampling-*`. Other-hardware testing remains
+deferred.
+
+### Low and Medium shadow stability follow-up (2026-10-24)
+
+Per-frame captures localized the remaining Medium variation to current shadow
+draws. Some frames differed across independently recreated effects; resolved
+shadow history retained those differences and propagated them into cloud RGB.
+Cloud opacity and depth/velocity remained equal. Sparse captures initially saw
+only the retained history difference, so the investigation was expanded to all
+64 frames before identifying the current pass as the earlier source.
+
+Applying the existing High interval guard to Medium was the only prototype
+change. Repeated shadow current/resolve, cloud current and sampled overlay
+outputs then matched in both tested views. `SceneCloudBackend` now installs
+`adaptSceneCloudShadowNumerics` for every scene quality before packing and
+warmup, including effect recreation. Invalid intervals return neutral outputs;
+the same live NaN check also selects the strict compiler path described above.
+This does not claim bit identity with the former unguarded kernel or identify a
+specific driver defect. Quality presets and appearance settings are unchanged.
+
+The permanent ray-interval GPU regression now consumes actual Low, Medium and
+High backend sources. Before the change, Low's NaN fixture emitted
+`[0, NaN, NaN, 1]` instead of neutral shadow data; after the change all three
+qualities passed finite/NaN cases in both direct and packed output paths.
+
+Integrated repeated-sequence checks now cover Low and Medium, above the layer
+with a 1.5-degree rotation and inside with a stationary camera. Each view used
+four independently recreated effects, 128 actual warm frames and 64 captured
+frames. All defined full-resolution shadow current/resolve and cloud current
+channels matched bit for bit; the 320 x 180 sampled resolved cloud overlay also
+matched, with no nonfinite values. The production sources were used directly,
+without injecting a diagnostic guard. This establishes repeatability for these
+sequences, not a guarantee for every camera path or driver.
+
+The six earlier Medium motion scenarios were then repeated above/inside at
+0/1.5/6-degree rotations. With guarded shadow inputs, the implicit density
+control and explicit production current pass matched exactly in all sampled
+RGBA frames. This closes the observed Medium discrepancy from the previous
+sampling investigation without changing its density or lighting budgets.
+
+Paired cost measurements used RTX 5070 Ti, Chrome 155, native ANGLE/D3D11,
+1920 x 1080 at DPR 1, fixed Solar epoch and the same above-layer camera.
+Each stage collected 181 nondisjoint GPU samples. The variant order included a
+repeated control; camera, visible terrain/water, geometry/texture counts and
+source generation matched within each quality.
+
+| Variant, in measurement order | Shadow GPU median | Full-frame GPU median |
+| --- | --- | --- |
+| Medium, previous unguarded | 0.795 ms | 11.016 ms |
+| Medium, guarded production | 0.768 ms | 11.257 ms |
+| Medium, unguarded repeat | 0.795 ms | 11.091 ms |
+| Low, guarded production | 0.180 ms | 7.982 ms |
+| Low, previous unguarded | 0.175 ms | 7.814 ms |
+| Low, guarded repeat | 0.180 ms | 7.823 ms |
+
+The guard adds about 0.005 ms to Low's shadow pass in this run. Medium shadow
+cost did not increase, while its full-frame median was 0.17–0.24 ms higher in
+the guarded sample. Stage/frame medians use separate intervals and do not
+isolate a total frame cost by subtraction. This change provides repeatability;
+no whole-frame acceleration is claimed. Comparative Low/Medium screenshots
+showed no obvious appearance regression.
+
+Lighting, pipeline and lifecycle passed 2,508 GPU checks across 73 cases, with
+resource release and no unexpected runtime/WebGL errors. Seven warnings were
+inside intentional failure windows. Local ignored reports under
+`tmpscreenshots/cloud-tuning/` are `medium-numerics-all-frames` for localization,
+`medium-numerics-guarded` for the single-change prototype,
+`medium-numerics-integrated` for final stage comparisons,
+`medium-numerics-final-motion` for the six Medium scenarios and
+`medium-numerics-final-perf` for timing/screenshot pairs. Logs are under
+`.superpowers/cloud-tuning/medium-numerics-*`.
+
+Final project verification passed: 5,692 unit tests in 587 files (four configured
+skips), production build including TypeScript, and project lint with the same
+documented local-tooling exclusion. Independent review found no actionable
+code or evidence issues. The task-owned probe server was stopped after testing.
