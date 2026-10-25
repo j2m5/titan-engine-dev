@@ -137,6 +137,98 @@ so it cannot prove foreground moon occlusion of an active main-scene volume.
 Actual terrain peaks and water provide main-scene depth checks; the numerical
 foreground-volume probe covers the general occlusion contract.
 
+### Reusable GPU benchmark
+
+`npm run benchmark:clouds` starts its own loopback Vite server and headless
+Chromium, boots the normal Solar UI and measures the production scene. Original
+assets must be available through the project's configured storage driver.
+`CHROME_BIN` may select an installed Chromium executable. No existing dev server
+is needed. The owned server and browser close after success or failure.
+
+The default matrix is Low / Medium / High at 1920 × 1080, DPR 1, with two stationary
+daytime Earth views: above the layer at 12 km / 8° down, and inside at 6 km / 0°.
+The weather UV is fixed at `(0.488525390625, 0.68408203125)`; changing the source
+does not silently select another cloud edge. JD is 2451545, simulation speed is
+zero, render delta is 1/60 s and render elapsed time is held at 64 s. Markers and
+orbit lines are hidden. This is a stationary workload, not a motion test.
+
+Each case waits for 120 consecutive stable frames with full cloud weight,
+resident terrain/water and no in-flight source loads. Each timed interval has
+another 64 warmup frames followed by exactly 512 consecutive samples, covering
+all 64 cloud noise phases equally. There are two repetitions per stage by
+default. Allow several minutes for the complete matrix; a scoped smoke run is:
+
+```sh
+npm run benchmark:clouds -- --quality=medium --view=above --samples=64 --repeats=1
+npm run benchmark:clouds -- --quality=high --width=2560 --height=1440
+npm run benchmark:clouds -- --help
+```
+
+Supported filters are `--quality=all|low|medium|high`, `--view=all|above|inside`
+and `--stage=all|cloud-current|cloud-resolve|shadows|depth|frame`. `--samples`
+must be a multiple of 64 in 64–4096; `--repeats` is 1–10. Width and height are
+positive integers up to 7680. Duplicate, unknown or malformed options fail
+before starting a browser. Actual drawing-buffer size must match the requested
+DPR-1 viewport.
+
+Intervals use `EXT_disjoint_timer_query_webgl2` and report GPU milliseconds:
+
+- `cloud-current`: packed raymarch **and unpack**, both inside currentPass.render.
+- `cloud-resolve`: temporal resolve pass.
+- `shadows`: all shadow cascades and their resolve inside ShadowPass.update.
+- `depth`: scene cloud depth pass.
+- `frame`: the complete Engine.renderFrame GPU interval.
+
+These intervals are measured separately and **must not be added together**.
+GPU query overhead is included; boot, compilation, screenshots, artifact writes
+and query-result polling are outside the measured draws. A missing timer,
+masked renderer identity, known software renderer, disjoint event, lost context,
+unavailable query result, changing scene/source, incomplete sample count or
+unexpected runtime/WebGL error fails the run. Hooks and pending queries are
+released on failure; a stopped RAF has a deadline.
+
+Each invocation creates a unique ignored `benchmark-results/scene-clouds/` folder.
+`report.json` is written only after the entire requested matrix succeeds;
+`progress.json` retains completed intervals, while a failed run writes
+`failure.json` with `status: "failed"`. PNGs record each case before timing.
+The report includes raw frame/time samples, count/mean/p50/p95, all per-phase
+means, individual repetitions, GPU/browser/viewport, camera and projection,
+current/resolved target sizes, geometry and resource counts, cloud configuration,
+prepared-weather SHA-256, Git commit and relevant dirty paths. Quantiles use the
+sorted sample at `floor(count × percentile)`, without interpolation.
+
+Compare matching hardware, browser, resolution, pose, assets and settings; save
+the diff separately for a dirty working tree. Geometry counts are not GPU bytes.
+There is no automatic speedup verdict or universal hardware budget. This command
+does not replace the numerical/flight checks or full-resolution motion parity,
+and does not measure cold startup, other lighting, other planets or transition LOD.
+
+First default-matrix run (2026-10-25): RTX 5070 Ti, native ANGLE/D3D11,
+Chromium 155, 1920 × 1080 at DPR 1. All 60 intervals completed with 512 samples
+each (30,720 total), eight samples per noise phase per interval, no disjoint
+events and no unexpected runtime/WebGL errors. The run took about 5 min 37 s,
+including boot/readiness and artifacts. Both repetitions are shown below;
+these are standalone current-build measurements, not before/after speedups.
+
+| Quality / view | Current + unpack mean, ms (1 / 2) | Whole frame mean, ms (1 / 2) |
+| --- | ---: | ---: |
+| Low / above | 0.8534 / 0.8484 | 6.8765 / 6.9728 |
+| Low / inside | 0.2907 / 0.2905 | 6.8155 / 6.8534 |
+| Medium / above | 2.3880 / 2.3931 | 6.8720 / 6.8668 |
+| Medium / inside | 1.2711 / 1.3349 | 6.8926 / 6.9060 |
+| High / above | 7.4900 / 7.5827 | 12.9932 / 13.1769 |
+| High / inside | 2.6165 / 2.6181 | 7.6492 / 7.7181 |
+
+Full evidence is in ignored
+`benchmark-results/scene-clouds/2026-10-25T07-35-13-955Z-6EWjM3/`.
+An independent report check verified matrix completeness, unique intervals,
+consecutive frame IDs, all phase counts and statistics recomputed from raw data.
+The earlier scoped smoke also completed all five stages. Its initial failed
+attempt is retained separately with `failure.json` and no success report:
+a benchmark-only guard incorrectly checked the transient cloud weight inside
+a draw; weight is now checked in completed-frame snapshots. Owned browser and
+server processes were confirmed closed after the full run.
+
 ### Recorded main-scene measurements (2026-10-19, before terrestrial light calibration)
 
 At 1280x800, DPR 1, medium quality, JD 2451545 and the saved AMD Radeon Graphics
@@ -2105,3 +2197,318 @@ Ignored evidence: `tmpscreenshots/cloud-tuning/residual-density-1080/`,
 `residual-density-*`, `shared-position-*` and `shadow-empty-*` tooling/logs under
 `.superpowers/cloud-tuning/` retain the raw measurements, summary validation,
 RED/GREEN regression, history/motion comparisons and project-check output.
+
+## Full-resolution High motion validation (2026-10-25)
+
+After the shadow optimization was committed as `6aa311ce`, the next validation
+replaced the previous 320 x 180 motion readback with the native resolved High
+cloud buffer. RTX 5070 Ti, Chrome 155, native ANGLE/D3D11, DPR 1 and fixed Solar
+epoch 2451545 were used at 1920 x 1080 and 2560 x 1440. Above/inside viewpoints
+retain the same daytime edge, at 12/6 km with pitches 8/0 degrees.
+
+Each view/resolution runs independent original/production/original effects.
+The original restores only the recent stationary-weather formula, main
+empty-detail condition and shadow LOD/empty-detail adapter. Earlier density,
+lighting, ray guards and CPU changes remain common to all variants. The render
+clock and simulation epoch are fixed; only the camera rotation and effect
+frame advance. Every effect receives 128 warmup frames, followed by:
+
+- 32 captured frames turning through 1.5 degrees;
+- 32 captured frames turning a further 6 degrees;
+- 64 captured frames holding the final camera pose.
+
+The harness checks that `historyRenderTarget` is the actual output texture,
+has full viewport dimensions and uses half floats. It reads all native RGBA16F
+channels without a filtering copy, downsampling or display quantization. Each
+complete readback is compared using SHA-256; this is a full-buffer fingerprint
+comparison, not a retained array-by-array comparison. Nonfinite values are
+rejected independently. Streaming fingerprints keep memory bounded; numeric
+readbacks are retained for a few mismatching frames only if a difference occurs.
+
+| Viewport / view | Frames compared | Original / production fingerprint differences | Same-source repeat differences |
+| --- | --- | --- | --- |
+| 1920 x 1080 / above | 128 | 0 | 0 |
+| 1920 x 1080 / inside | 128 | 0 | 0 |
+| 2560 x 1440 / above | 128 | 0 | 0 |
+| 2560 x 1440 / inside | 128 | 0 | 0 |
+
+All 512 captured frame positions matched, including every held-camera frame;
+the independent original repeats matched too. All cases contained clouds and
+partially transparent pixels. The validator checks frame indices, turn angles,
+phases, viewport, camera, quality, visible terrain/water counts, resource counts
+and source generation. Both browser runs completed without unexpected
+runtime/WebGL errors. These instrumented readbacks are not performance timings.
+
+Full scene screenshots and native 512 x 512 edge crops were saved for original
+and production at frames 0/31/63/127. Inspected above-layer crops during the turn
+and after stopping showed no new visible break or trail. The inside view is
+mostly dense fog and provides less silhouette detail; its full-buffer opacity
+and color comparisons still cover the complete image. Temporal RGB/alpha deltas
+are recorded, but include motion and sampling noise and are not a separate
+objective ghosting score. This establishes no observed regression from these
+three optimizations in the sampled High/day scenes, not absence of every
+possible temporal artifact or coverage of other qualities, lighting or GPUs.
+
+The earlier two-channel 1440p history discrepancy did not recur here. Its
+original evidence and unresolved cause remain documented above; these new
+sequences do not invalidate that observation. No product-code change was needed.
+
+Ignored evidence is in `tmpscreenshots/cloud-tuning/full-motion-1080/` and
+`full-motion-1440/` (`motion.json`, `summary.json`, `scene.json`, full screenshots
+and edge crops). The `full-resolution-motion-*` harness/validator and
+`full-motion-*` logs are under `.superpowers/cloud-tuning/`.
+
+## Conservative empty-space research (2026-10-25)
+
+Research on `6aa311ce` checked whether empty regions justify another primary
+march optimization. The current march already takes a longer LOD-dependent step
+after rejecting weather. An empty point alone does not prove the next interval
+empty; increasing that step can miss a thin cloud. The owned appearance uses
+one active layer, so empty gaps between separate layers are not the target.
+
+The live Earth weather texture is 2048 x 1024 and contains only 13 exactly-zero
+source texels (0.00062%). No completely zero expanded tile was found at tested
+sizes 1/2/4/8/16/32, including a one-texel border with repeat-U/clamp-V addressing.
+These are conservative LOD-0 support checks, not bounds for arbitrary mip levels.
+A hierarchy that only recognizes zero weather has little opportunity in this
+source; changing small positive values to zero would change the density model.
+
+A disposable primary-march counter captured noise phases 0/21/42/63 at High,
+1920 x 1080/DPR 1, fixed Solar epoch 2451545. The actual interleaved current
+buffer is 480 x 270; this is not a full-resolution overlay capture. It retains
+primary density/transmittance decisions and exports counts instead of color.
+
+| View | Weather-rejected iterations | Media-rejected iterations | Shaded iterations |
+| --- | --- | --- | --- |
+| Above, 12 km / 8 degrees | 0.0156% | 63.47% | 36.52% |
+| Inside, 6 km / 0 degrees | 0.0100% | 21.18% | 78.81% |
+| Transition, 110 km / 14 degrees | 0.0125% | 77.42% | 22.56% |
+
+All observed weather rejections were exactly zero. Media rejection means the
+existing extinction threshold rejected the sample after shape/detail/profile
+evaluation; it does not prove every rejected sample is exactly empty. Counts
+cover four sampled phases, not every camera or noise phase, and are not timings.
+The transition view has the expected 0.5 effective cloud weight; the first two
+views have full weight. Instrumentation can change shader compilation.
+
+Two throwaway prototypes captured the actual 128-cubed R8 shape texture using
+`texelFetch`, then built maximum-value grids over 4-cubed and 8-cubed source
+cells. A voxel border on both sides includes the trilinear support and wraps
+in all axes. The nearest-filtered R8 grids contain 32 KiB / 4 KiB of texel data.
+At each original primary sample, an upper bound rejects coarse density only
+when all weather channels are below `1 - shapeMax - 1e-5`. This assumes the
+checked stationary weather, disabled turbulence and unit shape amounts. The
+extra margin makes the condition stricter, rather than increasing extinction
+thresholds. Rejected samples retain the original short-step recurrence and
+iteration budget; this prototype does not jump across multiple sample positions.
+
+RTX 5070 Ti, Chrome 155 native ANGLE/D3D11 used production / 4-cell / 8-cell /
+production controls. Each current and whole-frame interval collected 512
+nondisjoint GPU samples, balanced across all 64 noise phases. Separate stage
+and frame means are not additive. Map construction/upload and shader warmup
+are outside these steady-state timings. Values are milliseconds:
+
+| View / interval | Production before | 4-cell bound | 8-cell bound | Production after |
+| --- | --- | --- | --- | --- |
+| Above / current | 7.553 | 7.704 | 7.773 | 7.567 |
+| Above / whole frame | 13.228 | 13.324 | 13.523 | 13.305 |
+| Inside / current | 2.647 | 2.668 | 2.909 | 2.629 |
+| Inside / whole frame | 7.849 | 7.938 | 7.984 | 7.823 |
+
+Neither candidate beat either control in this series. The smaller-cell variant
+increased current-pass means by about 1.9% above / 1.1% inside relative to the
+mean controls; its whole-frame means increased 0.4% / 1.3%. The larger-cell
+inside interval also had a long timing tail, so its 10.3% mean increase is not
+a universal slowdown estimate. Both candidates are rejected. Full image parity
+and motion validation were not expanded for these unsuccessful timing probes;
+no image-equivalence or other-hardware claim is made.
+
+This rejects the tested per-sample bound, not all spatial skipping algorithms.
+A useful next experiment would need to amortize the bound over multiple sample
+positions, prove weather/height/shape bounds across the entire skipped region
+including filtering and seams, and preserve iteration/step bookkeeping. That
+is a larger traversal change; a current-point zero test is insufficient.
+No product shader, quality setting or resource lifecycle was changed here.
+
+Both completed browser experiments reported no unexpected runtime/WebGL errors.
+Summary validators checked counts, noise-phase balance, means, scene state and
+the expected first-use allocation of the two diagnostic bound textures.
+Ignored evidence: `tmpscreenshots/cloud-tuning/empty-space-classify-1080-v2/`
+and `shape-bound-1080/`. Their `empty-space-*` / `shape-bound-*` harnesses,
+validators and logs remain under `.superpowers/cloud-tuning/`. The initial
+classification attempt stopped before measurements on a probe setup ordering
+error; its failed log is retained separately.
+
+## Skipping density work across empty intervals (2026-10-25)
+
+The follow-up on `6aa311ce` tested reusing an empty-region bound across multiple
+primary samples. Two disposable variants use the same padded 4/8-voxel shape
+cells as the preceding experiment. Their ray/cell intersection bounds a segment
+whose weather, vertical envelope and coarse shape cannot produce density.
+The original iteration count and float step multiply/add are still executed
+for every skipped position, preserving the existing sample grid and budget.
+Geography, weather and media sampling are bypassed while the interval is valid.
+
+The interval test accounts for more than zero density at its first point:
+
+- An R8 maximum grid includes the cell's trilinear shape support and wrapping.
+- An 8 MiB RGBA8 table stores weather minima/maxima over expanded UV cells,
+  using texels read from the actual generated LOD-0/1 textures. Every bilinear
+  footprint in the expanded rectangle is included; interpolation between the
+  two mips remains within their combined extrema.
+- Conservative angular-displacement checks restrict the whole segment to that
+  rectangle. Longitude wrapping and clamped latitude are included; near-pole
+  and future-LOD-above-1 cases fall back to the original march.
+- Radial extrema over the segment bound the unimodal vertical envelope. The
+  entire segment must remain inside the one active layer.
+- A strictly positive weather lower bound prevents the original march's
+  empty-weather branch from changing to its longer step. Only zero media with
+  the original short-step behavior is eligible.
+
+The prototype shortens the computed cell exit by 8 m, expands radial heights
+by 4 m and adds strict density margins. These are safeguards for this Earth-scale
+experiment, not a general floating-point proof for arbitrary worlds/hardware.
+Stationary weather, disabled turbulence, one active layer and unit shape amounts
+are checked. Failed bounds are retried at the next cell boundary. All three
+diagnostic textures are allocated/uploaded before the timing controls, and their
+construction cost is excluded from steady-state timings.
+
+On RTX 5070 Ti, Chrome 155 native ANGLE/D3D11, High at 1920 x 1080/DPR 1 and
+fixed Solar epoch 2451545, both variants matched the original current color and
+defined depth/velocity channels at frames 0/1/21/42/63/64/121, above and inside
+the layer. Independently accumulated final 128-frame resolved histories matched
+too. Every case also repeated the original source; all comparisons had zero
+mismatches and nonfinite values. This is stationary validation, not motion or
+other-quality/hardware coverage. Current buffers were 480 x 270.
+
+Separate instrumented captures at phases 0/21/42/63 measured actual reuse:
+
+| View / cell side | Later iterations bypassed with cached bound | Successful interval proofs | Later bypasses per successful proof |
+| --- | --- | --- | --- |
+| Above / 4 voxels | 4.37% | 3.13% of attempts | 10.07 |
+| Above / 8 voxels | 1.75% | 1.54% of attempts | 15.82 |
+| Inside / 4 voxels | 1.50% | 1.03% of attempts | 10.64 |
+| Inside / 8 voxels | 0.11% | 0.13% of attempts | 11.85 |
+
+The initiating sample can also bypass media, but already computed geography and
+weather; it is excluded from the cached-bypass column. These counters describe
+instrumented shader execution and are not timings. Their low proof-success
+rates explain why successful reuse alone does not establish an acceleration.
+
+Each timing interval collected 512 nondisjoint GPU samples balanced over all
+64 noise phases, with production / 4-cell / 8-cell / production controls.
+Separate current/frame means below are milliseconds and are not additive:
+
+| View / interval | Production before | 4-cell interval | 8-cell interval | Production after |
+| --- | --- | --- | --- | --- |
+| Above / current | 8.629 | 11.122 | 10.672 | 8.576 |
+| Above / whole frame | 14.662 | 17.323 | 16.754 | 14.732 |
+| Inside / current | 2.603 | 3.765 | 3.453 | 2.604 |
+| Inside / whole frame | 8.135 | 9.400 | 9.001 | 8.235 |
+
+Both variants are slower than both controls in every measured interval. Relative
+to the mean controls, current work increases 24-29% above and 33-45% inside;
+whole-frame time increases about 10-18%. Reject both prototypes: the region
+proof costs more than the small amount of sampling it avoids. Retain the
+current march and defer this approach until a concrete cheaper-bound design
+justifies another experiment. This does not rule out every spatial traversal
+algorithm or different density representation.
+
+The browser experiment and summary validation completed successfully, with no
+unexpected runtime/WebGL errors. The summary checks all pixel comparisons,
+counter consistency, raw timing means, phase balance and stable scene/resource
+state. No motion/1440p/other-quality expansion was warranted for these rejected
+candidates. No product code or quality setting changed, and no new unit-suite,
+build or lint result is claimed for this documentation/research step.
+
+Ignored evidence is in `tmpscreenshots/cloud-tuning/cell-skip-1080/` (`parity.json`,
+`counts.json`, `cycles.json`, `resources.json`, `summary.json`, `scene.json`).
+The `cell-skip-*` probe, runner, validator and log under `.superpowers/cloud-tuning/`
+retain the disposable implementation and raw results.
+
+## Native Medium/Low motion validation (2026-10-25)
+
+The High motion protocol above was extended on `6aa311ce` to Medium and Low,
+using the same RTX 5070 Ti / Chrome 155 / native ANGLE-D3D11 environment, DPR 1,
+JD 2451545, daytime cloud edge and above/inside views. Each independent effect
+receives 128 warmup frames, then 32 slow-turn frames, 32 faster-turn frames and
+64 frames holding the final pose. Epoch and render clock remain fixed.
+
+Readbacks cover every native RGBA16F resolved-cloud pixel. Medium/Low buffers
+are deliberately smaller than the viewport; the probe asserts the configured
+scale, actual output texture, half-float format and current-buffer dimensions.
+It applies no additional downsampling. Full scene PNGs remain at viewport size;
+512-pixel scene crops map the native edge position into screen coordinates.
+
+| Viewport | Quality | Native resolved buffer | Captured frame positions, above + inside | Production vs original | Original vs its repeat |
+| --- | --- | --- | ---: | ---: | ---: |
+| 1920 × 1080 | Medium | 1344 × 756 | 256 | 0 differences | 0 differences |
+| 1920 × 1080 | Low | 960 × 540 | 256 | 0 differences | 0 differences |
+| 2560 × 1440 | Medium | 1792 × 1008 | 256 | 0 differences | 100 differing frames |
+| 2560 × 1440 | Low | 1280 × 720 | 256 | 0 differences | 0 differences |
+
+This initial matrix contains 1,024 frame positions and 3,072 complete-buffer
+readbacks. Comparisons use SHA-256 of the unmodified half-float bits; finite
+values, opacity/edge coverage, frame indices, poses, quality and scene state
+are checked separately. The original variant reverses only stationary weather,
+the main empty-detail gate and the shadow LOD/empty-detail adapter. Shader-source
+hashes confirm that the original repeats match each other and differ from
+production. Earlier guards and optimizations remain common to both variants.
+
+The first 1440p run is **not a full parity pass**: Medium original-repeat differed
+at above frames 3–59 and inside frames 3–45, despite production matching the
+first original sequence throughout. Its strict summary retains `status: mismatch`
+and exits nonzero. The initial differing pixel arrays were not retained, so their
+pointwise error magnitude cannot be recovered from the fingerprints alone.
+
+An extended Medium 1440p run added a production repeat and retained original and
+production pixels at frames 3/16/32/45 for numeric comparisons. All fingerprints
+matched in that run, but new intermediate scene snapshots exposed terrain
+residency changing from 147 to 156 meshes during the first above sequence
+(268 to 269 renderer geometries). The validator rejected the unequal input
+states; that run is retained as diagnostic evidence, not a controlled pass.
+
+The final follow-up first traverses the complete motion path until two
+consecutive 128-frame traces have identical camera, geometry/resource counts
+and source generation, with full cloud weight and no in-flight source loads.
+It required three sweeps above and two inside. Then it creates fresh independent
+original / production / original-repeat / production-repeat effects and runs
+the same warmup and capture protocol. This run passed all checks:
+
+- Both views matched all 128 complete-buffer fingerprints across all four
+  variants, including the held-camera phase (256 positions, 1,024 readbacks).
+- Intermediate scene state at frames 3/16/32/45 and final state matched across
+  variants. All 24 selected numeric comparisons had zero differences in RGBA.
+- No nonfinite values or unexpected runtime/WebGL errors were observed.
+
+This establishes no observed optimization regression in the tested Medium/Low
+scenes. It does **not** identify the cause of the first control variation or prove
+that it was caused by terrain residency. The successful controlled repeat does
+not erase the initial failed result. No product shader correction was inferred
+from the inconsistent control alone.
+
+Reviewed above-layer images at the fast-turn endpoint and after stopping show
+no new visible discontinuity or trail. Inside-layer images are mostly opaque
+fog and provide weaker silhouette evidence. Temporal RGB/alpha deltas are
+recorded but are not an independent ghosting metric. Other lighting, planets,
+camera paths and hardware remain outside this validation; these readbacks are
+not performance timings.
+
+The temporary validator was also tightened: any production or same-source
+fingerprint difference now writes `status: mismatch` and fails. Deliberately
+altered, otherwise consistent report fixtures verified this rejection; the old
+validator incorrectly accepted such a report. Geometry-state mismatches remain
+failures too.
+
+Ignored evidence under `tmpscreenshots/cloud-tuning/`:
+
+- `quality-motion-1080/`: complete matrix, strict pass.
+- `quality-motion-1440/`: complete matrix, original-repeat mismatch retained.
+- `quality-motion-medium-repeat-1440/`: extended capture with matching pixels,
+  rejected intermediate geometry state.
+- `quality-motion-medium-stable-1440/`: controlled extended capture, strict pass.
+
+The `full-resolution-motion-*` harness, `quality-motion-*` logs/checklist and
+negative-control validator check remain under `.superpowers/cloud-tuning/`.
+This step changes documentation and disposable diagnostics only; no fresh
+unit-suite, build, lint or GPU-performance result is claimed here.
