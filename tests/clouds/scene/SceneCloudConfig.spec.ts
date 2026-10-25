@@ -19,14 +19,14 @@ it.each([
     far: { pattern: { kind: 'mask', encoding: 'rgb-cloud-map', map: { resourceId } } }
   })
 })
-it('resolves Earth and Jupiter volume presets and far-only Neptune', () => {
+it('resolves Earth, Jupiter and Neptune volume presets', () => {
   expect(resolveSceneClouds(7, undefined, ids).volume?.layers[0].pattern).toMatchObject({ encoding: 'rgb-cloud-map' })
   expect(resolveSceneClouds(10, undefined, ids)).toMatchObject({
     qualityProfile: 'giant',
     far: null,
     volume: { enabled: true }
   })
-  expect(resolveSceneClouds(13, undefined, ids).volume).toBeNull()
+  expect(resolveSceneClouds(13, undefined, ids).volume?.layers[0].pattern).toMatchObject({ encoding: 'rgb-cloud-map' })
 })
 it('keeps a checked catalog far map but never a preset volume after explicit errors', () => {
   const result = resolveSceneClouds(7, { enabled: true, layers: [] }, ids)
@@ -34,7 +34,7 @@ it('keeps a checked catalog far map but never a preset volume after explicit err
   expect(result.issues.length).toBeGreaterThan(0)
 })
 it('does not publish unavailable preset maps or volumes', () => {
-  for (const actor of [7, 10, 13, 88]) {
+  for (const actor of [7, 10, 13, 29, 88]) {
     const result = resolveSceneClouds(actor, undefined, new Set())
     expect(result).toMatchObject({ state: 'invalid', volume: null, far: null })
     expect(result.issues.length).toBeGreaterThan(0)

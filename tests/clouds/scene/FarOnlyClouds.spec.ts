@@ -11,26 +11,28 @@ import { resolveSceneClouds } from '@/core/clouds/resolveSceneClouds'
 import { Resources, ActorResource } from '@storage/database'
 
 afterEach(() => resourceStorage.deleteAllTextures())
-describe('explicit far-only cloud owners', () => {
+describe('authored cloud endpoints without a ready atmosphere', () => {
   it('preserves every authored cloud resource and owner without diffuse inference', () => {
     const clouds = Resources.filter((r) => r.resourceType === 'cloud')
-    expect(clouds.map((r) => r.id).sort((a, b) => a - b)).toEqual([26, 37, 113])
+    expect(clouds.map((r) => r.id).sort((a, b) => a - b)).toEqual([26, 37, 113, 248])
     for (const resource of clouds) expect(resource.wrapS, resource.path).toBe(RepeatWrapping)
     expect(
       ActorResource.filter((r) => clouds.some((c) => c.id === r.resourceId)).map((r) => [r.actorId, r.resourceId])
     ).toEqual([
       [7, 26],
       [13, 37],
-      [88, 113]
+      [88, 113],
+      [29, 248]
     ])
   })
   it.each([
     [13, 37],
+    [29, 248],
     [88, 113]
   ])('actor %i binds resource %i with no near work at the surface', (actorId, resourceId) => {
     const actor = Actor.find(actorId)!
     const descriptor = resolveSceneClouds(actorId, undefined, new Set([resourceId]))
-    expect(descriptor.volume).toBeNull()
+    expect(descriptor.volume).not.toBeNull()
     expect(descriptor.far?.pattern.map.resourceId).toBe(resourceId)
     for (const key of [
       '',

@@ -1,8 +1,10 @@
 # Clouds in the main scene
 
-The normal application renders one selected volumetric body at a time. Earth and
-Jupiter have volume profiles; Neptune and Korriban keep their authored surface
-cloud maps. The Earth and Jupiter lab demos remain available at
+The normal application renders one selected volumetric body at a time. Venus,
+Earth, Jupiter, Saturn, Uranus, Neptune, Titan, Korriban and the catalog's extrasolar
+gas/ice giants have explicit volume profiles. Sgr A* I retains the far fallback
+while its scene's gravitational lens is active. Korriban uses its authored cloud
+map for both near coverage and far appearance. The Earth and Jupiter lab demos remain available at
 `/earth-cloud-lab.html` and `/cloud-lab.html`.
 
 ## Configuration and source images
@@ -13,15 +15,23 @@ disables clouds. Absence resolves the configured actor preset, without searching
 textures for undeclared clouds. Validation reports unsupported or invalid
 configuration and uses a far fallback.
 
-The presets are actor 7 / resource 26 (Earth), actor 10 / resource 32 (Jupiter),
-actor 13 / resource 37 (Neptune), and actor 88 / resource 113 (Korriban). Original
+The presets are actor 6 / resource 22 (Venus), actor 7 / resource 26 (Earth),
+actor 10 / resource 32 (Jupiter), actor 11 / resource 33 (Saturn), actor 12 /
+resource 35 (Uranus), actor 13 / resource 37 (Neptune), actor 29 / resource 248
+(Titan), and actor 88 / resource 113 (Korriban), plus the extrasolar giant entries
+listed below. Original
 resource records and actor links remain intact. JPEG versus PNG does not choose
 the encoding. Earth, Neptune and Korriban declare `rgb-cloud-map`: encoded RGB
 is decoded to linear luminance for coverage and preserves the original authored
 far color. Scalar masks declare the channel, range, exponent, inversion and
 sample space. A scalar far map may borrow a separately declared color source.
-Jupiter declares an appearance source from its original diffuse image and retains
-the diffuse surface under the volume.
+Venus, Jupiter, Saturn and Uranus explicitly declare appearance sources from their
+original diffuse images and retain the diffuse surface under the volume. These
+are visual cloud-top patterns, not measurements of atmospheric density. The
+extrasolar giants use the same explicit appearance contract. No new
+assets, resource IDs or database edits are required for these diffuse-based
+profiles. Titan adds a generated scalar resource, described below. The unused local Venus cloud
+image is not a dependency of the profile.
 
 All images come from production ResourceObserver / ResourceStorage. Clouds borrow
 the original Texture, Source and ImageBitmap without loading duplicates, flipping
@@ -43,6 +53,106 @@ at 142 km. Above the layer these correspond to datum altitudes 70 and 150 km.
 Jupiter's layer is 10–30 km, with full / cutoff shell distances 100 / 1000 km
 (datum altitudes 130 / 1030 km). Selection considers containment, frustum
 intersection, distance and hysteresis.
+
+Additional Solar profiles use the same one-layer renderer and quality budgets:
+
+| Planet | Layer above model datum | Full / cutoff shell distance | Appearance |
+| --- | --- | --- | --- |
+| Venus | 50–70 km | 60 / 220 km | Dense warm deck, broad soft structure; terrestrial quality |
+| Saturn | 12–30 km | 150 / 1000 km | Large subdued structures following the authored bands; giant quality |
+| Uranus | 8–20 km | 80 / 600 km | Soft blue-green deck with weak erosion; giant quality |
+| Neptune | 20–38 km | 100 / 800 km | Separate white cloud streaks from resource 37; giant quality |
+| Titan | 12–30 km | 40 / 120 km | Sparse methane cloud systems from a generated linear mask; terrestrial quality |
+
+Neptune preserves its original RGB far map and uses it for volume coverage, so
+black areas remain empty. The other three return to their existing diffuse
+appearance outside the cutoff. Their appearance-to-coverage mapping retains a
+positive floor even in darker bands. Shape, erosion, tint, extinction and LOD are
+artistic tuning for this scene. Giant layer altitudes are relative to the model
+datum, not inferred pressure levels. Venus's broad 50–70 km envelope is consistent
+with the [ESA Venus Express cloud overview](https://www.esa.int/Science_Exploration/Space_Science/Venus_Express/Acid_clouds_and_lightning);
+the muted Uranus deck and separate Neptune clouds follow the qualitative
+[NASA Uranus](https://science.nasa.gov/uranus/facts/) and
+[Neptune](https://science.nasa.gov/neptune/neptune-facts/) descriptions. The renderer
+does not simulate cloud chemistry, vertical cloud strata or atmospheric winds.
+
+### Extrasolar giants and Korriban
+
+All giant profiles explicitly use their existing diffuse appearance as a colored
+cloud deck, with a positive coverage floor in dark bands and the unchanged base
+texture outside the cutoff. Reusing resource 92, 95 or 96 does not share mutable
+profile settings or change the source texture's sampler. Each body has its own
+seed, layer, detail scales and LOD; none are inferred from planet radius or type.
+
+| Body | Actor / resource | Layer above model datum | Full / cutoff shell distance |
+| --- | --- | --- | --- |
+| Sgr A* I | 44 / 92 | 14–32 km | 120 / 800 km |
+| TOI-519b | 57 / 92 | 10–24 km | 80 / 500 km |
+| Ohann | 63 / 95 | 12–34 km | 150 / 1000 km |
+| Adriana | 64 / 96 | 10–24 km | 100 / 700 km |
+| Yavin Prime | 82 / 109 | 18–48 km | 180 / 1200 km |
+| Darkness | 90 / 114 | 8–20 km | 80 / 600 km |
+| Halcyra | 120 / 95 | 12–32 km | 130 / 900 km |
+| Thalorn | 130 / 96 | 10–26 km | 100 / 750 km |
+| Korriban | 88 / 113 | 26–31 km | 55 / 150 km |
+
+Korriban uses terrestrial quality and the existing RGB cloud map, preserving its
+clear regions and authored far appearance. Its layer is relative to the model
+datum; the renderer accounts for the lower atmosphere bottom used by terrain.
+The 26 km base clears the current height map's 23.645 km maximum and its
+procedural-detail bound of 23.834 km by 2.166 km. The 5 km thickness, cloud
+coverage, color, noise, extinction and shell-distance LOD are unchanged.
+
+Korriban's neutral Rayleigh coefficients are `0.0067 / km` in all three channels.
+With the original 15.9 km scale height, the luminance-weighted vertical Rayleigh
+optical depth from model datum to atmosphere top is 0.10653, matching the shipped
+Earth profile's 0.10650 within 0.03%. The former coefficients `0.0008 / km` gave
+0.01272. This is an optical calibration of the molecular-scattering component,
+not equal pressure, mass density or total extinction: Korriban retains its own
+Mie haze, absorption spectrum, phase function, radii, ground albedo, lighting,
+exposure and terrain-floor compensation. Increasing the neutral triplet together
+preserves its spectral ratios instead of introducing Earth's blue spectrum.
+
+The eight giants use the existing giant quality budgets. All of these parameters
+are artistic choices for the catalog, with no new textures or startup generation.
+
+Sgr A* I's profile is registered, but the current Sagittarius scene retains
+`reason: lens`, zero volume weight and no allocated cloud backend while the
+strong-field black-hole mesh is active. This compatibility fallback is based on
+scene visibility, even when the hole is outside the camera view. Enabling
+simultaneous clouds and lensing requires separate composition work; these presets
+do not change that contract or claim volume acceptance for Sgr A* I.
+
+### Titan's generated methane coverage
+
+`npm run build:titan-clouds` reproduces
+`storage/images/textures/planets/titan/titan_methane_coverage.png`. The fixed recipe
+and seed (`0x54697461`) are in `scripts/lib/titanCloudCoverage.ts`; the CLI only
+encodes its linear bytes. The 2048 × 1024 PNG is grayscale, lossless, north-first,
+with half-texel-centred samples and no embedded color profile. Resource 248 uses
+`NoColorSpace`, red-channel scalar decoding and horizontal repeat. Near and far
+endpoints share the same mask and neutral cloud color; Titan's existing aerosol
+atmosphere supplies the orange haze independently. Surface resource 67 is unchanged.
+
+The map is an authored synthetic weather state, not a Cassini mosaic, a cloud
+measurement, or a reconstruction of a particular date. Southern mid-latitude
+systems follow the morphology in [Cassini's December 2009 sequence](https://science.nasa.gov/photojournal/titans-moving-mid-latitude-clouds/);
+the smaller northern systems are inspired by [Cassini's northern cloud observations](https://www.jpl.nasa.gov/images/pia12811-titans-northern-polar-clouds/).
+A small tropical system reflects the presence of [discrete tropical clouds](https://www.usgs.gov/publications/characterization-clouds-titans-tropical-atmosphere).
+These references inform qualitative distribution only: longitudes, footprints,
+strengths, the single 12–30 km envelope and all render parameters are artistic.
+No external image pixels or segmentation models are copied into the generated asset.
+
+The field is sampled on a unit sphere using deformed local cloud systems and
+seeded 3D noise, so longitude wraps continuously and the poles have a unique
+value. Coverage above 0.1 occupies about 2.35% of spherical area; the rest remains
+mostly clear. The image is 81,337 bytes with SHA-256
+`4cc7b1043be3a17635b711d00293dfcb4254ff8059c6f07a9e3c51a7072f9330`
+under the pinned Sharp version. There is no generation during application startup
+or rendering. As with the other storage textures, the PNG is ignored by Git:
+run the build command after checkout before serving local assets. The resource
+record also includes it automatically in `cloud:manifest` for the existing asset
+deployment workflow.
 
 The main scene retains `SpaceScale = 10^-3.3` units per kilometre. Body-local
 metres are `(worldPosition - bodyCenter) * (1000 / SpaceScale)`. Cloud layer
@@ -433,8 +543,9 @@ was not repeated for this iteration.
 
 Automated screenshots and numerical checks are technical evidence. User visual
 acceptance: on 2026-10-19 the user inspected the result live, reported a significant
-improvement and approved committing these iterations. Wind, multiple cloud layers, volume profiles
-for Saturn, Venus, Uranus or Neptune, and a dedicated cloud editor remain deferred.
+improvement and approved committing these iterations. At that point, wind, multiple cloud layers, volume profiles
+for Saturn, Venus, Uranus or Neptune, and a dedicated cloud editor were deferred.
+The four additional Solar volume profiles were subsequently added on 2026-10-25.
 
 ### Local sun self-shadow and stable sampling (2026-10-19)
 
@@ -2512,3 +2623,167 @@ The `full-resolution-motion-*` harness, `quality-motion-*` logs/checklist and
 negative-control validator check remain under `.superpowers/cloud-tuning/`.
 This step changes documentation and disposable diagnostics only; no fresh
 unit-suite, build, lint or GPU-performance result is claimed here.
+
+### Additional Solar cloud profiles (2026-10-25)
+
+Venus, Saturn, Uranus and Neptune now have separate volume presets (parameters
+and source semantics are listed above). This extension changes configuration,
+tests and documentation; the shared renderer, shaders and quality budgets are
+unchanged. The existing source images are reused through the production loader.
+
+Validation used the actual Solar UI boot on an NVIDIA RTX 5070 Ti, ANGLE/D3D11,
+1920 × 1080, DPR 1, epoch 2451545. All four profiles completed nine cases each:
+High outside the cutoff, half transition, above, inside and below the layer;
+Medium and Low above and inside. Above views sit 8 km above the shell and look
+10 degrees below the local horizon. Inside views sit at 45% of layer thickness.
+Neptune's camera uses a bright sunlit mask sample so the sparse authored clouds
+are actually visible; the other bodies use their subsolar direction.
+
+All 32 volume snapshots had finite, nonempty native RGBA16F output. All four far
+cases released the backend, and transition cases reached weight 0.5. The output
+dimensions matched the established terrestrial/giant quality scales. The browser
+reported no unexpected runtime or WebGL errors. Screenshots were inspected for
+the distinct deck structure and sparse Neptune mask; lower quality changes fine
+structure and lighting, so this is not pixel equality across presets.
+
+The local GPU calibration recorded 24 intervals, 64 consecutive phase-balanced
+samples each. Times below are current-pass p50 milliseconds, above / inside:
+
+| Planet | High | Medium | Low |
+| --- | --- | --- | --- |
+| Venus | 6.96 / 3.43 | 3.32 / 1.50 | 0.90 / 0.27 |
+| Saturn | 4.63 / 6.67 | 2.11 / 2.30 | 0.59 / 0.65 |
+| Uranus | 4.34 / 6.05 | 1.87 / 2.10 | 0.55 / 0.57 |
+| Neptune | 3.07 / 1.41 | 1.14 / 0.29 | 0.35 / 0.07 |
+
+These short samples cover raymarch plus packed-output unpacking, not the whole
+frame, and do not establish speedups or support on other hardware. Native
+screenshots, camera states, configuration, pixel summaries and raw query samples
+are in `tmpscreenshots/cloud-tuning/planet-profiles-final/`; the disposable runner
+and probe are `.superpowers/cloud-tuning/planet-profiles-{run.mjs,probe.js}`.
+
+`npm test -- --run` passed 5915 tests (4 skipped), production build passed, and
+scoped ESLint/Prettier checks passed. The GPU receiver probe passed 174 checks
+including Neptune's preserved RGB far map and Korriban's far-only endpoint.
+The normal-app flight probe with `SCENE_CLOUD_FLIGHT_START=peak` then passed
+280 checks / 15 cases at 1280 × 800, including all four added profile cases,
+all qualities, Earth/Jupiter return paths, settings toggles, Korriban, the lens
+scenario and three matched scene exits. No unexpected WebGL errors were reported;
+owned resources were released. This focused scope does not repeat the full cold
+Earth altitude/performance matrix. Evidence is in
+`tmpscreenshots/scene-clouds/flight-{report,evidence}.json` and its checkpoint PNGs.
+
+## Titan coverage and profile validation (2026-10-25)
+
+The generated map and Titan profile were checked in the actual Solar application
+on NVIDIA RTX 5070 Ti / ANGLE D3D11, 1920 × 1080, DPR 1, epoch 2451545. A sunlit
+nonzero coverage sample was selected explicitly so a sparse mask could not pass
+the visual check through an empty view. Nine cases covered High outside the
+cutoff, half transition, above, inside and below the layer, plus Medium/Low above
+and inside. All eight near outputs were finite, nonempty RGBA16F; the distant
+case released the backend and the blend case reached weight 0.5.
+
+Five additional same-camera on/off comparisons covered a cloud edge above and
+inside, a clear downward view, a night-side cloud and the whole moon. The clear
+view produced exactly zero RGBA cloud output and identical PNG screenshots with
+clouds on/off. Cloudy views retained the existing haze; inside a dense system
+the cloud volume is nearly opaque. No unexpected runtime or WebGL errors occurred.
+Evidence and the disposable runners are respectively in
+`tmpscreenshots/cloud-tuning/titan-{initial,extra}/` and
+`.superpowers/cloud-tuning/titan-{run.mjs,probe.js,extra-run.mjs,extra-probe.js}`.
+
+The 64-sample current-pass intervals (raymarch plus packed-output unpacking)
+recorded p50 above / inside of 5.41 / 5.96 ms on High, 3.24 / 2.67 ms on Medium,
+and 0.78 / 0.28 ms on Low. These are local calibration samples, not whole-frame
+times, a comparison against another implementation or evidence for other GPUs.
+
+`npm test -- --run` passed 5929 tests with 4 skipped in 601 files, including
+generator determinism, longitude continuity, poles, sparse spherical-area
+coverage and unconverted scalar decoding. The production build, scoped ESLint
+and Prettier checks passed. `cloud:manifest -- --check` verified all 805 local
+assets. The GPU receiver probe passed 191 checks / 20 cases, including Titan's
+PNG through the production loader and far composition on sphere, terrain and
+water, with no unexpected WebGL errors.
+
+The normal-app flight probe (`SCENE_CLOUD_FLIGHT_START=peak`, 1280 × 800) passed
+321 checks / 16 cases, including Titan above/inside on all three qualities,
+backend release outside the cutoff, switching between bodies, settings toggles,
+the lens scenario and three matched Solar exits. Owned resources were released
+and no unexpected WebGL errors were reported. Its report and checkpoints are in
+`tmpscreenshots/scene-clouds/flight-{report,evidence}.json` and the adjacent PNGs;
+the console log is `tmpscreenshots/cloud-tuning/titan-flight.log`. This focused
+scope does not repeat the full cold Earth altitude/performance matrix.
+
+## Extrasolar profile validation (2026-10-25)
+
+The actual application was checked on NVIDIA RTX 5070 Ti / ANGLE D3D11 at
+1920 × 1080, DPR 1, epoch 2451545. TOI-519b, Ohann, Adriana, Yavin Prime,
+Korriban, Darkness, Halcyra and Thalorn were visited in their six native scenes.
+The 33 High-quality cases cover each body outside the cutoff, halfway through
+the transition, above the layer and inside it, plus a below-cloud view on
+Korriban. Korriban's camera targets a bright sunlit sample of its real cloud map.
+
+All 25 near snapshots contained finite, nonempty native RGBA16F cloud output.
+All eight midpoint cases reached weight 0.5 and all eight far cases released the
+volume backend. Same-camera cloud on/off screenshots above each body visibly
+differed, preserving the catalog's warm or blue decks and Korriban's white cloud
+systems over terrain. The browser reported no unexpected runtime or WebGL
+errors; switching scenes and leaving the final scene released cloud derivatives
+and backend resources. Screenshots and per-case camera, configuration, buffer
+and ownership records are in `tmpscreenshots/cloud-tuning/extrasolar-native/`;
+the disposable runner is `.superpowers/cloud-tuning/extrasolar-run.mjs`.
+
+The initial attempted Sgr A* I near flight stopped at the existing `lens`
+fallback, with zero cloud/depth/shadow passes and no backend. This is a retained
+composition limitation, not successful volume validation for that planet.
+These checks establish behavior on the current GPU; they do not establish
+performance improvements or acceptance on other hardware.
+
+`npm test -- --run` passed 5938 tests with 4 skipped in 601 files. The catalog
+preparation checks cover resource ownership, sync/async decoding, positive
+appearance coverage, empty RGB mask backgrounds, untouched borrowed samplers,
+explicit disable and missing-source behavior. Production build, scoped ESLint
+and Prettier checks passed. No new assets or resource database changes were
+needed for these nine profiles.
+
+The normal-app flight probe (`SCENE_CLOUD_FLIGHT_START=peak`, 1280 × 800) passed
+651 checks / 25 cases with no unexpected WebGL errors. It exercises all eight
+new active profiles above/inside on High, Medium and Low, verifies native
+half-float finiteness and the one-volume render budget, and releases the backend
+outside each cutoff. The Sagittarius case explicitly verifies the retained
+`lens` fallback at Sgr A* I and the original black-hole view. Three matched Solar
+exits released cloud/depth/prepared owners and returned to the same renderer
+geometry/texture counts. Reports and checkpoints are in
+`tmpscreenshots/scene-clouds/flight-{report,evidence}.json`; the log is
+`tmpscreenshots/cloud-tuning/extrasolar-flight.log`. This focused scope does not
+repeat the full cold Earth altitude/performance matrix.
+
+## Korriban atmosphere and terrain clearance (2026-10-25)
+
+The adjusted atmosphere and 26–31 km cloud layer were checked in the actual
+Horuset application on NVIDIA RTX 5070 Ti / ANGLE D3D11, 1920 × 1080, DPR 1,
+epoch 2451545. Twelve before/after cases used identical camera positions and
+orientations: ground with clouds on/off, valley, mountain, an upward mountain
+view, above the layer with clouds on/off, inside, below, half transition, orbit
+and night. Four further cases covered above/inside on Medium and Low.
+
+All 13 active after-change cloud buffers were finite, nonempty RGBA16F. The
+transmittance and irradiance LUTs and all 32 scattering LUT slices were finite.
+The midpoint reached volume weight 0.5; orbit and disabled clouds released the
+backend, and leaving the scene released both backend and prepared resources.
+No unexpected runtime or WebGL errors occurred. Same-camera images show stronger
+neutral atmospheric haze and limb scattering while retaining the authored
+surface and cloud colors. The sky visibility factor at the 23.584 km mountain
+view fell from 1 to 0.654; the night and orbital factors remained 1.
+
+A separate data audit confirmed the 2.166 km minimum clearance above the current
+terrain bound and the 0.027% difference from Earth's Rayleigh optical column.
+Every atmosphere field except the Rayleigh coefficient triplet is unchanged.
+`npm test -- --run` passed 5938 tests with 4 skipped in 601 files. Production
+build, scoped ESLint and profile formatting checks passed.
+
+Evidence is in `tmpscreenshots/cloud-tuning/korriban-atmosphere-{before,after}/`,
+`korriban-atmosphere-comparison.json` and `korriban-density-audit.json` under the
+same parent directory. The disposable capture runner is
+`.superpowers/cloud-tuning/korriban-atmosphere-run.mjs`. Its final run used a
+fresh Vite process to avoid duplicate store modules after development hot reload.

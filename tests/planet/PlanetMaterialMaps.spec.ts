@@ -1084,12 +1084,17 @@ describe('поверхность планеты: 19 тел Task 2 — пути �
   )
 })
 
-describe('поверхность планеты: зачистка облаков Титана и Венеры', () => {
-  it('у Титана и Венеры облачной строки больше нет', () => {
+describe('поверхность планеты: источники облаков Титана и Венеры', () => {
+  it('Титан использует маску метановых облаков, Венера сохраняет внешний вид в diffuse', () => {
     const titan = Actor.find(29)!
     const venus = Actor.find(6)!
 
-    expect(titan.resources.where('resourceType', 'cloud').first()).toBeUndefined()
+    expect(
+      titan.resources
+        .where('resourceType', 'cloud')
+        .all()
+        .map((r) => r.getAttribute('path'))
+    ).toEqual(['planets/titan/titan_methane_coverage.png'])
     expect(venus.resources.where('resourceType', 'cloud').first()).toBeUndefined()
   })
 

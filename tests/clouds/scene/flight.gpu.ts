@@ -9,6 +9,7 @@ import {
   Raycaster,
   ShaderMaterial,
   WebGLRenderTarget,
+  HalfFloatType,
   FloatType,
   PlaneGeometry,
   type PerspectiveCamera,
@@ -1006,6 +1007,56 @@ export async function run(): Promise<SceneCloudProbeReport> {
         'Actual Io cannot be foreground inside the fixed near activation region. This is far endpoint evidence; no stale near depth is sampled. Near foreground-volume numerical coverage belongs to the depth probe.'
     })
     cases.push('jupiter-altitude-path')
+    const originalQuality = settingsStore.cloudQuality
+    const verifyPlanetProfile = async (actorId: number) => {
+      const body = getBody(actorId),
+        config = body.descriptor.volume
+      assert(config, `planet ${actorId} has a volume profile`)
+      if (!config) throw new Error(`Missing cloud profile ${actorId}`)
+      const layer = config.layers[0],
+        top = layer.baseAltitudeMeters + layer.thicknessMeters
+      for (const quality of ['high', 'medium', 'low'] as const) {
+        settingsStore.setCloudQuality(quality)
+        for (const altitudeMeters of [top + 8000, layer.baseAltitudeMeters + layer.thicknessMeters * 0.45]) {
+          move(body, altitudeMeters / 1000)
+          await wait(`planet-${actorId}-${quality}-${altitudeMeters}`, () => {
+            const d = runtime.diagnostics
+            return (
+              d.actorId === actorId &&
+              d.state === 'active' &&
+              d.effectiveWeight === 1 &&
+              app.resourceObserver.inFlight.size === 0
+            )
+          })
+          for (let i = 0; i < 64; i++) await frame()
+          const backend = privateField<{ effect: { cloudsPass: { historyRenderTarget: WebGLRenderTarget } } }>(
+            runtime,
+            'backend'
+          )
+          const target = backend.effect.cloudsPass.historyRenderTarget
+          assert(target.texture.type === HalfFloatType, 'profile history uses native RGBA16F')
+          const pixels = new Uint16Array(target.width * target.height * 4)
+          e.renderer.readRenderTargetPixels(target, 0, 0, target.width, target.height, pixels)
+          assert(
+            pixels.every((value) => (value & 0x7c00) !== 0x7c00),
+            `finite planet ${actorId} ${quality} volume`
+          )
+          await checkpoint(`planet-${actorId}-${quality}-${altitudeMeters}`, body, {
+            budget: await assertBudget(),
+            historySize: [target.width, target.height]
+          })
+        }
+      }
+      move(body, (top + config.lod.cutoffDistanceMeters + 100000) / 1000)
+      await wait(
+        `planet-${actorId}-outside-cutoff`,
+        () => !privateField(runtime, 'backend') && runtime.diagnostics.effectiveWeight === 0
+      )
+      await checkpoint(`planet-${actorId}-far`, body, { budget: await assertBudget() })
+      cases.push(`planet-profile-${actorId}`)
+    }
+    for (const actorId of [6, 11, 12, 13, 29]) await verifyPlanetProfile(actorId)
+    settingsStore.setCloudQuality(originalQuality)
     for (const body of [earth, jupiter, earth]) {
       move(body, body === earth ? 100 : 500)
       await frame()
@@ -1077,8 +1128,8 @@ export async function run(): Promise<SceneCloudProbeReport> {
         sources(neptune).some((s) => s.id === 37 && s.width! > 1) &&
         !runtime.diagnostics.farFallbacks.some((s) => s.actorId === 13)
     )
-    assert(!neptune.descriptor.volume, 'Neptune remains far only')
-    assert(!privateField(runtime, 'backend'), 'far-only Neptune allocates no volume owner')
+    assert(neptune.descriptor.volume, 'Neptune has a volume profile')
+    assert(!privateField(runtime, 'backend'), 'distant Neptune allocates no volume owner')
     await checkpoint('authored-neptune', neptune, { encoding: neptune.descriptor.far?.pattern.encoding })
     cases.push('authored-neptune')
     await engineStore.setScenario(Scenarios.find((s) => s.rootId === 86)!)
@@ -1093,11 +1144,25 @@ export async function run(): Promise<SceneCloudProbeReport> {
         !runtime.diagnostics.farFallbacks.some((s) => s.actorId === 88)
     )
     assert(
-      !korriban.descriptor.volume && !privateField(runtime, 'backend'),
-      'Korriban remains far only without volume owner'
+      korriban.descriptor.volume && !privateField(runtime, 'backend'),
+      'Korriban retains its authored far map outside the volume cutoff'
     )
     await checkpoint('authored-korriban', korriban, { encoding: korriban.descriptor.far?.pattern.encoding })
     cases.push('authored-korriban')
+    for (const actorId of [88, 90]) await verifyPlanetProfile(actorId)
+    for (const [scenarioId, actorIds] of [
+      [3, [57]],
+      [4, [63, 64]],
+      [5, [82]],
+      [12, [120]],
+      [13, [130]]
+    ] as const) {
+      await engineStore.setScenario(Scenarios.find((s) => s.id === scenarioId)!)
+      e.clock.setSpeedOfTime(0)
+      e.clock.setEpoch(2451545)
+      for (const actorId of actorIds) await verifyPlanetProfile(actorId)
+    }
+    settingsStore.setCloudQuality(originalQuality)
     await engineStore.setScenario(Scenarios.find((s) => s.rootId === 42)!)
     e.clock.setSpeedOfTime(0)
     e.clock.setEpoch(2451545)
@@ -1109,6 +1174,19 @@ export async function run(): Promise<SceneCloudProbeReport> {
     }>(e.postprocessing, 'lensRegistry')
     const lens = lensRegistry.entries()[0]
     assert(!!lens, 'real Sagittarius black hole registers a lens')
+    const sgrPlanet = getBody(44)
+    assert(sgrPlanet.descriptor.volume, 'Sgr A* I has an explicit appearance profile')
+    move(sgrPlanet, 40)
+    await wait(
+      'sgr-a-cloud-lens-fallback',
+      () => runtime.diagnostics.actorId === 44 && runtime.diagnostics.reason === 'lens'
+    )
+    assert(
+      !privateField(runtime, 'backend') && runtime.diagnostics.effectiveWeight === 0,
+      'active gravitational lens preserves the existing far-only compatibility fallback'
+    )
+    await checkpoint('sgr-a-cloud-lens-fallback', sgrPlanet)
+    cases.push('sgr-a-cloud-lens-fallback')
     e.renderCamera.position
       .copy(lens.object.getWorldPosition(new Vector3()))
       .add(new Vector3(0, 0, lens.simulationRadiusUnits * 2))

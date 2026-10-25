@@ -6,7 +6,7 @@ import { resolveSceneClouds } from '@/core/clouds/resolveSceneClouds'
 import { CloudRegistry } from '@/core/services/CloudRegistry'
 import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { SRGBColorSpace } from 'three'
+import { NoColorSpace, SRGBColorSpace } from 'three'
 import {
   Color,
   Data3DTexture,
@@ -213,10 +213,11 @@ export async function run(): Promise<SceneCloudProbeReport> {
     return { coverage, cloud: rgb.map((value, channel) => Math.min(value / coverage, 1) * [0.7, 0.8, 0.9][channel]) }
   }
   try {
-    // Catalog far-only owners use real JPEG/PNG decoding through the production loader.
+    // Catalog surface maps use real JPEG/PNG decoding through the production loader.
     // These are deterministic encoded fixtures, not the authored Task9 image assets.
     for (const [actorId, resourceId, mime] of [
       [13, 37, 'image/jpeg'],
+      [29, 248, 'image/png'],
       [88, 113, 'image/png']
     ] as const) {
       const resource = Resources.find((r) => r.id === resourceId)!
@@ -255,12 +256,13 @@ export async function run(): Promise<SceneCloudProbeReport> {
         })
         Storage.url = originalUrl
         source.name = resource.path
-        source.colorSpace = SRGBColorSpace
+        source.colorSpace = resource.colorSpace ?? NoColorSpace
         source.wrapS = RepeatWrapping
         source.needsUpdate = true
         check(
-          resource.colorSpace === 'srgb' && source.image instanceof ImageBitmap,
-          'catalog source ImageBitmap/sRGB ' + resourceId
+          resource.colorSpace === (actorId === 29 ? NoColorSpace : SRGBColorSpace) &&
+            source.image instanceof ImageBitmap,
+          'catalog source ImageBitmap/color space ' + resourceId
         )
         resourceStorage.addTexture(source)
         const decoded = readCloudImagePixels(source)
@@ -270,12 +272,12 @@ export async function run(): Promise<SceneCloudProbeReport> {
           decoded.bytes[2] / 255,
           SRGBColorSpace
         )
-        const components = [rgb.r, rgb.g, rgb.b]
-        const coverage = Math.sqrt((rgb.r + rgb.g + rgb.b) / 3)
+        const coverage = actorId === 29 ? decoded.bytes[0] / 255 : Math.sqrt((rgb.r + rgb.g + rgb.b) / 3)
+        const components = actorId === 29 ? [coverage, coverage, coverage] : [rgb.r, rgb.g, rgb.b]
         const descriptor = resolveSceneClouds(actorId, undefined, new Set([resourceId]))
         check(
-          descriptor.volume === null && descriptor.far?.pattern.map.resourceId === resourceId,
-          'catalog far-only descriptor'
+          descriptor.state === 'configured' && descriptor.far?.pattern.map.resourceId === resourceId,
+          'catalog surface-map descriptor'
         )
         scene.position.z = -1e-6
         registry.register({
@@ -329,7 +331,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
             runtime.diagnostics.shadowUpdates === 0,
           'far-only zero near allocations/depth/shadow'
         )
-        report.cases.push('far-only-' + actorId + '-' + resourceId + '-' + mime.split('/')[1])
+        report.cases.push('surface-map-' + actorId + '-' + resourceId + '-' + mime.split('/')[1])
       } finally {
         Storage.url = originalUrl
         runtime.dispose()

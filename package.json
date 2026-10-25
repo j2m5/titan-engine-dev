@@ -24,6 +24,7 @@
     "build:enhance-heightmap": "vite-node scripts/enhance-heightmap.ts --",
     "build:sculpt-heightmap": "vite-node scripts/sculpt-heightmap.ts --",
     "build:ice-archetype": "vite-node scripts/build-ice-archetype.ts --",
+    "build:titan-clouds": "vite-node scripts/build-titan-clouds.ts",
     "cloud:manifest": "vite-node scripts/cloud-manifest.ts --",
     "cloud:sync": "vite-node scripts/cloud-sync.ts --",
     "build:archetype-set": "vite-node scripts/build-archetype-set.ts --",
