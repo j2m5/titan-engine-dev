@@ -95,4 +95,20 @@ describe('SectorGrid — ленивые слои', () => {
 
     expect(grid.layerAt(0)).toBe(kept)
   })
+
+  it('сохраняет порядок вытеснения после повторных чтений новейшего слоя и ошибочных индексов', () => {
+    const grid = new SectorGrid({ innerRadius: 0, outerRadius: 1000, cellSize: 1, ringId: 1, densityPerUnit: 1 })
+    const layers = Array.from({ length: 64 }, (_, index) => grid.layerAt(index))
+    for (let i = 0; i < 4; i++) expect(grid.layerAt(63)).toBe(layers[63])
+    // Promote an old hit, then repeatedly read that now-newest entry.
+    for (let i = 0; i < 4; i++) expect(grid.layerAt(0)).toBe(layers[0])
+    expect(() => grid.layerAt(-1)).toThrow(RangeError)
+    expect(() => grid.layerAt(grid.layerCount)).toThrow(RangeError)
+    grid.layerAt(64)
+    expect(grid.layerAt(0)).toBe(layers[0])
+    expect(grid.layerAt(63)).toBe(layers[63])
+    // Inserting64 evicted1; reinserting1 must then evict2, not either kept hit.
+    expect(grid.layerAt(1)).not.toBe(layers[1])
+    expect(grid.layerAt(2)).not.toBe(layers[2])
+  })
 })

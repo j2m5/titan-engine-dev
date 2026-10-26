@@ -129,6 +129,7 @@ class SectorGrid {
 
   /** LRU по порядку вставки Map: старый ключ — первый в итерации, вытесняется первым. */
   private readonly layerCache = new Map<number, LayerInfo>()
+  private mostRecentLayerIndex = -1
 
   /**
    * Радиальный профиль плотности из альфы текстуры кольца (A-lite). null →
@@ -205,8 +206,12 @@ class SectorGrid {
     const cached = this.layerCache.get(index)
     if (cached) {
       // Освежить позицию в порядке вставки — из неё LRU и вытесняет самый старый
-      this.layerCache.delete(index)
-      this.layerCache.set(index, cached)
+      // Соседние сектора часто читают тот же слой: он уже последний в Map.
+      if (index !== this.mostRecentLayerIndex) {
+        this.layerCache.delete(index)
+        this.layerCache.set(index, cached)
+        this.mostRecentLayerIndex = index
+      }
       return cached
     }
 
@@ -228,6 +233,7 @@ class SectorGrid {
     }
 
     this.layerCache.set(index, layer)
+    this.mostRecentLayerIndex = index
     if (this.layerCache.size > LAYER_CACHE_LIMIT) {
       // Map хранит порядок вставки — первый ключ в итерации самый старый
       const oldestKey = this.layerCache.keys().next().value
