@@ -15,6 +15,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
   return {
     uMaxSteps: new Uniform(96),
     uLightSteps: new Uniform(6),
+    uDensityUnitRange: new Uniform(0),
     uBlueNoise: new Uniform(null),
     uTemporalCapture: new Uniform(0),
     uTemporalJitter: new Uniform(0),

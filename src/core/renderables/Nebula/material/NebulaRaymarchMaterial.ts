@@ -5,8 +5,10 @@ import {
   GLSL3,
   OneFactor,
   OneMinusSrcAlphaFactor,
+  RGFormat,
   Texture,
   Uniform,
+  UnsignedByteType,
   Vector3
 } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
@@ -109,6 +111,10 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
       if (this.uniforms.uDensityTex.value !== texture) this.temporalRevision++
       this.uniforms.uDensityTex.value = texture
       this.uniforms.uDensityReady.value = texture ? 1 : 0
+      // Only normalized RG8 guarantees samples in [0,1]. In particular, an
+      // external floating-point field may exceed one even when it is ready.
+      this.uniforms.uDensityUnitRange.value = texture?.type === UnsignedByteType && texture.format === RGFormat &&
+        (texture.internalFormat === null || texture.internalFormat === 'RG8') ? 1 : 0
       const ready = texture !== null
       if (ready !== (this.defines.NEB_BAKED_ONLY !== undefined)) {
         // Two cached programs: live fallback and texture-only sampling. Replacing

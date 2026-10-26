@@ -11,6 +11,9 @@ export const nebulaLightingChunk = `
   uniform float uAnisotropy;
   uniform float uShadowStrength;
   uniform float uLightSteps;
+  #ifdef NEB_BAKED_ONLY
+    uniform float uDensityUnitRange;
+  #endif
 
   float nebulaPhase(vec3 rd, vec3 toStar) {
     if (uPhaseHG < 0.5) return max(dot(-rd, toStar), 0.0);
@@ -37,6 +40,21 @@ export const nebulaLightingChunk = `
 
     float dt = path / uLightSteps;
     float tau = 0.0;
+    #ifdef NEB_BAKED_ONLY
+      // Normalized samples cannot exceed this optical depth, including any
+      // partial sum. Leave a full unit below the cutoff for rounding. Keeping
+      // this loop separate removes its texture-dependent exit at every sample.
+      float upperTau = (max(uDensityScale * uGasAbsorption, 0.0) + max(uDustStrength, 0.0)) * path * uShadowStrength;
+      if (uDensityUnitRange > 0.5 && upperTau < 11.0) {
+        for (int i = 0; i < 16; i++) {
+          if (i >= int(uLightSteps)) break;
+          vec2 medium = nebulaMedium(p + toStar * (float(i) + 0.5) * dt);
+          float sigma = medium.r * uDensityScale * uGasAbsorption + medium.g * uDustStrength;
+          tau += sigma * dt * uShadowStrength;
+        }
+        return exp(-tau);
+      }
+    #endif
     for (int i = 0; i < 16; i++) {
       if (i >= int(uLightSteps)) break;
       vec2 medium = nebulaMedium(p + toStar * (float(i) + 0.5) * dt);

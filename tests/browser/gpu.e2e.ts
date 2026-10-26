@@ -19,6 +19,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula gas dust fields', path: 'nebula/gasDust', name: 'checkNebulaGasDustFields' },
   { title: 'nebula directed structure', path: 'nebula/directedStructure', name: 'checkNebulaDirectedStructure' },
   { title: 'nebula light transport', path: 'nebula/lightTransport', name: 'checkNebulaLightTransport' },
+  { title: 'nebula bounded light', path: 'nebula/lightBound', name: 'checkNebulaLightBound' },
   { title: 'nebula lighting images', path: 'nebula/lightTransport', name: 'checkNebulaLightingImages' },
   { title: 'nebula resolution', path: 'nebula/resolution', name: 'checkNebulaResolution' },
   { title: 'nebula stencil reconstruction', path: 'nebula/stencilReconstruction', name: 'checkNebulaStencilReconstruction' },
