@@ -224,20 +224,30 @@ export const BlackHoleShaderTemplate = {
     // копироваться не должен. dDx/dDy — производные побега, dPixDx/dPixDy —
     // неотклонённого луча пикселя (площадь пикселя и усиление звёзд)
     vec3 sampleBackground(vec3 direction, vec3 dDx, vec3 dDy, vec3 dPixDx, vec3 dPixDy) {
-      if (uSceneEnabled < 0.5) return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
-      vec3 dirView = normalize(mat3(crModelViewMatrix) * direction);
-      vec4 p = crProjectionMatrix * vec4(dirView, 0.0);
-      vec2 uv = p.xy / max(p.w, 1e-6) * 0.5 + 0.5;
-      if (p.w <= 0.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
-      // crModelViewMatrix camera-relative: столбец переноса — центр дыры в виде
-      vec3 centerView = crModelViewMatrix[3].xyz;
-      float tMid = dot(centerView, dirView);
-      float z = texture(uSceneDepth, uv).r;
-      float sceneT = z >= 1.0 - 1e-6 ? 1e30 : (exp2(z * uSceneLogFarFactor) - 1.0) / max(-dirView.z, 1e-6);
-      if (sceneT < tMid) return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
-      // max: под поглощающей туманностью копия = T·небо + свечение, разность ниже нуля
-      vec4 layer = texture(uSkyLayer, uv);
-      return max(texture(uSceneColor, uv).rgb - layer.rgb, vec3(0.0)) + layer.a * sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
+      // Explicit return branches avoid ANGLE/D3D11 X4000 on the function result.
+      if (uSceneEnabled < 0.5) {
+        return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
+      } else {
+        vec3 dirView = normalize(mat3(crModelViewMatrix) * direction);
+        vec4 p = crProjectionMatrix * vec4(dirView, 0.0);
+        vec2 uv = p.xy / max(p.w, 1e-6) * 0.5 + 0.5;
+        if (p.w <= 0.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
+          return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
+        } else {
+          // crModelViewMatrix camera-relative: столбец переноса — центр дыры в виде
+          vec3 centerView = crModelViewMatrix[3].xyz;
+          float tMid = dot(centerView, dirView);
+          float z = texture(uSceneDepth, uv).r;
+          float sceneT = z >= 1.0 - 1e-6 ? 1e30 : (exp2(z * uSceneLogFarFactor) - 1.0) / max(-dirView.z, 1e-6);
+          if (sceneT < tMid) {
+            return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
+          } else {
+            // max: под поглощающей туманностью копия = T·небо + свечение, разность ниже нуля
+            vec4 layer = texture(uSkyLayer, uv);
+            return max(texture(uSceneColor, uv).rgb - layer.rgb, vec3(0.0)) + layer.a * sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
+          }
+        }
+      }
     }
 
     // Аналитический планковский blackbody: CIE-аппроксимация локуса → XYZ → linear sRGB,

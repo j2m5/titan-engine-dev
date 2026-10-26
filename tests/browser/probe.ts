@@ -47,9 +47,9 @@ export const test = base.extend<{ probePage: Page }>({
       expect(pageErrors, 'Unhandled browser exceptions').toEqual([])
       const errors = consoleEntries.filter(entry => entry.type === 'error' ||
         /THREE\.WebGLProgram: Shader Error|VALIDATE_STATUS.*false|Error compiling shader/i.test(entry.text) ||
-        // Native ANGLE/D3D11 regression: density and dust samplers must compile without
+        // Native ANGLE/D3D11 regression: volume and background samplers must compile without
         // an uninitialized-return warning, even when its pixels look correct.
-        /\bX4000\b.*\b(?:f_)?(?:nebulaMedium|ringDustPieceMask)\b/i.test(entry.text) ||
+        /\bX4000\b.*\b(?:f_)?(?:nebulaMedium|ringDustPieceMask|sampleBackground)\b/i.test(entry.text) ||
         (entry.type === 'warning' && /WebGL: (?:INVALID_|OUT_OF_MEMORY|CONTEXT_LOST)/.test(entry.text) && !expectedRestorationWarning(entry)))
       expect(errors, 'Browser console/shader errors').toEqual([])
     }

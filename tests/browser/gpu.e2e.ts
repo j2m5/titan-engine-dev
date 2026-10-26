@@ -36,6 +36,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula incremental baking', path: 'nebula/rendering', name: 'checkNebulaIncrementalBaking' },
   { title: 'atmosphere terminator', path: 'atmosphere/terminator', name: 'checkAtmosphereTerminator' },
   { title: 'black hole depth (0 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [0] },
+  { title: 'black hole background sampling', path: 'blackHole/backgroundSampling', name: 'checkBlackHoleBackgroundSampling' },
   { title: 'black hole depth (4 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [4] },
   { title: 'star LOD photometry', path: 'star/lodPhotometry', name: 'checkStarLodPhotometry' },
   { title: 'star granulation filtering', path: 'star/granulationFiltering', name: 'checkStarGranulationFiltering' },
