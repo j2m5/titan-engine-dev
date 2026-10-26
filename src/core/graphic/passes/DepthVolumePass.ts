@@ -26,7 +26,7 @@ export function orderFarToNear(volumes: readonly DepthVolume[], camera: Object3D
   for (const volume of volumes) {
     volume.getWorldPosition(position)
     volume.getWorldScale(scale)
-    const worldRadius = (volume.boundingRadius ?? 0) * Math.max(scale.x, scale.y, scale.z)
+    const worldRadius = (volume.boundingRadius ?? 0) * Math.max(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z))
     farExtent.set(volume, position.distanceTo(cameraWorld) + worldRadius)
   }
   return [...volumes].sort((a, b) => farExtent.get(b)! - farExtent.get(a)!)
