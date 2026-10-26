@@ -145,9 +145,15 @@ export class InstanceVisibility {
     if (!changed && this.versions.get(source) === source.version) return
     this.versions.set(source, source.version)
     const size = source.itemSize, src = source.array, dst = target.array
-    for (let i = 0; i < this.visibleCount; i++) {
-      const offset = this.slots[i] * size
-      for (let j = 0; j < size; j++) dst[i * size + j] = src[offset + j]
+    for (let start = 0; start < this.visibleCount;) {
+      let end = start + 1
+      while (end < this.visibleCount && this.slots[end] === this.slots[end - 1] + 1) end++
+      const first = this.slots[start] * size, limit = first + (end - start) * size
+      // A block copy pays off for longer spans; small spans avoid the temporary
+      // subarray view. Count components so scalar attributes do not copy tiny blocks.
+      if (limit - first >= 64) dst.set(src.subarray(first, limit), start * size)
+      else for (let i = start * size, j = first; j < limit; i++, j++) dst[i] = src[j]
+      start = end
     }
     // This prefix supersedes pending uploads, including when several view
     // updates occur before a render. Unused tail slots are outside mesh.count.
