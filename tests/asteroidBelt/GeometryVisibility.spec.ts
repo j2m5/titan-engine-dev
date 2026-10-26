@@ -1,4 +1,4 @@
-import { BoxGeometry, Group, InstancedBufferAttribute, Matrix4, PerspectiveCamera, Vector3 } from 'three'
+import { BoxGeometry, BufferGeometry, Float32BufferAttribute, Group, InstancedBufferAttribute, Matrix4, OrthographicCamera, PerspectiveCamera, Vector3 } from 'three'
 import { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 
 const setup = (layer: 'near' | 'l0') => {
@@ -103,6 +103,52 @@ describe.each(['near', 'l0'] as const)('%s instance visibility', layer => {
     pool.geometryMaterial.uniforms.uShapeAmpMin.value = -0.2
     update()
     expect(mesh.count).toBe(1)
+  })
+
+  it('checks all six planes and retains spheres whose centers are outside but whose bounds intersect', () => {
+    const { pool, mesh, add } = setup(layer)
+    const camera = new OrthographicCamera(-2, 2, 2, -2, 1, 9)
+    camera.updateMatrixWorld(true)
+    // Box radius sqrt(3)/2: offsets of 0.5 intersect; offsets of 1.5 do not.
+    const centers = [
+      [0, 0, -5], [2.5, 0, -5], [-2.5, 0, -5], [0, 2.5, -5], [0, -2.5, -5], [0, 0, -0.5], [0, 0, -9.5],
+      [3.5, 0, -5], [-3.5, 0, -5], [0, 3.5, -5], [0, -3.5, -5], [0, 0, 0.5], [0, 0, -10.5]
+    ]
+    for (const [index, [x, y, z]] of centers.entries()) pool.writeDetailEnd(add(x, y, z), index + 10)
+    pool.commitUpdates(); pool.updateVisibility(camera)
+    expect(mesh.count).toBe(7)
+    expect(Array.from({ length: mesh.count }, (_, i) => mesh.geometry.getAttribute('instanceDetailEnd').getX(i))).toEqual([10, 11, 12, 13, 14, 15, 16])
+  })
+
+  it('uses directional bounds for outside centers under shear, reflection and nonuniform scale', () => {
+    const { pool, mesh, stream, add } = setup(layer)
+    const camera = new OrthographicCamera(-2, 2, 2, -2, 1, 9)
+    camera.updateMatrixWorld(true)
+    // X support is sqrt(3)/2 * sqrt(8); Y support is sqrt(3)/4.
+    for (const [index, [x, y]] of [[4, 0], [4.6, 0], [0, 2.3], [0, 2.6]].entries()) {
+      const allocation = add(x, y, -5)
+      const transform = new Matrix4().set(-2, 2, 0, x, 0, 0.5, 0, y, 0, 0, 1, -5, 0, 0, 0, 1)
+      pool.writeMatrices(stream, allocation.offset, new Float32Array(transform.elements))
+      pool.writeDetailEnd(allocation, 20 + index)
+    }
+    pool.commitUpdates(); pool.updateVisibility(camera)
+    expect(mesh.count).toBe(2)
+    expect(Array.from({ length: mesh.count }, (_, i) => mesh.geometry.getAttribute('instanceDetailEnd').getX(i))).toEqual([20, 22])
+  })
+
+  it('keeps zero-radius centers on planes and within the existing epsilon, then culls beyond it', () => {
+    const { pool, mesh, add } = setup(layer)
+    const point = new BufferGeometry().setAttribute('position', new Float32BufferAttribute([0, 0, 0], 3))
+    pool.replaceArchetypeGeometry(0, point, point)
+    const camera = new OrthographicCamera(-2, 2, 2, -2, 1, 9)
+    camera.updateMatrixWorld(true)
+    // At y=0,z=-5 the side-plane epsilon is about 0.00008.
+    const centers = [[0, 0, -5], [2, 0, -5], [-2, 0, -5], [0, 2, -5], [0, -2, -5], [0, 0, -1], [0, 0, -9],
+      [2.000079, 0, -5], [-2.000079, 0, -5], [2.000081, 0, -5], [-2.000081, 0, -5]]
+    for (const [index, [x, y, z]] of centers.entries()) pool.writeDetailEnd(add(x, y, z), index + 30)
+    pool.commitUpdates(); pool.updateVisibility(camera)
+    expect(mesh.count).toBe(9)
+    expect(Array.from({ length: mesh.count }, (_, i) => mesh.geometry.getAttribute('instanceDetailEnd').getX(i))).toEqual([30, 31, 32, 33, 34, 35, 36, 37, 38])
   })
 
   it('does not upload unchanged attributes, bounds changed uploads, and survives context fallback/reset', () => {

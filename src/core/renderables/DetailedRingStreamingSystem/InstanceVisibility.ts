@@ -58,10 +58,14 @@ export class InstanceVisibility {
       let visible = true
       for (const plane of this.frustum.planes) {
         const n = plane.normal
+        const distance = n.x * x + n.y * y + n.z * z + plane.constant
+        // A plane containing the center cannot exclude its sphere. Only outside
+        // centers need the directional support norm; still check every plane.
+        if (distance >= -epsilon) continue
         // Support of the transformed sphere along this plane normal. Unlike
         // max column length, this remains conservative under scale and shear.
         const extent = radius * Math.hypot(a * n.x + b * n.y + c * n.z, d * n.x + e * n.y + f * n.z, g * n.x + h * n.y + i * n.z)
-        if (n.x * x + n.y * y + n.z * z + plane.constant < -extent - epsilon) { visible = false; break }
+        if (distance < -extent - epsilon) { visible = false; break }
       }
       if (!visible) continue
       if (this.slots[visibleCount] !== slot) changed = true
