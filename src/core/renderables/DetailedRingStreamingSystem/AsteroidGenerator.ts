@@ -196,6 +196,9 @@ class AsteroidGenerator {
    */
   public archetypeAssignment(seed: number, count: number, archetypeCount: number): Int32Array {
     const archetypeOf = new Int32Array(count)
+    // Flat billboard generation has one destination for every instance. Keep
+    // the fresh zero-filled array; no hash or separate morphology RNG is needed.
+    if (archetypeCount === 1) return archetypeOf
     const profile = this.config.profile
     if (!profile) {
       for (let i = 0; i < count; i++) archetypeOf[i] = archetypeForInstance(seed, i, archetypeCount)
