@@ -18,6 +18,7 @@ import { IMPOSTOR_FRAME_FILL } from './lod'
  * standalone scenes) the volume exists in the graph but no pass draws it.
  */
 class NebulaVolume extends Mesh implements TemporalDepthVolume, Disposable {
+  public readonly supportsDepthVolumeBatch = true
   declare public material: NebulaRaymarchMaterial
   public readonly supportsStencilReconstruction = true
 

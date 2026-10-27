@@ -86,6 +86,7 @@ interface RingDustVolumeConfig {
  * DepthVolumePass: лежит на слое DEPTH_VOLUME_LAYER и числится в реестре пасса.
  */
 class RingDustVolume extends Mesh implements DepthVolume, Disposable {
+  public readonly supportsDepthVolumeBatch = true
   public readonly dustMaterial: RingDustRaymarchMaterial
   /** Радиус описанной сферы прокси (см. DepthVolume.boundingRadius) */
   public readonly boundingRadius: number

@@ -16,6 +16,7 @@ const PROXY_PADDING = 1.05
  * магнитная ось крутится вокруг неё по симуляционному времени.
  */
 class PulsarBeams extends Mesh implements DepthVolume, Disposable {
+  public readonly supportsDepthVolumeBatch = true
   declare public material: PulsarBeamsMaterial
   public readonly boundingRadius: number
 

@@ -3,6 +3,7 @@ import { DepthCopyPass, Pass } from 'postprocessing'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
 import { DepthVolumeResolutionRenderer } from './DepthVolumeResolutionRenderer'
+import { depthVolumeBatchEnd, renderDepthVolumeBatch } from './DepthVolumeBatchRenderer'
 
 /** Тип упаковки глубины библиотека объявляет, но не экспортирует — берём из сигнатуры Pass */
 type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
@@ -56,7 +57,15 @@ export function drawDepthVolumes(
     renderer.setRenderTarget(target)
     scaled?.prepare(volumes, resolution)
 
-    for (const volume of volumes) {
+    const canBatch = target !== null && target.samples > 0 && renderer.autoClear === false && !renderer.xr?.isPresenting
+    for (let index = 0; index < volumes.length;) {
+      const end = canBatch ? depthVolumeBatchEnd(volumes, index) : index
+      if (end - index > 1) {
+        renderDepthVolumeBatch(renderer, camera, volumes, index, end, sceneDepth, resolution, logFarFactor)
+        index = end
+        continue
+      }
+      const volume = volumes[index++]
       try {
         volume.bindSceneDepth(sceneDepth, resolution, logFarFactor)
         if (scaled) scaled.render(renderer, target, camera, volume, sceneDepth, resolution, logFarFactor)

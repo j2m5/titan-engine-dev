@@ -60,6 +60,12 @@ export function isSceneFrameConsumer(object: Object3D): object is SceneFrameCons
  * отвязывает: любой другой рендер объёма (запекание) идёт без обрезки.
  */
 export interface DepthVolume extends Object3D {
+  /** Opt in to a shared render/resolve for consecutive direct transparent draws.
+   * Bind/unbind and object callbacks may only refresh this draw's uniforms;
+   * they must not mutate other volumes, renderer state or invoke nested renders.
+   * Material callbacks, children, shared materials and scaled/temporal draws
+   * keep their separate render boundaries. Original object callback roots remain. */
+  readonly supportsDepthVolumeBatch?: boolean
   /**
    * Радиус описанной сферы прокси в ЛОКАЛЬНЫХ единицах объёма (масштаб мира
    * пасс применяет сам). Порядок рисования — по дальней кромке

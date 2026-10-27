@@ -1,6 +1,8 @@
 import { test, runProbe } from './probe'
 
 const probes: { title: string; path: string; name: string; args?: unknown[] }[] = [
+  { title: 'volume MSAA batch', path: 'graphic/volumeBatch', name: 'checkVolumeBatch' },
+  { title: 'front volume MSAA batch', path: 'graphic/volumeBatch', name: 'checkVolumeBatch', args: [true] },
   { title: 'volume reflection order', path: 'graphic/volumeOrder', name: 'checkVolumeReflectionOrder' },
   { title: 'impostor instance visibility', path: 'asteroidImpostors/visibility', name: 'checkImpostorVisibility' },
   { title: 'impostor side culling', path: 'asteroidImpostors/sideCulling', name: 'checkImpostorSideCulling' },
