@@ -232,6 +232,8 @@ class AsteroidGenerator {
    * @param count — количество экземпляров для генерации
    * @param bounds — границы сектора в полярных координатах
    * @param archetypeCount — число архетипов K, на которые раскладываются камни
+   * @param assignment — готовый результат archetypeAssignment для тех же seed,
+   *   count, archetypeCount и профиля генератора; массив не изменяется и не сохраняется
    * @returns массив длиной archetypeCount; элемент k — Float32Array матриц камней архетипа k,
    *   в порядке возрастания исходного индекса инстанса i
    */
@@ -239,12 +241,13 @@ class AsteroidGenerator {
     seed: number,
     count: number,
     bounds: SectorBounds,
-    archetypeCount: number
+    archetypeCount: number,
+    assignment?: Int32Array
   ): Float32Array[] {
     // Проход 1: раскладка по архетипам (см. archetypeAssignment) — на rng-поток
     // прохода 2 не влияет: без профиля это хеш, с профилем — реплей того же
     // потока отдельным экземпляром SeededRandom.
-    const archetypeOf = this.archetypeAssignment(seed, count, archetypeCount)
+    const archetypeOf = assignment ?? this.archetypeAssignment(seed, count, archetypeCount)
     const groupCounts = new Array<number>(archetypeCount).fill(0)
     for (let i = 0; i < count; i++) groupCounts[archetypeOf[i]]++
 

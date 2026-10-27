@@ -246,7 +246,8 @@ class SectorManager {
       allocations.push(allocation)
     }
 
-    const groups = this.generator.generateMatricesGrouped(seed, count, bounds, archetypeCount)
+    // Повторно используем раскладку, по которой только что выделили группы.
+    const groups = this.generator.generateMatricesGrouped(seed, count, bounds, archetypeCount, assignment)
     for (const allocation of allocations) {
       const k = allocation.stream - streamBase
       this.pool.writeMatrices(allocation.stream, allocation.offset, groups[k])
