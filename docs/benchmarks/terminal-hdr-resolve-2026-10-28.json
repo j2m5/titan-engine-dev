@@ -4755,7 +4755,7 @@
     "Run unit tests,tsc-b,eslint and Playwright. Native all51; SwiftShader focus:terminal HDR output,black hole depth(4samples),stellar bloom. Keep heavy GPU/CPU measurements serial."
   ],
   "review": {
-    "status": "pending",
+    "status": "passed",
     "executionRulings": [
       "Ruling: continue this reversible diagnostic inline without another approval/workflow menu -- established user authorization covers sequential audit work -- cost if wrong: diagnostic time and disposable local files; no product change is assumed.",
       "Ruling: test a dedicated single-sample terminal HDR buffer,not mutate samples on an already allocated target -- preserves installed renderer attachment semantics and original scene MSAA -- cost if wrong:8bytes/pixel extra temporary GPU storage; product adoption needs exact parity and benefit.",
@@ -4764,7 +4764,169 @@
       "Ruling: implement two EffectPass subclasses behind the existing pair factory,not a combined composer pass -- preserves10pass order,composer swap/mask/enable semantics and existing effect wiring -- cost if wrong: a small paired input-routing abstraction and about7.03MiB extra color storage at720p.",
       "Ruling: preserve raw pixel/PNG buffers locally with hashes and embed reports,sources,queries and logs in the tracked archive -- repeated large identical image variants would bloat the repository -- cost if wrong: independent pixel recomputation on another PC needs the local artifacts or a rerun; the archive alone checks hashes/statistics,not unembedded pixels."
     ],
-    "rulings": [],
-    "deferredMinors": []
+    "rulings": [
+      {
+        "id": 1,
+        "behavior": "Вся сцена при MSAA 0",
+        "decision": "Оставить отдельным открытым наблюдением",
+        "reason": "Сбой атмосферы воспроизведён до HDR в baseline; штатное приложение задаёт 8, финальный проход при 0 проверен отдельно",
+        "costIfWrong": "Принудительный режим всей сцены 0 остаётся неисправным до отдельной работы"
+      },
+      {
+        "id": 2,
+        "behavior": "Другие GPU и драйверы",
+        "decision": "Ограничить выводы проверенными AMD/ANGLE и SwiftShader",
+        "reason": "На них получены точные сравнения; код сохраняет свойства текстуры и использует штатный WebGL",
+        "costIfWrong": "Иной драйвер может дать другую скорость или потребовать отдельной проверки пикселей"
+      },
+      {
+        "id": 3,
+        "behavior": "Полные пиксели 4K-снимка",
+        "decision": "Сохранить штатный путь снимка без заявления о 4K-побитовом сравнении",
+        "reason": "Unit покрывает размеры4K/возврат, GPU покрывает настоящий resize, владелец буфера тот же",
+        "costIfWrong": "Артефакт, зависящий только от полного4K, этим этапом не исключён"
+      },
+      {
+        "id": 4,
+        "behavior": "Оптимизированный DPR 2",
+        "decision": "Сохранить унаследованные размеры drawing buffer",
+        "reason": "Новый target клонирует выход композера и следует его setSize; отдельной матрицыDPR2 нет",
+        "costIfWrong": "Отдельная ошибка приDPR2 потребует воспроизведения"
+      },
+      {
+        "id": 5,
+        "behavior": "Восстановление контекста",
+        "decision": "Не приравнивать отсутствие потерь к проверке recovery",
+        "reason": "Ресурс остаётся обычным WebGLRenderTarget с жизненным циклом Three; принудительной потери не было",
+        "costIfWrong": "Ошибка после потери контекста может остаться невыявленной"
+      },
+      {
+        "id": 6,
+        "behavior": "Многочасовая работа и давление на VRAM",
+        "decision": "Принять проверенную короткую выгрузку, длинный soak оставить вне вывода",
+        "reason": "После сцен0textures/0programs, один контекст; дополнительный объём явно указан",
+        "costIfWrong": "Медленное накопление или нехватка памяти в длинной сессии не исключены"
+      },
+      {
+        "id": 7,
+        "behavior": "Фактическая VRAM",
+        "decision": "Называть7.03/63.28МиБ расчётом формата",
+        "reason": "8байт/пиксель RGBA16F не включает внутренние выделения драйвера",
+        "costIfWrong": "Фактический расход может быть выше расчёта"
+      },
+      {
+        "id": 8,
+        "behavior": "FPS и редкие длинные кадры",
+        "decision": "Не заявлять общий приростFPS или улучшение всех перцентилей",
+        "reason": "Измерены GPUокна, есть два раскрытых ухудшенияp95",
+        "costIfWrong": "Видимая плавность может не улучшиться или зависеть от иных узких мест"
+      },
+      {
+        "id": 9,
+        "behavior": "Полный GPU-кадр новой реализации",
+        "decision": "Оставить числа полного кадра только за прототипом",
+        "reason": "Продукт подтверждён точными пикселями,счётчиками и16pass-сериями; отдельный whole-frame повтор не выполнен",
+        "costIfWrong": "Точная величина выигрыша полного кадра продукта не установлена"
+      },
+      {
+        "id": 10,
+        "behavior": "Все конфигурации активных линз",
+        "decision": "Принять fixture переходов и существующие регрессии в заявленном объёме",
+        "reason": "Изменён только выход после линзы; upstreamгеометрия/глубина не меняются",
+        "costIfWrong": "Непроверенное сочетание линз может выявить дополнительный случай"
+      },
+      {
+        "id": 11,
+        "behavior": "GPU stencil, отключённые и offscreen проходы",
+        "decision": "Сохранить исходный маршрут и unit-контракты",
+        "reason": "Оптимизация явно выключена для этих ветвей, shaderпуть остаётся унаследованным",
+        "costIfWrong": "Отдельная GPUособенность fallback не проверена новой матрицей"
+      },
+      {
+        "id": 12,
+        "behavior": "Перестановка проходов и изменение флагов внутри кадра",
+        "decision": "Считать пару смежным финальным контрактом внутренней фабрики",
+        "reason": "Приложение создаёт именно такую пару; one-shotпроверка принимает только ожидаемый input",
+        "costIfWrong": "Новая внешняя перестройка пайплайна потребует адаптации и тестов"
+      },
+      {
+        "id": 13,
+        "behavior": "Изменение формата/фильтров/colorSpace после выделения",
+        "decision": "Сохранить фиксированные свойства штатного композера и сброс приinitialize",
+        "reason": "В приложении такие свойства не меняются посреди жизни target",
+        "costIfWrong": "При добавлении динамической смены формата понадобится пересоздание или синхронизация target"
+      },
+      {
+        "id": 14,
+        "behavior": "Проверка пикселей только из Git-архива",
+        "decision": "Сохранить локальные бинарные данные и их точные хеши",
+        "reason": "Все34случая пересчитаны; embedding408больших файлов необязателен для журнала аудита",
+        "costIfWrong": "Другому ПК нужны эти файлы или повторный запуск"
+      },
+      {
+        "id": 15,
+        "behavior": "Инъекции ошибок в диагностическое восстановление",
+        "decision": "Принять просмотр finally и успешные проверки дескрипторов без заявления о полном fault injection",
+        "reason": "Данные приняты только из завершённых чистых прогонов; unit проверяет исключения продуктового маршрута",
+        "costIfWrong": "Новый сбой самого стенда потребует отдельного воспроизведения,его неполный отчёт нельзя принимать"
+      }
+    ],
+    "deferredMinors": [],
+    "reviewer": "/root/terminal_hdr_final_review",
+    "model": "gpt-6-astra",
+    "reasoningEffort": "medium",
+    "base": "6c12bc87fff2b4e2705c66ed9a58032236f0b028",
+    "reviewedHead": "3bec169b70a773f4efc2b86259e689c62ea672cf",
+    "critical": 0,
+    "important": 0,
+    "minor": 0,
+    "independentVerification": {
+      "hashes": 81,
+      "imageCases": 34,
+      "timedFrames": 4848,
+      "rawPixelRecheck": false
+    },
+    "result": {
+      "path": "benchmark-results/heavy-scenes/terminal-hdr-final-review-2026-10-28.md",
+      "bytes": 3054,
+      "sha256": "fb815d4d131098ba4f9238a64545687ce783e92ae737bbbf99474e9bfc5de412",
+      "encoding": "gzip/base64",
+      "data": "H4sIAAAAAAAACn1WwW7jSA696ysI7NUux07iJA6wQGbS3TPYSXeQ7MwcB3QVJVWnVKUmS3bSX79gSXbcO4u92JZVosjH9x75D/joIwbw0VFP0VHMwLTztK+qp/JNvIEFp5QXmbjTw3+1jv+qy6/x6AyaPs/Xc5TMOIOOnB+6GdRM0oJNMdNrNtUTxoY2sLbL1dZeX9V1vdpe0Orq7NKu1+Ru8PL67Hy1Ol/XZ9uz1TXM/wnnW7LL9c326gyvrs7rC6rtanu9Xl3e0Pr6xq5XhOurla1N9UTo5imGtyn7W4gJZNhiQzELJIaWcKd3eYhiquo5M8Umt7Kp5vDvqbIPdU02P6IIicmyOT+HZkB2AqnPvvPfMfsUb8HHlthncsCKGfvYQIvRBRKQTNH6MAPnBbeB3EJefN+TAyrRZQbfiRMIdr2ex+gg1bVYJorw2/2T+X8J3UDPJMQ7ElBYByboOfXE2ZPAvvWBgKlLO82pAHJoGzw8390tHPW5BcwZbdspNgY+Ueoo81tJZUwSEjtiDYQ+whBtq81zmtqXSHNpUwZOQ/axmQG9WuoVGJkBk/jvpN8++uwxTJiV2M5LnwQDYMNEsPe5hdwS+CgZQyAHNnV9EuKFlmzG82Tgp8Sc9uQgIzeUR9B6IhZAJogpT7HHFH+PPi8+Pf4OmSQL2LTTWg7pBl+TfbOBxnpf0Wb45f5p8fTppwmeGfhow+AUQrTZ7wgCRYHMGMWXSvU1H3beUbQEQj0yZm0+djTfDj6MpSB7KbD0nHLKbz0tek5usBmUTrGRGWieFLAXckeQAr6Rg4+PzwZ+TqKU+epzJh7rvrkEpoZJRDMpCDgvNozlVz+zz95i2MCZgV+7PnHGmMvVg4+J9Vf164neg2/avCf9hB2xr71q/noJ1G3JOXLQorQkMzi/AN9hQ2BR9Pri+uJaKyEHNWOnf/XKVWeO5qHN7cmqVjpCGZiUdQsmyYkLNWYQU9QWBex7hfzbQOw1FrLPbUfZ2xlIGtgSKOLZ55GrOwzejfRisomdGPicgKknLOLEPfT+lUK53fVDHg8f3UAGn0kM/Jn4Rd+cCy1RwAbCaKrqnmzwUYmX4OvgGtpUSwN/tinQHPs+eDtGVGmdbYBeveTCmtwl6Vtighp9GFVKlpzKtiUY9XR71OZoXYWoCq+XsTZTrQx8yS2x0kQWjv2OWDZAB+qVRwQiFpbePdwv7j5/+u1Dged57+v83KIqufbFK0x1buBDoXw9hHDxLxh9pwi6QCWbScNjaHKzw8mp80daF9lNPXWmujDwZTRJcnD/+LTagGQebB4YAzjGvY/NfDvUNTGI/64wHbzMzY4amrIA3ArFbKpLlUCZIPOQREond8RvGzV4H91giwuPfxbBF+vXsyQKpGZ5vH/AzVRrA7+kgWUeUmxAMm598Plt8cfT3UPJS8vagLSJ84ll2Jbsi4BLJS7pc8FLC5LwBbbU4s4nNtWVgTubBwyg8Tag3rJcfzxhtLpmGJQPY1NBE2wJnamuDdyfmsBiiKXtGCCjD+C7ntOu6GjzYxrkbv9mD5OHu2QHfUJbdWPgcbKhfaFyES902ESfB0cbOLjU1F4ZZS23P5xv0EeBLRUEc3o3OVMtzwx8KIgzYZiLpUiTlc6LlSKzKmCsYSLnqb9O3jzJafTxg9XTa4uDaCxTLZemOOg0dRfHofs+UnfIHmOWDdQYwhbtSwk+RH+cYeou8ZSEGrLDzN7SOxWXKwN3vPWZkd8KIsBUBqWPzcLHrFSOhdcFrUXn3QRVHbCRDWDf6z406kJrBHRf0aoJ1/6VHPTo+bYUKUOvzq1D4cRn6pD2YqrluYGnIarzgiPFaLqduMO8qH3IxAubQuK59GgJusn7xhz0ZXKyN9z+fV4zBVKTn0aumvGhcnrNxLpQHIKKbgijW5hqeWHg8X+Ybs2p0w7bF62JbauGhSFF2rwb9djkkCyG22nqLJgUiKPmmPqgFW3f1Lqr5aWBz7QH57GJSVRZJ7MFahxCBh+/kh3LL3tr0PblVt6H0wxksJZE6iH8EMAlGj1k3CKokHqMp1NvNHdTVX8QO2/zBnQTfVM5dMQNGXjAbFtlkdUtSdfA10xRyuArixrJf+1pTJLCjmaAjr4NSkebmMnmSCKLdy86DoE68Ym+QWzqqUzCsc9M3wZfevMfVOrACO4LAAA="
+    },
+    "completedWorkspace": {
+      "directory": "benchmark-results/heavy-scenes/terminal-hdr-resolve-completed-workspace-2026-10-28",
+      "files": [
+        {
+          "path": "benchmark-results/heavy-scenes/terminal-hdr-resolve-completed-workspace-2026-10-28/plan-path",
+          "bytes": 58,
+          "sha256": "e327fe9a8dd73ef7183c89e94e181e3a36bd8a16d3d71850974cbe1a664d71f9"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/terminal-hdr-resolve-completed-workspace-2026-10-28/plan.md",
+          "bytes": 10137,
+          "sha256": "343e56e9e2ea1d23bdc3dd952c356499d4c64867a2e68f7b736fb4279bbb613c"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/terminal-hdr-resolve-completed-workspace-2026-10-28/progress.md",
+          "bytes": 16252,
+          "sha256": "228976304104bca27934ebcce9d79324d543838278e0fdd08eaa13b9ac69a3cb"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/terminal-hdr-resolve-completed-workspace-2026-10-28/review-6c12bc87..3bec169b.diff",
+          "bytes": 2583826,
+          "sha256": "73f205df797a76a9fddc3d42f0a2d5a9abb0d433cb393f224149a68aa0b4411d"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/terminal-hdr-resolve-completed-workspace-2026-10-28/task-1-brief.md",
+          "bytes": 1874,
+          "sha256": "01953e6f472b99115c4a66762b4bb9d4534a23bb21643c4a998c4b6ce2e1dde3"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/terminal-hdr-resolve-completed-workspace-2026-10-28/task-1-tests.log",
+          "bytes": 92,
+          "sha256": "d65b9ff0f3706ed769b0302865b3587076bee1b84e50d5a5eb9cca1278247437"
+        }
+      ]
+    }
   }
 }
