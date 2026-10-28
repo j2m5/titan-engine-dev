@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Clock, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { BoxGeometry, Clock, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { WebGLRenderLists } from 'three/src/renderers/webgl/WebGLRenderLists'
+import { WebGLProperties } from 'three/src/renderers/webgl/WebGLProperties'
 import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { Engine } from '@/core/Engine'
 import type { SceneManager } from '@/core/services/SceneManager'
@@ -13,11 +15,12 @@ import type { CameraCollision } from '@/core/services/CameraCollision'
 function makeEngine() {
   const order: string[] = []
   const domElement = { style: {}, addEventListener: vi.fn(), removeEventListener: vi.fn() }
+  const scene = new Scene()
 
   const sceneManager = {
     initialize: vi.fn(),
     update: vi.fn(),
-    dispose: vi.fn(() => order.push('scene')),
+    dispose: vi.fn(() => { scene.clear(); order.push('scene') }),
     crosshair: {}
   } as unknown as SceneManager
   const sceneObserver = { dispose: vi.fn(() => order.push('observer')) } as unknown as SceneObserver
@@ -28,6 +31,7 @@ function makeEngine() {
   } as unknown as Postprocessing
   const renderer = {
     domElement,
+    renderLists: new WebGLRenderLists(new WebGLProperties()),
     setAnimationLoop: vi.fn(() => order.push('loop')),
     setSize: vi.fn()
   } as unknown as WebGLRenderer
@@ -43,7 +47,7 @@ function makeEngine() {
     cameraController as unknown as CameraController,
     renderer,
     { domElement: { ...domElement }, render: vi.fn() } as unknown as CSS2DRenderer,
-    new Scene(),
+    scene,
     new PerspectiveCamera(),
     { update: vi.fn(), enabled: true } as unknown as AstroControls,
     new Clock(),
@@ -51,10 +55,43 @@ function makeEngine() {
     { resolve: vi.fn(), reset: vi.fn() } as unknown as CameraCollision
   )
 
-  return { engine, order, sceneManager, sceneObserver, postprocessing, domElement, cameraController }
+  return { engine, order, sceneManager, sceneObserver, postprocessing, domElement, cameraController, renderer, scene }
 }
 
 describe('Engine.dispose', () => {
+  it('releases the last rendered objects at every render depth and allows later scenarios to render', () => {
+    const { engine, renderer, scene } = makeEngine()
+
+    for (let scenario = 0; scenario < 2; scenario++) {
+      const geometry = new BoxGeometry()
+      const materials = [new MeshBasicMaterial(), new MeshBasicMaterial({ transparent: true }), new MeshPhysicalMaterial({ transmission: 1 })]
+      const meshes = materials.map(material => new Mesh(geometry, material))
+      scene.add(...meshes)
+
+      for (const depth of [0, 1]) {
+        const list = renderer.renderLists.get(scene, depth)
+        list.init()
+        for (const mesh of meshes) list.push(mesh, geometry, mesh.material, 0, 0, null)
+        list.finish()
+        expect(list.opaque[0].object).toBe(meshes[0])
+        expect(list.transparent[0].object).toBe(meshes[1])
+        expect(list.transmissive[0].object).toBe(meshes[2])
+      }
+
+      engine.dispose()
+
+      expect(scene.children).toHaveLength(0)
+      for (const depth of [0, 1]) {
+        const list = renderer.renderLists.get(scene, depth)
+        expect(list.opaque).toHaveLength(0)
+        expect(list.transparent).toHaveLength(0)
+        expect(list.transmissive).toHaveLength(0)
+      }
+      geometry.dispose()
+      materials.forEach(material => material.dispose())
+    }
+  })
+
   it('делегирует разборку своим сотрудникам', () => {
     const { engine, sceneManager, sceneObserver, postprocessing, cameraController } = makeEngine()
 

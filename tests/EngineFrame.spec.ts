@@ -55,6 +55,7 @@ function makeEngine(scene = new Scene(), manager?: SceneManager, queue?: NebulaB
   } as unknown as Postprocessing
   const renderer = {
     domElement: canvas,
+    renderLists: { dispose: vi.fn() },
     setAnimationLoop: vi.fn(),
     setSize: vi.fn(),
     setPixelRatio: vi.fn()

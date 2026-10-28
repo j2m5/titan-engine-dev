@@ -158,6 +158,9 @@ class Engine {
     this.sceneManager.dispose()
     this.postprocessing.dispose()
     this.sceneObserver.dispose()
+    // The session renderer outlives the scene. Without another frame, its
+    // render lists retain the unloaded objects and their CPU-side buffers.
+    this.renderer.renderLists.dispose()
 
     this.canvas.removeEventListener('wheel', this.boundOnWheel)
 
