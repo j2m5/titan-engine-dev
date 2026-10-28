@@ -22,6 +22,7 @@ import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
 import { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
 import { LensFrontSplitPass } from '@/core/graphic/passes/LensFrontSplitPass'
 import { LensFrontPass } from '@/core/graphic/passes/LensFrontPass'
+import { createTerminalEffectPasses } from '@/core/graphic/passes/TerminalEffectPasses'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -147,10 +148,11 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
     dithering: new DitheringEffect()
   } as const
 
-  return [
-    new EffectPass(camera, ...HDR_EFFECT_ORDER.map((key) => hdrEffects[key])),
-    new EffectPass(camera, ...LDR_EFFECT_ORDER.map((key) => ldrEffects[key]))
-  ] as const
+  return createTerminalEffectPasses(
+    camera,
+    HDR_EFFECT_ORDER.map((key) => hdrEffects[key]),
+    LDR_EFFECT_ORDER.map((key) => ldrEffects[key])
+  )
 }
 
 /** `?atmoDebug=<1|2|3|4>` — дебаг-вид эффекта атмосферы в основной сцене (0 — выключен). */
