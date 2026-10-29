@@ -18054,6 +18054,13 @@
       "data": "H4sIAAAAAAAACpVWTW/bOBC951fQl0iqBW7aS7MOmEWa7aJ7KBKk7ckwCkYaSVxTpHY4iut1/d8X1LccY4G92CI58+bNmxlKO2VSu+PfvyfWGEjojkrrqgIQvqpSmZwJJt3eJAxrQ6qEb6iZuGWHC8YSaxz1+0LupCKmysoihaNxNBjmQMLIEsStd+53E9HZ8hzoT6NISa3+gfSLKmstSVnz1J6HEU+sIakM4MSf7BaME2vOecKflUmVyR3fwt6F0YZnShNgSOKW9hXYjJEQIrDPf0FCweUl8YaQaHhFDarKwhaSazA5FQsh3kZUoN2xj4gWw+CufFZ5bWvHHOCLSoAFy9EfgWo0LPHpdEjrq40/Ow5KVAjeFUTYMom3sI/msqTgElQVWRQPjY3He9iZR7QVIO1/H86nGFMG4YDYJDUCRh1gCpky0ANOYOKJ7Q1oBywFDQSsNVlvYb/pgFuyMiP4/zwbWotF47wQYrEYw/78OeF7ebkOXqSuIYiDHCiIA9f87lCRfNZ+O7EmU3mN3RJMXUK72HBnSwi34raJs95uFkKM2OvtJorm5X0CRxabzmOZVBrSVbAcSB+7QnYi7/rpkSdjI1rp29EpQboaIbSVR3XRYaYemFwZEL5fgo/NcxDFCCYFBGy3n7pVEMW5Fv2Zl/reGoIfFEZxVbW2j9ZRhTYB55TJgyguUhRVxRNbVtYB8ko6B279fjNWYXpc1pqUk2WllckXQlzP5XlAlSsjNXMJGGCfv9zdsaSQJoc0iOZ5ZRkk9IiWrB++SX8Mew9ZeH63SDGadEk3vEWKnOQWHmqqaloIEWS1SbymwZzkI9q0TsgTU4Yh/F0rfMUPm0LDH+ivgH4kw7YacdCK3Bw25WhsP3kpB8t5fr3LaP1BKxrNcx0Hz1pRA/lcZ5k3nRGynbQto5YIn/CIewNP4yR6ZzeYNLFzzU8izuJlft+J9eZGA7GkRgRDwtRax8o4lTbpZlI7mLntUFYVpC3LvgAh51xiPvZ2b931fnomn4UQU6zBUWVh7xX1rA5FiqurmCxJvbqKS+m2brXeHAcnwv2hG8qZjlxWld6HVCgXNwSPmT/T+8M0zKHVgle1K8IuZnQzleTYh+r/X+dzLpvzZToj2/BmeFG2dmIowI1v/0I5IYQfirEwhDXcnMn6U4r/kfPg3kca8nrdLGdYqmxQ59A98KYmy6UnOsD3deNFistlLyRvytaK3BR0sG8KuvIx1tebuH1rt8tfN8foeJKib+7XOV6MjXDSgwiu1tR9oZy5sp/AWf0C/PSennZk1yDDR0Fnw9v9+fXTaPgLtqgssbUhVipXSkqKVbCcQc2CLLojeAHch5m4zbyAQoieEk+kSVUqCX67Wr09fXV9M/CjgoQgZWNybMYjGON1oh44561A8QC+ehUu7lCa1Nyq5RnDD0J5b7XFrxJzoA97Ard6++766s37d1dvruORxhdtya38Dd6OhP8q4k5buve0huHqG3V6OYfRzXj/jgvfBWFX9va1fLz4F+2RH0vOCgAA"
     },
     {
+      "path": "benchmark-results/heavy-scenes/complete-w26-frame-tail-2026-10-29.mjs",
+      "bytes": 5084,
+      "sha256": "96f4b54fc879b27796b64434b7f9c7af5277b5de525da5c6078d1b849dfc2ff0",
+      "encoding": "gzip/base64",
+      "data": "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"
+    },
+    {
       "path": "benchmark-results/heavy-scenes/gpu-draws-2026-10-27.browser.js",
       "bytes": 22539,
       "sha256": "bd9bb1f7a83ff352827d33a62818e5f482dea3d5bdc12f941722d59b416bcaec",
@@ -18403,13 +18410,97 @@
     }
   },
   "review": {
-    "status": "pending",
+    "status": "complete",
+    "model": "gpt-6-astra",
+    "reasoningEffort": "medium",
+    "freshContext": true,
+    "reviewers": 1,
+    "base": "35d28b34b4fa4200863bcb02354192e6b6ab8fe2",
+    "head": "79d6e808d5e511f4e202c4c775c999aed0de4ba5",
+    "verdict": "Ready to merge: Yes",
+    "findings": {
+      "critical": 0,
+      "important": 0,
+      "minor": 0
+    },
+    "result": {
+      "path": "benchmark-results/heavy-scenes/w26-frame-tail-final-review-2026-10-29.md",
+      "bytes": 5407,
+      "sha256": "9b80696a7b4afb0d78cd868da93cba07fc00706be7c6401e7aba51582dd7a8fe",
+      "encoding": "gzip/base64",
+      "data": "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"
+    },
     "executionRulings": [
       "Ruling: continue the authorized inline investigation in the current branch with the already frozen product build — the user accepted the next W26 tail priority and the preceding stage verified this exact source tree — cost if wrong: diagnostic time; no product change without an isolated cause and separate acceptance tests.",
       "Ruling: use600frame windows with the old helper's complete-turn/two-unit trajectory — longer windows improve tail sampling while preserving the matched spatial path across new windows — cost if wrong: angular motion is five times slower than the old120frame series,so old/new percentile differences are not a speedup comparison.",
       "Ruling: repair the external measurement scheduler before drawing application-tail conclusions — actual Three reproduction proves the old stop/restart sequence leaves an orphan RAF chain — cost if wrong: another set of native runs; previous cadence/tail claims require qualification and no speculative production fix is justified."
     ],
-    "rulings": [],
-    "deferredMinors": []
+    "rulings": [
+      "Final: Ruling: leave the remaining isolated GPU spikes unresolved — counters and repeat windows do not identify shader,driver,OS or competing-process causality,so a production patch would be speculative — cost if wrong: occasional delays remain while their cause needs a separate controlled investigation.",
+      "Final: Ruling: make no displayed-FPS or presentation-latency claim — these are RAF entry intervals and submitted GPU elapsed queries — cost if wrong: observed benchmark improvements may not match a user's displayed-frame experience.",
+      "Final: Ruling: treat plain/probe comparisons as coarse observer controls — separate windows differ in time and instrumentation — cost if wrong: unmeasured probe overhead may influence some tails.",
+      "Final: Ruling: do not assert identical workload across windows — matched camera paths and counters coexist with simulation,uniform and streaming changes — cost if wrong: part of a measured difference may be unrelated to the tested output path.",
+      "Final: Ruling: qualify historical timing magnitudes and preserve original reports — the old scheduler defect is proven,and only W26 atmosphere has fresh corrected comparisons here — cost if wrong: other old performance estimates require repetition before being used as normal-cadence predictions.",
+      "Final: Ruling: limit corrected-run claims to W26 belt on the recorded GPU/resolution/DPR — no new Alkaid,active-atmosphere,other-device or high-resolution matrix ran — cost if wrong: behavior or performance elsewhere may differ.",
+      "Final: Ruling: short cleanup is not long-session or context-loss proof — observed menu resources and queued RAF requests return to baseline — cost if wrong: slow leaks or recovery failures may remain undetected.",
+      "Final: Ruling: zero observed LongTasks/uploads is not absence of every GC/resource stall — the recorded APIs only cover their declared mechanisms — cost if wrong: an unobserved mechanism could explain a remaining pause.",
+      "Final: Ruling: keep external helpers scoped to versioned recorded experiments — successful routes and strict rejection gates were verified,and runners close the browser on failure; no production API was added — cost if wrong: unsupported inputs or a new failure path may require another diagnostic revision or cleanup rather than yield usable data.",
+      "Final: Ruling: accept independent source/raw verification without a second native matrix by the reviewer — the author ran fresh native controls and corrected matrices with provenance,and the reviewer reproduced the deterministic cause — cost if wrong: hardware measurements lack an independent repeated run.",
+      "Final: Ruling: retain previous pixel/ownership/full-suite evidence without rerunning unchanged application inputs — all1217build inputs match the frozen tested tree and this stage only changes diagnostic evidence — cost if wrong: pre-existing defects outside the scheduling investigation remain beyond this check.",
+      "Final: Ruling: document reproduction prerequisites instead of bundling an execution environment — archive bytes/hashes and sources are preserved but frozen bundle,dependencies and cloud assets remain required — cost if wrong: a fresh machine needs setup or artifact transfer before repeating GPU measurements."
+    ],
+    "deferredMinors": [],
+    "independentChecks": {
+      "archiveHashes": 51,
+      "acceptedFrames": 7116,
+      "acceptedQueries": 25932,
+      "supersededFrames": 4236,
+      "nativeRedFrames": 12,
+      "installedModuleRedExit": 1,
+      "installedModuleGreenExit": 0,
+      "nativeMatrixRerun": false
+    },
+    "completion": "No application,helper or measurement changes after review. Only audit/review metadata follows. Owned workspace preserved with hashes before removal;local commits only,no push.",
+    "completedWorkspace": {
+      "directory": "benchmark-results/heavy-scenes/w26-frame-tail-completed-workspace-2026-10-29",
+      "files": [
+        {
+          "path": "benchmark-results/heavy-scenes/w26-frame-tail-completed-workspace-2026-10-29/plan-path",
+          "originalPath": ".superpowers/sdd/2026-10-29-w26-frame-tails/plan-path",
+          "bytes": 53,
+          "sha256": "79652a4f002e6519c31ff1c6acaaa8818d00790f541b1b4ae1a3c937eef4f153"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/w26-frame-tail-completed-workspace-2026-10-29/progress.md",
+          "originalPath": ".superpowers/sdd/2026-10-29-w26-frame-tails/progress.md",
+          "bytes": 10203,
+          "sha256": "f46461aa47d2a41734ec5d90f1a365cd0ec796c6f2f965e2798fc8ff7fa7c578"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/w26-frame-tail-completed-workspace-2026-10-29/review-35d28b34..79d6e808.diff",
+          "originalPath": ".superpowers/sdd/2026-10-29-w26-frame-tails/review-35d28b34..79d6e808.diff",
+          "bytes": 3475965,
+          "sha256": "388a94f95ac9357deea777545a427b8b84ff8d0d3b566748102cc2dd15ef2bd7"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/w26-frame-tail-completed-workspace-2026-10-29/task-1-brief.md",
+          "originalPath": ".superpowers/sdd/2026-10-29-w26-frame-tails/task-1-brief.md",
+          "bytes": 2871,
+          "sha256": "bac71e342927d4fe8918019a7c16c59c8d7663e8bb893aed3ea9e11038c3c308"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/w26-frame-tail-completed-workspace-2026-10-29/task-1-tests.log",
+          "originalPath": ".superpowers/sdd/2026-10-29-w26-frame-tails/task-1-tests.log",
+          "bytes": 124,
+          "sha256": "d033799b7a7672e940f14a9349fe0e606d3ca9cb8dbb54ed899b73d5a96d64f1"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/w26-frame-tail-completed-workspace-2026-10-29/plan.md",
+          "originalPath": "docs/superpowers/plans/2026-10-29-w26-frame-tails.md",
+          "bytes": 9225,
+          "sha256": "10373e4e1f5db4d58a23ee678eaeaf0f2a9af5783b7789672c748d1fac6d02d2"
+        }
+      ]
+    }
   }
 }
