@@ -4555,6 +4555,13 @@
       "data": "H4sIAAAAAAAACrVUTY+cOBC996/wYdU2CrgzPUoU9cq9ymGymdVoE+VDOYxmJWMKcBps1jZMs0n/98gYOjCT7Gn3Ati8qvfqucqybrRx6IsBnr2SFbzvlTih3OgaYaUz2OUWr+QIEga4g9fclguIMH3j9BnGrQXj5oCws7HOSOHwSmhlHbIlZynbf89JsC359tlzHNG2ybgDkkY0kwVYR3AJRxyt4Dgw5K0STmqFOjAy769V0zpLSm5LsNGXFUKBIeXi0DaW/fH+zZ+04cYCmZdJcApKlDU3h8SAbStnNyXwrk+sAAV2w12tbVOCgSTlFiqpIJEDV7J9un2eXDxNti/oZ6sVjnHr8hc4ilYI5dqQIOC24a6Mva47naM36WcQjoJyRsJZ7qAXIZkTW/KlPh8dRYwxD42EVk6qFgb4vEA21klzqTJyZPsj9ZGMMf9ar480+DolGhKEI6H6QEJ0jAcXkSi5KiBD99KVunUo7R0kcOTCswUPRtodwk8GhXNBvQPLFkUEMA2v6NeRF/5ueUUGOK1AFa6MJ6Dfe4DzzoT9wcx4oj2tTj9piU/cKKkKSwz434umCFX8F11hwOqqg6S7nDVEUvPmcVOM9WQAzdVQUxBG70eh8XJ91YFylta8IcD2QGuwlhfwoL/Ao5DO0Y+Cx8aaH3So/MxJpRJVm4ElQ6IFyTmw5k6UI6ApuYVJaWN01gr32+YvcnH59WIb7Ugl3ddK1mmUNBVX4HYjJrnnpm6bXza7fwOfZ2xCP+zUkVjoupEVmBtdWGp1DUSwPf7w+t3VFf0E6e83b40uDK93aPxA1yrX6EYXvmUFrXRBnZE18aP1uPLTwuKRLJu5POf/uck/VDmQM8amrH65Xg+d6C9HVci8J8LPawbGen0P/02BEySKEf6oDAhdKPmPH9xwuCgAUBMswFNlMifL8xsrCNVqIwupePX/DUfeVtXj6Zg73km4n7ntl5PN5xmGXBtgk9qACddfx/YdlRljzG9Sma3X3fB/2vGPaMw2O7YhY4zfBlOCiFpa6608X3wyA+Wk6/GU4LvqA/Re9C3mwmlzneEYpzrrX55XhmeytfguWtxsnuf2AP1dHBSE7wP0geE0XnLfANW5+cOmBwAA"
     },
     {
+      "path": "benchmark-results/heavy-scenes/complete-atmosphere-resolve-2026-10-28.mjs",
+      "bytes": 6078,
+      "sha256": "a02a055aee9b75878d91bd2bde6d3cd63691ccccd03826c7d70dfc8082d5f0c1",
+      "encoding": "gzip/base64",
+      "data": "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"
+    },
+    {
       "path": "benchmark-results/heavy-scenes/freeze-atmosphere-product-2026-10-28.mjs",
       "bytes": 2053,
       "sha256": "b83059a99b4256b206d7518c82842649165ccd04c7be77a1d57388a185a361ca",
@@ -4906,7 +4913,26 @@
     "Run complete Vitest,typecheck,ESLint,production build and native browser suite. SwiftShader focus:atmosphere output,terminal HDR output,stellar bloom,black hole depth(4samples)."
   ],
   "review": {
-    "status": "pending",
+    "status": "complete",
+    "model": "gpt-6-astra",
+    "reasoningEffort": "medium",
+    "freshContext": true,
+    "reviewers": 1,
+    "base": "772a9e06f9025e8b294113fc65cfec248b3f8b3f",
+    "head": "6b2c93643456245e96ed29ae169b62e37b56872b",
+    "verdict": "Ready to merge: Yes",
+    "findings": {
+      "critical": 0,
+      "important": 0,
+      "minor": 0
+    },
+    "result": {
+      "path": "benchmark-results/heavy-scenes/atmosphere-final-review-2026-10-28.md",
+      "bytes": 5322,
+      "sha256": "37d4c900f45863a2586fea2d14b59914cdfd89b0914b2d9ecc442cc2c8ae3b18",
+      "encoding": "gzip/base64",
+      "data": "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"
+    },
     "executionRulings": [
       "Ruling: continue in the existing authorized inline workflow and branch without another approval menu — user selected the next optimization at our judgment and prior quality constraints remain — cost if wrong: bounded diagnostic time; product still requires measured exact parity and a concrete implementation extension.",
       "Ruling: investigate atmosphere output with a separate cloned color-only target — it is the last remaining fullscreen MSAA destination before the already optimizedHDR; allocated-target sample/depth mutation and generic resolve suppression can invalidate depth or alter geometry — cost if wrong: candidate costs8bytes/pixel additional storage and may be rejected.",
@@ -4915,7 +4941,71 @@
       "Ruling: require zero in-flight cloud requests and two seconds of network quiet before measurements,then another16frames and recheck — a fixed96-frame warmup left W26 terrain textures loading — cost if wrong: extra diagnostic time; without this gate image comparisons could use incomplete assets.",
       "Ruling: accept one extra atmosphere RGBA16F target and reuse the terminal output lifecycle in a fixed three-pass chain — exact14case image controls and12ordered pass pairs support0.86..1.39ms savings — cost if wrong:7.03MiB720p/63.28MiB4K additional format storage; no claim that all tail percentiles improve or that whole-frame3.30ms is attributable solely to this pass."
     ],
-    "rulings": [],
-    "deferredMinors": []
+    "rulings": [
+      "Final: Ruling: whole-application MSAA 0 stays an open baseline defect — the app currently configures 8 samples and the original zero-sample fallback is unchanged; exact real-scene evidence covers 8/4 — cost if wrong: forcing the unsupported zero mode retains its known GL failure.",
+      "Final: Ruling: do not generalize AMD/ANGLE and SwiftShader results to other hardware — native exact pixels and timing support this environment; software coverage adds functionality checks only — cost if wrong: another GPU or driver could expose an unmeasured regression.",
+      "Final: Ruling: full 4K/DPR 2 pixel parity remains unproven — physical-size propagation, unit 4K sizing and native small resize cycles are verified, but no full-resolution pixel matrix was run — cost if wrong: a resolution-specific artifact could remain undetected.",
+      "Final: Ruling: accept the stated extra color storage without claiming measured VRAM — the additional target is required for this safe depth-independent path and useful measured savings; the format calculation is exact — cost if wrong: 63.28 MiB at 4K plus driver overhead may cause pressure on limited devices.",
+      "Final: Ruling: context-loss recovery remains outside the demonstrated lifecycle — ordinary disposal/reinitialization is verified and the change preserves the existing renderer recovery path, but no loss/restore experiment was run — cost if wrong: a recovery defect may remain undetected.",
+      "Final: Ruling: short scene unload checks establish short cleanup only — zero scene textures/programs and empty bake queues were observed after both heavy scenes — cost if wrong: a slow leak or long-session instability may remain undetected.",
+      "Final: Ruling: claim the measured atmosphere-pass benefit, not universal frame/FPS improvement — all ordered pass pairs improve, while W26 moving whole-frame p95 worsens in the baseline window — cost if wrong: users may see unchanged or worse rare long frames despite the median pass saving.",
+      "Final: Ruling: accept product pass-level confirmation without repeating whole-frame timing — it confirms the actual implemented route and exact one-resolve reduction; earlier whole-frame results remain explicitly tied to their own build/window — cost if wrong: whole-frame gain of the final product build remains unmeasured.",
+      "Final: Ruling: retain source-matched baseline ANGLE warnings as a separate investigation — the same planet shader bytes warn before the experiment and candidate/new warnings still fail the gate — cost if wrong: an existing undefined-derivative or visual problem may remain unresolved.",
+      "Final: Ruling: retain the documented adjacent fixed chain and stable flags during a render — actual buildPasses preserves this order; arbitrary graph edits are not part of the existing user path — cost if wrong: future insertion/reordering or mid-render flag changes could route stale color and must add appropriate coverage.",
+      "Final: Ruling: do not extend pass reinitialization results to repeated whole-service initialize without dispose — source inspection confirms Engine.initialize has an initialized guard and Engine.dispose disposes postprocessing before clearing that guard — cost if wrong: a new direct caller that bypasses this lifecycle could retain the old composer; current optimization does not repair that pre-existing API boundary.",
+      "Final: Ruling: preserve full image binaries locally and archive their hashes — all local pixels were independently rechecked, while embedding every binary would greatly enlarge the repository — cost if wrong: a different checkout without these files needs a transfer or rerun for full pixel verification."
+    ],
+    "deferredMinors": [],
+    "independentChecks": {
+      "archiveHashes": 96,
+      "imageCases": 28,
+      "timedFrames": 6720,
+      "queries": 58560,
+      "rawPixelRecheck": true,
+      "diffCheck": "passed",
+      "fullSuitesRerun": false
+    },
+    "completion": "No production, test or measurement edits after review. Final commit contains only audit and review metadata. Owned workspace preserved with hashes before removal; no push.",
+    "completedWorkspace": {
+      "directory": "benchmark-results/heavy-scenes/atmosphere-resolve-completed-workspace-2026-10-28",
+      "files": [
+        {
+          "path": "benchmark-results/heavy-scenes/atmosphere-resolve-completed-workspace-2026-10-28/plan-path",
+          "originalPath": ".superpowers/sdd/2026-10-28-atmosphere-msaa-resolve/plan-path",
+          "bytes": 61,
+          "sha256": "9e616a01e7bb718b54fb1e732194531b298e6823d569867b635c6137941087ba"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/atmosphere-resolve-completed-workspace-2026-10-28/progress.md",
+          "originalPath": ".superpowers/sdd/2026-10-28-atmosphere-msaa-resolve/progress.md",
+          "bytes": 13863,
+          "sha256": "a52e8e26c2583c6f507ea047fcf9963d9751ea811cb649a9d502d71eeb2b952a"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/atmosphere-resolve-completed-workspace-2026-10-28/review-772a9e06..6b2c9364.diff",
+          "originalPath": ".superpowers/sdd/2026-10-28-atmosphere-msaa-resolve/review-772a9e06..6b2c9364.diff",
+          "bytes": 3303780,
+          "sha256": "5c720aefc6f9c03af9a544de7ab8cb275eb863ba2d772eb68f8d0c9e7fc3db5f"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/atmosphere-resolve-completed-workspace-2026-10-28/task-1-brief.md",
+          "originalPath": ".superpowers/sdd/2026-10-28-atmosphere-msaa-resolve/task-1-brief.md",
+          "bytes": 2089,
+          "sha256": "aebebb44c9e81eb54b7ba5015c4359c748a7967565b600b24e0d215647a3c949"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/atmosphere-resolve-completed-workspace-2026-10-28/task-1-tests.log",
+          "originalPath": ".superpowers/sdd/2026-10-28-atmosphere-msaa-resolve/task-1-tests.log",
+          "bytes": 108,
+          "sha256": "add31024659cb18a19c9769a9bbb4d16d754df10b0ced60a981b5d3dbafa5e08"
+        },
+        {
+          "path": "benchmark-results/heavy-scenes/atmosphere-resolve-completed-workspace-2026-10-28/plan.md",
+          "originalPath": "docs/superpowers/plans/2026-10-28-atmosphere-msaa-resolve.md",
+          "bytes": 9621,
+          "sha256": "370914d761ca009f10781b35c3208efb09a49738eb17c8d6b6488f9ade06a8c0"
+        }
+      ]
+    }
   }
 }
