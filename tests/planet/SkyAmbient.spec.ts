@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { irradianceUv } from '@/core/materials/shaders/lib/chunks/sunTransmittanceMath'
-import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
+import {
+  sunTransmittanceFunctions,
+  sunTransmittanceUniforms
+} from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
 import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
@@ -43,10 +46,14 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
   ])('%s: шаблон смешивает серый пол с небом под USE_SKY_AMBIENT весом uSkyAmbientStrength', (_path, template) => {
     const frag = template.fragmentShader
     // юниформный гейт: при 0 два тапа LUT не платятся
-    expect(frag).toContain('if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);')
+    expect(frag).toContain(
+      'if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);'
+    )
     const idx = frag.indexOf('skyTerm = mix(skyTerm, skyAmbientTint')
     // гейт парный: uSkyAmbientStrength и skyAmbientTint живут в чанке под USE_SUN_TINT
-    expect(frag.lastIndexOf('#if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)', idx)).toBeGreaterThan(frag.lastIndexOf('vec3 skyTerm = vec3(clamp(', idx))
+    expect(frag.lastIndexOf('#if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)', idx)).toBeGreaterThan(
+      frag.lastIndexOf('vec3 skyTerm = vec3(clamp(', idx)
+    )
   })
 
   it.each([
@@ -54,14 +61,20 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
     ['рельеф', TerrainShaderTemplate]
   ])('%s: тинт солнца только на прямом свете и сером поле, не на небе и не на всём day', (_path, template) => {
     const frag = template.fragmentShader
-    expect(frag).toContain('vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;')
+    expect(frag).toContain(
+      'vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;'
+    )
     expect(frag).toContain('vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;')
-    expect(frag).toContain('vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;')
+    expect(frag).toContain(
+      'vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;'
+    )
     expect(frag).toContain('vec3 litDirect = vec3(directGain) * sunTintMix;')
-    expect(frag).toContain('dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);')
-    expect(frag).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
+    expect(frag).toContain(
+      'dayColor = surfaceAlbedo * mix(sunTintMix * eclipse * sceneCloudSunVisibility, lit, uTerrainLambert);'
+    )
+    expect(frag).toContain('vec3 day = dayColor * landGate;')
     // day целиком не тонируется: после сборки day тинта солнца нет
-    const day = frag.indexOf('vec3 day = cloudRadiance + dayColor')
+    const day = frag.indexOf('vec3 day = dayColor')
     expect(day).toBeGreaterThan(-1)
     expect(frag.slice(day)).not.toContain('sunTint(muS)')
   })

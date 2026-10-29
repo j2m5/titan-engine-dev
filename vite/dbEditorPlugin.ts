@@ -145,6 +145,8 @@ export function dbEditorPlugin(options: PluginOptions = {}): Plugin {
         }
 
         let body = ''
+        // Decode across chunk boundaries: a UTF-8 character may span multiple buffers.
+        req.setEncoding('utf8')
         req.on('data', (chunk) => {
           body += chunk
           // примитивная защита от гигантских тел

@@ -12,6 +12,7 @@ import {
 import { NEBULA_SHAPE_IDS } from '@/core/renderables/Nebula/NebulaParams'
 import { ringMoonletProblems } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
+import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 
 /**
  * Валидатор целостности данных приложения.
@@ -559,7 +560,11 @@ function checkNebulaShapes(
  * источник, что у резолвера кольца): радиус орбиты внутри кольца,
  * положительные размер и щель, известная модель формы, не больше 4 лунок.
  */
-function checkRingMoonlets(rows: IRenderingObject[], aliasByActor: Map<number, string>, issues: ValidationIssue[]): void {
+function checkRingMoonlets(
+  rows: IRenderingObject[],
+  aliasByActor: Map<number, string>,
+  issues: ValidationIssue[]
+): void {
   for (const row of rows) {
     if (aliasByActor.get(row.actorId) !== 'ring') continue
     for (const problem of ringMoonletProblems(asRecord(row.data) ?? {})) {
@@ -673,6 +678,27 @@ function checkRequiredNumbers(db: DatabaseSnapshot, issues: ValidationIssue[]): 
         })
       }
     }
+  }
+}
+
+/** JSON.parse допускает 1e400 → Infinity, а генератор записал бы его как null. */
+function checkRenderingNumbers(rows: IRenderingObject[], issues: ValidationIssue[]): void {
+  for (const row of rows) {
+    const visit = (value: unknown, path: string): void => {
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        issues.push({
+          level: 'error',
+          collection: 'renderingObjects',
+          entity: row.id,
+          message: `renderingObjects#${row.id} ${path} must be a finite number, got ${String(value)}`
+        })
+      } else if (Array.isArray(value)) {
+        value.forEach((entry, index) => visit(entry, `${path}[${index}]`))
+      } else if (typeof value === 'object' && value !== null) {
+        for (const [key, entry] of Object.entries(value)) visit(entry, `${path}.${key}`)
+      }
+    }
+    visit(row.data, 'data')
   }
 }
 
@@ -854,7 +880,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // алиас категории по актору — для правил позиционирования и проверок формы
   const aliasByActor = new Map<number, string>()
   for (const actor of db.actors) {
-    const alias = typeof actor.categoryId === 'number' ? categoryAliasById.get(actor.categoryId) : actor.categoryId
+    const alias = categoryAliasById.get(actor.categoryId)
     if (alias !== undefined) aliasByActor.set(actor.id, alias)
   }
 
@@ -871,7 +897,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 2. Внешние ключи акторов ---
   for (const actor of db.actors) {
-    // categoryId может быть числом или строковым алиасом (IActor допускает оба)
+    // Проверяем и runtime-вход: старый JSON может содержать alias вместо FK.
     if (typeof actor.categoryId === 'number') {
       checkForeignKey(
         actor.categoryId,
@@ -879,12 +905,12 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
         { collection: 'actors', entity: actor.id, field: 'categoryId', nullable: false },
         issues
       )
-    } else if (!db.categories.some((c) => c.alias === actor.categoryId)) {
+    } else {
       issues.push({
         level: 'error',
         collection: 'actors',
         entity: actor.id,
-        message: `actors#${actor.id}.categoryId="${actor.categoryId}" is not a known category alias`
+        message: `actors#${actor.id}.categoryId must be a numeric category ID`
       })
     }
 
@@ -1055,6 +1081,26 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // --- 6h. Форма конфига пояса астероидов ---
   checkAsteroidBeltShapes(renderingObjects, aliasByActor, issues)
   checkRingMoonlets(renderingObjects, aliasByActor, issues)
+
+  checkRenderingNumbers(renderingObjects, issues)
+  for (const row of renderingObjects) {
+    const ids = new Set(
+      db.actorResource
+        .filter((link) => link.actorId === row.actorId && resourceIds.has(link.resourceId))
+        .map((link) => link.resourceId)
+    )
+    const result = resolveCloudConfig(row.data?.clouds, ids)
+    if (result.state !== 'invalid') continue
+    for (const issue of result.issues) {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.actorId,
+        message: `Actor ${row.actorId} clouds.${issue.path}: ${issue.message}`
+      })
+    }
+  }
+
 
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)

@@ -9,10 +9,18 @@ import { SpaceScale } from '@/core/constants'
 import type { Actor } from '@/core/models/Actor'
 
 // Минимальный узел тела: модель с радиусом/именем/детьми и поверхность с материалом-шпионом
-function body(id: number, radiusKm: number, pos: [number, number, number], opts: { atmosphere?: boolean; star?: boolean } = {}) {
+function body(
+  id: number,
+  radiusKm: number,
+  pos: [number, number, number],
+  opts: { atmosphere?: boolean; star?: boolean } = {}
+) {
   const calls: EclipseUniformData[] = []
   const surface = new Mesh()
-  ;(surface as unknown as { material: unknown }).material = { setEclipse: (d: EclipseUniformData) => calls.push(structuredClone({ count: d.count, star: d.star.toArray(), occ0: d.occluders[0].toArray() }) as never) }
+  ;(surface as unknown as { material: unknown }).material = {
+    setEclipse: (d: EclipseUniformData) =>
+      calls.push(structuredClone({ count: d.count, star: d.star.toArray(), occ0: d.occluders[0].toArray() }) as never)
+  }
   const model = {
     getAttribute: (k: string, d?: unknown) => (k === 'id' ? id : k === 'name' ? `B${id}` : d),
     physicalObject: { getAttribute: (k: string) => (k === 'radius' ? radiusKm : undefined) },
@@ -88,7 +96,16 @@ describe('EclipseSystem', () => {
   it('атмосфера тела получает данные в км, мировые оси', () => {
     const registry = new AtmosphereRegistry()
     const atmObject = new Object3D()
-    registry.register({ actorId: 1007, bodyActorId: 7, name: 'A', object: atmObject, config: {} as never, lut: {} as never })
+    registry.register({
+      actorId: 1007,
+      bodyActorId: 7,
+      name: 'A',
+      object: atmObject,
+      generation: 0,
+      ready: true,
+      config: {} as never,
+      lut: {} as never
+    })
     const sys = new EclipseSystem(registry, () => 696000)
     const earth = body(7, 6371, [75000, 0, 0])
     const moon = body(19, 1737, [74800, 0, 0])

@@ -18,7 +18,6 @@ import { GiantStarShaderTemplate } from '@/core/renderables/GiantStar/GiantStarS
 import { GiantStarShellShaderTemplate } from '@/core/renderables/GiantStar/GiantStarShellShaderTemplate'
 import { GiantStarImpostorShaderTemplate } from '@/core/renderables/GiantStar/GiantStarImpostorShaderTemplate'
 import { GIANT_STAR_IMPOSTOR_PIXELS, frameHeightAt } from '@/core/helpers/apparentSize'
-import { UpdateContext } from '@/core/UpdateContext'
 import { withoutComments } from '../helpers/glsl'
 import { stubGiantActor } from './stubGiantActor'
 
@@ -148,7 +147,7 @@ describe('импостор', () => {
 
     camera.position.set(0, 0, 1e9)
     camera.updateMatrixWorld()
-    impostor.updateObject({ camera, elapsed: 0 } as unknown as UpdateContext)
+    impostor.updateView(camera)
 
     expect(impostor.material.uniforms.uQuadScale.value).toBeCloseTo(1.4, 12)
     expect(impostor.scale.x).toBeCloseTo(((GIANT_STAR_IMPOSTOR_PIXELS * 1.4) / 1080) * frameHeightAt(1e9, 50), 3)

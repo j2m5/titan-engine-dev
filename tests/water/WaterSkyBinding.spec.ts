@@ -8,7 +8,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 
 function atmosphere(): AtmosphereEntry {
   return {
-    actorId: 47, name: 'EarthAtmosphere', object: new Object3D(),
+    actorId: 47, generation: 0, ready: true, name: 'EarthAtmosphere', object: new Object3D(),
     config: {
       solarIrradiance: [1.474, 1.8504, 1.91198], sunAngularRadius: 0.004,
       bottomRadius: 6351.8, topRadius: 6420,
@@ -43,10 +43,15 @@ describe('water sky reflection lifecycle', () => {
     const version = material.version
     material.syncSunTint()
     expect(material.version).toBe(version)
-    material.syncClouds(new Texture(), 1)
+    const normalPath = Actor.find(7)!.resources.where('resourceType', 'waterNormal').first()!.getAttribute('path')
+    const normal = new Texture()
+    normal.name = normalPath!
+    resourceStorage.addTexture(normal)
+    material.updateMaterial()
     expect(material.defines.USE_WATER_SKY).toBe('1')
     expect(material.defines.USE_SUN_TINT).toBe('1')
-    expect(material.defines.USE_WATER_CLOUD).toBe('1')
+    expect(material.defines.USE_WATER_WAVES).toBe('1')
+    expect(material.defines.SCENE_CLOUD_RECEIVER).toBe(1)
     expect(material.defines.USE_WATER_REFLECTION).toBeUndefined()
     material.dispose()
   })

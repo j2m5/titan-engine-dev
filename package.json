@@ -6,6 +6,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:clouds:gpu": "node scripts/check-cloud-lab.mjs",
+    "test:clouds:earth:gpu": "node scripts/check-earth-cloud-lab.mjs",
+    "test:clouds:scene:gpu": "node scripts/check-scene-clouds.mjs",
+    "benchmark:clouds": "node scripts/benchmark-scene-clouds.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -20,6 +24,7 @@
     "build:enhance-heightmap": "vite-node scripts/enhance-heightmap.ts --",
     "build:sculpt-heightmap": "vite-node scripts/sculpt-heightmap.ts --",
     "build:ice-archetype": "vite-node scripts/build-ice-archetype.ts --",
+    "build:titan-clouds": "vite-node scripts/build-titan-clouds.ts",
     "cloud:manifest": "vite-node scripts/cloud-manifest.ts --",
     "cloud:sync": "vite-node scripts/cloud-sync.ts --",
     "build:archetype-set": "vite-node scripts/build-archetype-set.ts --",
@@ -39,6 +44,9 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "@takram/three-atmosphere": "0.19.1",
+    "@takram/three-clouds": "0.7.6",
+    "@takram/three-geospatial": "0.9.1",
     "@three.ez/instanced-mesh": "^0.3.13",
     "animejs": "^3.2.2",
     "dayjs": "^1.11.13",
@@ -73,6 +81,6 @@
     "typescript-eslint": "^8.24.1",
     "vite": "7.3.7",
     "vite-node": "^3.2.4",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   }
 }

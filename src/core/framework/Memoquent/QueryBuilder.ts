@@ -272,13 +272,13 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     currentPage: number
     lastPage: number
   } {
-    const total = this.count()
-    const lastPage = Math.ceil(total / perPage)
+    // Счётчик и страница читают один снимок, сохраняя условия и границы запроса.
+    const collection = this.get()
+    const total = collection.count()
+    const lastPage = Math.max(1, Math.ceil(total / perPage))
     const currentPage = Math.min(Math.max(1, page), lastPage)
 
-    const data = this.offset((currentPage - 1) * perPage)
-      .limit(perPage)
-      .get()
+    const data = collection.skip((currentPage - 1) * perPage).take(perPage)
 
     return {
       data,
@@ -290,13 +290,13 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
   }
 
   public first(): TModel | null {
-    const collection: ModelCollection<TModel> = this.limit(1).get()
+    const collection: ModelCollection<TModel> = this.get()
 
     return collection.first() ?? null
   }
 
   public exists(): boolean {
-    return this.limit(1).get().isNotEmpty()
+    return this.get().isNotEmpty()
   }
 
   public count(): number {

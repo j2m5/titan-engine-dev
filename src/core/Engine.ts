@@ -15,11 +15,13 @@ import Stats from 'three/examples/jsm/libs/stats.module'
 import { clampPixelRatio } from '@/core/graphic/renderingFactories'
 import { resolveCrosshairAnchor } from '@/core/helpers/resolveCrosshairAnchor'
 import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
+import { bindResourceStorageContext } from '@/core/services/ResourceStorage'
 import type { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 
 class Engine {
   private readonly canvas: HTMLCanvasElement
   private readonly overlay: HTMLElement
+  private readonly releaseResourceContext: () => void
 
   private initialized: boolean = false
   private running: boolean = false
@@ -63,6 +65,7 @@ class Engine {
     private readonly nebulaBakes?: Pick<NebulaBakeQueue, 'pumpFrame'>
   ) {
     this.canvas = this.renderer.domElement
+    this.releaseResourceContext = bindResourceStorageContext(this.renderer)
     this.overlay = this.labelRenderer.domElement
 
     if (this.stats) {
@@ -169,6 +172,11 @@ class Engine {
     this.stop()
   }
 
+  /** Final renderer/test owner only. Scenario dispose intentionally retains this application binding. */
+  public releaseRendererContextBinding(): void {
+    this.releaseResourceContext()
+  }
+
   private onStart(): void {
     this.canvas.addEventListener('wheel', this.boundOnWheel)
   }
@@ -240,6 +248,8 @@ class Engine {
     this.astroControls.setSurface(this.cameraCollision.nearestSurface())
     // Импосторы и свечение должны видеть камеру после follow и коллизий.
     this.sceneManager.updateView(this.renderCamera)
+    this.scene.updateMatrixWorld(true)
+    this.renderCamera.updateMatrixWorld(true)
     this.labelRenderer.render(this.scene, this.renderCamera)
     this.sceneManager.updateMarkers()
     this.asteroidImpostors?.pumpFrame()

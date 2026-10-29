@@ -1,9 +1,10 @@
 import { BlendFunction, Effect, EffectAttribute, EffectPass } from 'postprocessing'
-import { Frustum, Matrix4, PerspectiveCamera, Sphere, Uniform, Vector3, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { DataTexture, PerspectiveCamera, Uniform, Vector3, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three'
 import { SpaceScale } from '@/core/constants'
 import { MAX_OCCLUDERS } from '@/core/eclipse/eclipseMath'
 import { AtmosphereRegistry, AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
-import { orderSlots } from '@/core/graphic/effects/atmosphere/atmosphereDepthMath'
+import { captureAtmosphereFrame, type AtmosphereFrameSnapshot } from './atmosphereFrame'
+import type { SceneCloudOutput } from '@/core/clouds/takram/SceneCloudBackend'
 import {
   ATMOSPHERE_SLOTS,
   buildAtmosphereEffectFragment,
@@ -11,9 +12,6 @@ import {
   slotUniformName
 } from '@/core/graphic/effects/atmosphere/atmosphereSlotShader'
 import type { AtmosphereConfig, DensityProfileLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-
-/** Оболочка мельче этого углового размера (top/dist, рад) в кадре не видна. */
-const MIN_ANGULAR = 1e-5
 
 /** Параметры слота типа vec3 — юниформы держат один Vector3 на всё время жизни. */
 const SLOT_VEC3_PARAMS: readonly string[] = [
@@ -39,7 +37,6 @@ const SLOT_LAYER_PARAMS: readonly string[] = [
 interface SlotItem {
   entry: AtmosphereEntry
   centerKm: Vector3
-  topRadiusKm: number
   sunDir: Vector3
 }
 
@@ -59,10 +56,11 @@ export class AtmosphereEffect extends Effect {
   private filled = 0
   private warnedDropped = false
 
-  private readonly cameraWorld = new Vector3()
-  private readonly viewProjection = new Matrix4()
-  private readonly frustum = new Frustum()
-  private readonly shell = new Sphere()
+  private frame: AtmosphereFrameSnapshot | null = null
+  private cloudOverlay: SceneCloudOutput | null = null
+  private readonly neutralOverlay = new DataTexture(new Uint8Array(4), 1, 1)
+  private standaloneSerial = 0
+  public cloudFallbackReason: string | null = null
 
   public constructor(camera: PerspectiveCamera, registry: AtmosphereRegistry, options: { debugView?: number } = {}) {
     const uniforms = new Map<string, Uniform>([
@@ -93,10 +91,16 @@ export class AtmosphereEffect extends Effect {
       uniforms.set(slotUniformName(i, 'exposure'), new Uniform(1))
       uniforms.set(slotUniformName(i, 'hdrKnee'), new Uniform(1))
       uniforms.set(slotUniformName(i, 'eclipseCount'), new Uniform(0))
-      uniforms.set(slotUniformName(i, 'eclipseOcc'), new Uniform(Array.from({ length: MAX_OCCLUDERS }, () => new Vector4())))
+      uniforms.set(
+        slotUniformName(i, 'eclipseOcc'),
+        new Uniform(Array.from({ length: MAX_OCCLUDERS }, () => new Vector4()))
+      )
       uniforms.set(slotUniformName(i, 'eclipseStar'), new Uniform(new Vector3()))
       uniforms.set(slotUniformName(i, 'eclipseStarRadius'), new Uniform(0))
-      uniforms.set(slotUniformName(i, 'eclipseUmbra'), new Uniform(Array.from({ length: MAX_OCCLUDERS }, () => new Vector4())))
+      uniforms.set(
+        slotUniformName(i, 'eclipseUmbra'),
+        new Uniform(Array.from({ length: MAX_OCCLUDERS }, () => new Vector4()))
+      )
     }
 
     super('AtmosphereEffect', buildAtmosphereEffectFragment(), {
@@ -107,6 +111,17 @@ export class AtmosphereEffect extends Effect {
 
     this.camera = camera
     this.registry = registry
+    this.neutralOverlay.needsUpdate = true
+    this.uniforms.set('sceneCloudSlot', new Uniform(-1))
+    this.uniforms.set('sceneCloudOverlay', new Uniform(this.neutralOverlay))
+  }
+
+  public setFrame(snapshot: AtmosphereFrameSnapshot | null): void {
+    this.frame = snapshot
+  }
+
+  public setCloudOverlay(output: SceneCloudOutput | null): void {
+    this.cloudOverlay = output
   }
 
   public get slotCount(): number {
@@ -119,27 +134,15 @@ export class AtmosphereEffect extends Effect {
     this.uniforms.get('uProjectionInverse')!.value = camera.projectionMatrixInverse
     this.uniforms.get('uLogFarFactor')!.value = Math.log2(camera.far + 1)
 
-    this.cameraWorld.setFromMatrixPosition(camera.matrixWorld)
-    this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
-    this.frustum.setFromProjectionMatrix(this.viewProjection)
-
-    // Кандидаты собираются заново каждый кадр: хранить их между кадрами значит
-    // держать узлы и LUT удалённых сценариев живыми до смерти композера
-    const items: SlotItem[] = []
-    for (const entry of this.registry.entries()) {
-      const centerWorld = new Vector3().setFromMatrixPosition(entry.object.matrixWorld)
-      this.shell.set(centerWorld, entry.config.topRadius * SpaceScale)
-      if (!this.shell.containsPoint(this.cameraWorld) && !this.frustum.intersectsSphere(this.shell)) continue
-      // Звезда в мировом (0,0,0): направление от центра оболочки к нулю СЦЕНЫ,
-      // а не к камере — иначе освещённая сторона всегда смотрела бы в кадр
-      const sunDir = centerWorld.clone().negate().normalize()
-      // Центр относительно камеры в float64, затем юниты → км
-      const centerKm = centerWorld.sub(this.cameraWorld).multiplyScalar(1 / SpaceScale)
-      items.push({ entry, centerKm, topRadiusKm: entry.config.topRadius, sunDir })
-    }
-
-    // filtered (мельче порога) в кадре не видны — про них молчим
-    const { chosen, dropped } = orderSlots(items, ATMOSPHERE_SLOTS, MIN_ANGULAR)
+    const snapshot = this.frame ?? captureAtmosphereFrame(camera, this.registry, ++this.standaloneSerial)
+    const valid = snapshot.slots.every(
+      (slot) =>
+        slot.entry.ready &&
+        slot.generation === slot.entry.generation &&
+        this.registry.get(slot.entry.actorId) === slot.entry
+    )
+    const chosen = valid ? snapshot.slots : []
+    const dropped = snapshot.dropped
     if (dropped.length > 0 && !this.warnedDropped) {
       console.warn(
         `AtmosphereEffect: видимых атмосфер больше, чем слотов (${ATMOSPHERE_SLOTS}) — не рисуются: ${dropped.map((e) => e.name).join(', ')}`
@@ -147,13 +150,24 @@ export class AtmosphereEffect extends Effect {
       this.warnedDropped = true
     }
 
-    chosen.forEach((slot, i) => {
-      const item = items.find((it) => it.entry === slot.entry)!
-      this.fillSlot(i, item)
-    })
+    chosen.forEach((slot) =>
+      this.fillSlot(slot.index, { entry: slot.entry, centerKm: slot.centerKm, sunDir: slot.sunDirection })
+    )
     this.clearSlotsFrom(chosen.length)
     this.filled = chosen.length
     this.uniforms.get('uCount')!.value = chosen.length
+    const cloud = this.cloudOverlay
+    const cloudSlot =
+      cloud && cloud.frame.serial === snapshot.serial
+        ? chosen.find(
+            (slot) => slot.entry.actorId === cloud.atmosphereActorId && slot.generation === cloud.atmosphereGeneration
+          )
+        : undefined
+    const debug = this.uniforms.get('uDebugView')!.value > 0
+    this.cloudFallbackReason =
+      cloud && debug ? 'atmosphere-debug-view' : cloud && !cloudSlot ? 'stale-atmosphere-frame' : null
+    this.uniforms.get('sceneCloudSlot')!.value = cloudSlot && !debug ? cloudSlot.index : -1
+    this.uniforms.get('sceneCloudOverlay')!.value = cloudSlot && !debug ? cloud!.overlay : this.neutralOverlay
   }
 
   /** Пустые слоты не держат LUT ушедшего сценария живыми до смерти композера. */

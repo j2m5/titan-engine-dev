@@ -38,6 +38,8 @@ interface Call {
 
 function fakeRenderer() {
   const calls: Call[] = []
+  const domElement = new EventTarget()
+  let contextLost = false
   let bound: unknown = null
   let nextId = 1
   const record =
@@ -47,6 +49,7 @@ function fakeRenderer() {
     }
   const gl = {
     ...GL,
+    isContextLost: () => contextLost,
     createTexture: () => ({ id: nextId++ }),
     texStorage2D: record('texStorage2D'),
     texParameteri: record('texParameteri'),
@@ -60,6 +63,7 @@ function fakeRenderer() {
   }
   const store = new Map<unknown, Record<string, unknown>>()
   const renderer = {
+    domElement,
     getContext: () => gl,
     state: {
       bindTexture: (_type: number, texture: unknown) => {
@@ -78,7 +82,19 @@ function fakeRenderer() {
     },
     capabilities: { getMaxAnisotropy: () => 16 }
   }
-  return { renderer: renderer as unknown as GaiaSkyRenderer, calls, store }
+  return {
+    renderer: renderer as unknown as GaiaSkyRenderer, calls, store,
+    loseContext: () => {
+      contextLost = true
+      domElement.dispatchEvent(new Event('webglcontextlost'))
+    },
+    restoreContext: () => {
+      // Three's listener runs first and replaces the renderer's property store.
+      store.clear()
+      contextLost = false
+      domElement.dispatchEvent(new Event('webglcontextrestored'))
+    }
+  }
 }
 
 const tails: GaiaTile[] = gaiaTiles().filter((tile) => tile.level === 4)
@@ -230,5 +246,97 @@ describe('GaiaSky', () => {
     await loading
 
     expect(of(calls, 'texSubImage2D')).toHaveLength(0)
+  })
+
+  it('каждое восстановление пересоздаёт три текстуры, перепривязывает обёртки и загружает тайлы', async () => {
+    const { renderer, calls, store, loseContext, restoreContext } = fakeRenderer()
+    const uniforms = createGaiaSkyUniforms()
+    const fetchTile = vi.fn(ok)
+    const sky = new GaiaSky(renderer, uniforms, fetchTile, tails)
+    await sky.start()
+    const wrappers = [uniforms.uGaiaGalaxy.value, uniforms.uGaiaStars.value, uniforms.uGaiaStarsCoarse.value]
+
+    for (let cycle = 1; cycle <= 2; cycle++) {
+      loseContext()
+      expect(uniforms.uGaiaMinLod.value).toBe(GAIA_LEVELS)
+      expect(uniforms.uGaiaGalaxy.value).toBeNull()
+      expect(wrappers.every(wrapper => !store.has(wrapper))).toBe(true)
+      expect(sky.start()).toBeNull()
+      restoreContext()
+      expect(uniforms.uGaiaMinLod.value).toBe(GAIA_LEVELS)
+      expect([uniforms.uGaiaGalaxy.value, uniforms.uGaiaStars.value, uniforms.uGaiaStarsCoarse.value]).toEqual(wrappers)
+      expect(wrappers.map(wrapper => (store.get(wrapper)!.__webglTexture as { id: number }).id))
+        .toEqual([1, 2, 3].map(id => id + cycle * 3))
+      await vi.waitFor(() => expect(uniforms.uGaiaMinLod.value).toBe(4))
+      expect(fetchTile).toHaveBeenCalledTimes(6 * (cycle + 1))
+      expect(sky.start()).toBeNull()
+    }
+    expect(of(calls, 'deleteTexture')).toHaveLength(0)
+    expect(of(calls, 'texStorage2D')).toHaveLength(9)
+    sky.dispose()
+    expect(of(calls, 'deleteTexture')).toHaveLength(3)
+  })
+
+  it('поздний тайл потерянного контекста не меняет новое небо и не вызывает предупреждение', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { renderer, calls, loseContext, restoreContext } = fakeRenderer()
+    const uniforms = createGaiaSkyUniforms()
+    let release: () => void = () => {}
+    const fetchTile = vi.fn((tile: GaiaTile, _signal?: AbortSignal): Promise<ArrayBuffer> => {
+      if (fetchTile.mock.calls.length > 1) return ok(tile)
+      return new Promise(resolve => { release = () => resolve(new ArrayBuffer(gaiaTileByteLength(tile))) })
+    })
+    const sky = new GaiaSky(renderer, uniforms, fetchTile, tails)
+    const oldLoad = sky.start()!
+    const oldSignal = fetchTile.mock.calls[0][1]
+    loseContext()
+    expect(oldSignal?.aborted).toBe(true)
+    restoreContext()
+    await vi.waitFor(() => expect(uniforms.uGaiaMinLod.value).toBe(4))
+    const uploadsBeforeLateReply = of(calls, 'texSubImage2D').length
+    release()
+
+    expect(await oldLoad).toEqual({ loaded: 0, failed: [], aborted: false, cancelled: true })
+    expect(of(calls, 'texSubImage2D')).toHaveLength(uploadsBeforeLateReply)
+    expect(fetchTile).toHaveBeenCalledTimes(7)
+    expect(warn).not.toHaveBeenCalled()
+    sky.dispose()
+  })
+
+  it('start при потерянном контексте ждёт восстановления, dispose отменяет автозапуск', async () => {
+    const { renderer, calls, loseContext, restoreContext } = fakeRenderer()
+    const uniforms = createGaiaSkyUniforms()
+    const fetchTile = vi.fn(ok)
+    const sky = new GaiaSky(renderer, uniforms, fetchTile, tails)
+    loseContext()
+    expect(sky.start()).toBeNull()
+    expect(fetchTile).not.toHaveBeenCalled()
+    expect(of(calls, 'texStorage2D')).toHaveLength(0)
+    sky.dispose()
+    restoreContext()
+    expect(fetchTile).not.toHaveBeenCalled()
+
+    loseContext()
+    expect(sky.start()).toBeNull()
+    restoreContext()
+    await vi.waitFor(() => expect(uniforms.uGaiaMinLod.value).toBe(4))
+    expect(fetchTile).toHaveBeenCalledTimes(6)
+    sky.dispose()
+  })
+
+  it('dispose во время потери контекста не удаляет старые GL-объекты и не запускает загрузку заново', async () => {
+    const { renderer, calls, loseContext, restoreContext } = fakeRenderer()
+    const fetchTile = vi.fn(ok)
+    const sky = new GaiaSky(renderer, createGaiaSkyUniforms(), fetchTile, tails)
+    await sky.start()
+    loseContext()
+    sky.dispose()
+    restoreContext()
+
+    expect(of(calls, 'deleteTexture')).toHaveLength(0)
+    expect(fetchTile).toHaveBeenCalledTimes(6)
+    await sky.start()
+    expect(fetchTile).toHaveBeenCalledTimes(12)
+    sky.dispose()
   })
 })

@@ -2,6 +2,19 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { settingsStore } from '@/ui/mobx/SettingsStore'
 
 describe('SettingsStore', () => {
+  it('defaults clouds to enabled and medium; validates quality without changing unrelated settings', () => {
+    expect(settingsStore.showClouds).toBe(true)
+    expect(settingsStore.cloudQuality).toBe('medium')
+    for (const quality of ['low', 'high', 'medium'] as const) {
+      settingsStore.setCloudQuality(quality)
+      expect(settingsStore.cloudQuality).toBe(quality)
+    }
+    expect(() => settingsStore.setCloudQuality('invalid' as never)).toThrow(RangeError)
+    expect(settingsStore.cloudQuality).toBe('medium')
+    settingsStore.toggle('showClouds')
+    expect(settingsStore.showClouds).toBe(false)
+    settingsStore.toggle('showClouds')
+  })
   beforeEach(() => {
     settingsStore.showOrbitLines = true
     settingsStore.showMarkers = true

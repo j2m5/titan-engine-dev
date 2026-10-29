@@ -1,32 +1,74 @@
-import { DepthTexture, HalfFloatType, PerspectiveCamera, WebGLRenderTarget, type WebGLRenderer } from 'three'
+import { DepthTexture, HalfFloatType, PerspectiveCamera, Texture, WebGLRenderTarget, type ShaderMaterial, type WebGLRenderer } from 'three'
 import { EffectPass } from 'postprocessing'
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
+import { CloudRegistry } from '@/core/services/CloudRegistry'
+import { CloudBlendPass } from '@/core/graphic/clouds/CloudBlendPass'
 
 describe('atmosphere output before terminal HDR', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  function setup() {
-    const passes = new Postprocessing(null as never, null as never, new PerspectiveCamera(),
-      new AtmosphereRegistry(), new DepthVolumeRegistry()).buildPasses()
-    const [atmosphere, hdr, ldr] = passes.slice(7) as EffectPass[]
+  function setup(withClouds = false) {
+    const runtime = withClouds ? new SceneCloudRuntime(new CloudRegistry()) : undefined
+    const passes = new Postprocessing({} as WebGLRenderer, null as never, new PerspectiveCamera(),
+      new AtmosphereRegistry(), new DepthVolumeRegistry(), undefined, runtime).buildPasses()
+    const atmosphere = passes[7] as EffectPass
+    const [hdr, ldr] = passes.slice(-2) as EffectPass[]
+    const blend = passes.find(pass => pass instanceof CloudBlendPass)
     ldr.renderToScreen = true
     const input = new WebGLRenderTarget(128, 72, { type: HalfFloatType, samples: 8 })
     const output = input.clone(), depth = new DepthTexture(128, 72)
     output.depthTexture = depth
     atmosphere.setDepthTexture(depth)
-    const renderer = {} as WebGLRenderer
+    const renderer = { setRenderTarget: vi.fn(), render: vi.fn() } as unknown as WebGLRenderer
     const render = vi.spyOn(EffectPass.prototype, 'render').mockImplementation(() => {})
     const frame = (stencil = false): void => {
       let read = input, write = output
-      for (const pass of [atmosphere, hdr, ldr]) if (pass.enabled) {
+      for (const pass of passes.slice(7)) if (pass.enabled) {
         pass.render(renderer, read, write, 0.1, stencil)
         if (pass.needsSwap) [read, write] = [write, read]
       }
     }
-    return { atmosphere, hdr, ldr, input, output, depth, renderer, render, frame }
+    return { atmosphere, hdr, ldr, blend, runtime, passes, input, output, depth, renderer, render, frame }
   }
+
+  it('routes completed cloud blend to HDR and restores direct atmosphere color when clouds leave', () => {
+    const { atmosphere, blend, runtime, passes, input, output, render, frame } = setup(true)
+    const near = new Texture()
+    try {
+      frame()
+      const directAtmosphere = render.mock.calls[0][2]!
+      expect(directAtmosphere.samples).toBe(0)
+      expect(render.mock.calls[1][1]).toBe(directAtmosphere)
+
+      blend!.setNear(near, 0.5)
+      frame()
+      expect(render.mock.calls[3][2]).toBe(output)
+      expect((blend!.fullscreenMaterial as ShaderMaterial).uniforms.inputBuffer.value).toBe(output.texture)
+      expect(render.mock.calls[4][1]).toBe(input)
+      expect(render.mock.calls[4][2]!.samples).toBe(0)
+      expect(render.mock.calls[5][1]).toBe(render.mock.calls[4][2])
+
+      atmosphere.enabled = false
+      blend!.setNear(near, 1)
+      frame()
+      expect(render.mock.calls[6][1]).toBe(output)
+
+      atmosphere.enabled = true
+      blend!.setNear(null, 0)
+      frame()
+      expect(render.mock.calls[8][2]).toBe(directAtmosphere)
+      expect(render.mock.calls[9][1]).toBe(directAtmosphere)
+    } finally {
+      for (const pass of passes) pass.dispose()
+      runtime!.dispose()
+      near.dispose()
+      input.dispose()
+      output.dispose()
+    }
+  })
 
   it('feeds atmosphere color to HDR and HDR color to LDR while preserving original scene depth and MSAA', () => {
     const { atmosphere, input, output, depth, render, frame } = setup()

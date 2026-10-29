@@ -9,7 +9,7 @@ export const PhysicalObjects: IPhysicalObject[] = [
   { id: 3, actorId: 6, parentId: 1, mass: 4.868e24, radius: 6051.8, axialTilt: 157.16, rotationPeriod: 5832.443616, temperature: 0 },
   { id: 4, actorId: 7, parentId: 1, mass: 5.9736e24, radius: 6360, axialTilt: 23.4392911, rotationPeriod: 23.93447117, temperature: 0 },
   { id: 5, actorId: 8, parentId: 1, mass: 6.4185e23, radius: 3390, axialTilt: 37.1135, rotationPeriod: 24.622962156, temperature: 0 },
-  { id: 6, actorId: 9, parentId: 1, mass: 5.21e-10, radius: 469.7, axialTilt: 2.9, rotationPeriod: 9.07417, temperature: 0 },
+  { id: 6, actorId: 9, parentId: 1, mass: 9.38416e20, radius: 469.7, axialTilt: 2.9, rotationPeriod: 9.07417, temperature: 0 },
   { id: 7, actorId: 10, parentId: 1, mass: 1.8986e27, radius: 69911, axialTilt: 2.22, rotationPeriod: 9.927953, temperature: 0 },
   { id: 8, actorId: 11, parentId: 1, mass: 5.6846e26, radius: 58232, axialTilt: 28.052, rotationPeriod: 10.65622222, temperature: 0 },
   { id: 9, actorId: 12, parentId: 1, mass: 8.681e25, radius: 25362, axialTilt: 97.722, rotationPeriod: 17.24, temperature: 0 },

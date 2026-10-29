@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import '@/core/framework/TitanThree'
 import { PerspectiveCamera, Vector2, WebGLRenderer } from 'three'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
@@ -13,6 +14,8 @@ import { toThreeJSUnits, fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { AU } from '@/core/constants'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
+import type { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
+import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 
 /** WebGL-контекста в jsdom нет; фабрике от рендерера нужны только эти вызовы */
 const fakeRenderer = {
@@ -80,6 +83,46 @@ describe('RenderableFactory — пояс астероидов', () => {
 })
 
 describe('AsteroidBelt — состояния LOD по расстоянию до тора', () => {
+  it.each([0.2, 2])('обход сцены освобождает скрытый пул на высоте %s а.е. и заселяет его после возврата', (heightAu) => {
+    const belt = new AsteroidBelt(beltActor({ ...BELT_DATA, pointCount: 0, iceFraction: 0 }))
+    const camera = new PerspectiveCamera(50, 1, 0.1, 1e12)
+    const traverseFrame = (yAu: number): void => {
+      camera.position.set(fromAstronomicalUnits(50), fromAstronomicalUnits(yAu), 0)
+      camera.lookAt(0, 0, 0)
+      camera.updateMatrixWorld(true)
+      belt.updateMatrixWorld(true)
+      belt.traverse(object => object.updateObject({ delta: 0.016, epoch: 2451545, elapsed: 0, camera } as UpdateContext))
+      belt.traverse(object => object.updateView?.(camera))
+    }
+
+    try {
+      for (let i = 0; i < 20; i++) traverseFrame(0)
+      const streamer = internalsOf(belt).streamer!
+      expect(streamer.getDebugInfo().instances.total).toBeGreaterThan(0)
+
+      traverseFrame(heightAu)
+      expect(streamer.visible).toBe(false)
+      expect(streamer.getDebugInfo().activeSectors).toBe(0)
+      expect(streamer.getDebugInfo().instances.total).toBe(0)
+
+      traverseFrame(0)
+      expect(internalsOf(belt).streamer).toBe(streamer)
+      expect(streamer.visible).toBe(true)
+      expect(streamer.getDebugInfo().instances.total).toBeGreaterThan(0)
+    } finally { disposeSceneTree(belt) }
+  })
+
+  it.each([0, 0.06])('нулевая доля высоты пыли при толще %s даёт конечные юниформы', (dustTauVertical) => {
+    const belt = new AsteroidBelt(beltActor({ ...BELT_DATA, dustEnabled: true, pointCount: 0,
+      dustScaleHeightFraction: 0, dustTauVertical }))
+    try {
+      const dust = belt.children.find(child => child.name === 'RingDustVolume') as RingDustVolume
+      expect(dust.dustMaterial.uniforms.uDustScaleHeight.value).toBeGreaterThan(0)
+      expect(Number.isFinite(dust.dustMaterial.uniforms.uDustDensity.value)).toBe(true)
+      if (dustTauVertical === 0) expect(dust.dustMaterial.uniforms.uDustDensity.value).toBe(0)
+    } finally { disposeSceneTree(belt) }
+  })
+
   it('камера далеко от пояса (100 а.е.) — состояние Far, стример не создан', () => {
     const node = makeFactory().make(beltActor(BELT_DATA)) as PlacedNode
     const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt

@@ -1,3 +1,5 @@
+import { CloudRegistry } from '@/core/services/CloudRegistry'
+import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
 import { ServiceProvider } from '@/core/framework/container/ServiceProvider'
 import { config } from '@/core/framework/config'
 import { Container } from '@/core/framework/container/Container'
@@ -56,15 +58,24 @@ class AppServiceProvider extends ServiceProvider {
       (c: Container) => new MarkerManager(c.get(Tokens.SceneObserver), c.get(Tokens.Settings))
     )
 
+    this.app.singleton(Tokens.CloudRegistry, () => new CloudRegistry())
+    this.app.singleton(Tokens.SceneCloudRuntime, (c: Container) => new SceneCloudRuntime(c.get(Tokens.CloudRegistry)))
     this.app.singleton(Tokens.AtmosphereRegistry, () => new AtmosphereRegistry())
     this.app.singleton(Tokens.DepthVolumeRegistry, () => new DepthVolumeRegistry())
     this.app.singleton(Tokens.NebulaBakeQueue, () => new NebulaBakeQueue())
     this.app.singleton(Tokens.LensRegistry, () => new LensRegistry())
     // Небо одно на приложение: грузится при первом сценарии, не перезагружается
     this.app.singleton(Tokens.GaiaSky, (c: Container) => new GaiaSky(c.get(Tokens.Renderer)))
-    this.app.singleton(Tokens.AsteroidImpostorLibrary, (c: Container) => new AsteroidImpostorLibrary(
-      c.get(Tokens.Renderer), config('asteroidImpostor'), shapeModelStorage, c.get(Tokens.LoadingProgressReporter)
-    ))
+    this.app.singleton(
+      Tokens.AsteroidImpostorLibrary,
+      (c: Container) =>
+        new AsteroidImpostorLibrary(
+          c.get(Tokens.Renderer),
+          config('asteroidImpostor'),
+          shapeModelStorage,
+          c.get(Tokens.LoadingProgressReporter)
+        )
+    )
 
     // Один генератор на сцену (владение рендерером — по прецеденту
     // BrunetonAtmosphere, см. докблок ProceduralSurfaceGenerator): его
@@ -105,6 +116,7 @@ class AppServiceProvider extends ServiceProvider {
           () => c.get(Tokens.SceneObserver).refreshObservableObjects(),
           c.get(Tokens.LensRegistry),
           c.get(Tokens.AsteroidImpostorLibrary),
+          c.get(Tokens.CloudRegistry),
           c.get(Tokens.NebulaBakeQueue)
         )
     )
@@ -129,7 +141,9 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Camera),
           c.get(Tokens.AtmosphereRegistry),
           c.get(Tokens.DepthVolumeRegistry),
-          c.get(Tokens.LensRegistry)
+          c.get(Tokens.LensRegistry),
+          c.get(Tokens.SceneCloudRuntime),
+          c.get(Tokens.Settings)
         )
     )
 
@@ -155,10 +169,7 @@ class AppServiceProvider extends ServiceProvider {
     )
 
     // Значение и обоснование — в ручке config('streaming.textureBudgetMiB').
-    this.app.singleton(
-      Tokens.TextureBudget,
-      () => new TextureBudget(config('streaming.textureBudgetMiB') * 1024 ** 2)
-    )
+    this.app.singleton(Tokens.TextureBudget, () => new TextureBudget(config('streaming.textureBudgetMiB') * 1024 ** 2))
 
     this.app.singleton(
       Tokens.ResourceObserver,

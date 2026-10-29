@@ -11,23 +11,30 @@ export function createTerminalEffectPasses(
   return [passes[0], passes[1]]
 }
 
-/** Keep these passes adjacent: bloom must see the completed atmosphere color. */
+/** Bloom must see completed atmosphere color; disable direct output while an intervening pass runs. */
 export function createAtmosphereEffectPasses(
   camera: Camera,
   atmosphere: Effect,
   hdrEffects: readonly Effect[],
-  ldrEffects: readonly Effect[]
+  ldrEffects: readonly Effect[],
+  canRedirectAtmosphere: () => boolean = () => true
 ): readonly [EffectPass, EffectPass, EffectPass] {
-  const passes = createColorPasses(camera, [[atmosphere], hdrEffects, ldrEffects])
+  const passes = createColorPasses(camera, [[atmosphere], hdrEffects, ldrEffects],
+    index => index !== 0 || canRedirectAtmosphere())
   return [passes[0], passes[1], passes[2]]
 }
 
-function createColorPasses(camera: Camera, effects: readonly (readonly Effect[])[]): ColorOutputPass[] {
+function createColorPasses(
+  camera: Camera,
+  effects: readonly (readonly Effect[])[],
+  canRedirect: (index: number) => boolean = () => true
+): ColorOutputPass[] {
   // Closures keep peers out of Pass.dispose's shallow disposable-property scan.
   const passes: ColorOutputPass[] = effects.map((group, index) => new ColorOutputPass(
     camera,
     () => passes[index - 1] ?? null,
     () => {
+      if (!canRedirect(index)) return false
       for (let next = index + 1; next < passes.length; next++) {
         const pass = passes[next]
         if (!pass.enabled || !pass.needsSwap ||

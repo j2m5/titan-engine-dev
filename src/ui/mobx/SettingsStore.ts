@@ -1,9 +1,17 @@
 import { makeAutoObservable } from 'mobx'
 import { Settings } from '@/core/ports/Settings'
+import type { CloudQuality } from '@/core/clouds/SceneCloudConfig'
 
 class SettingsStore implements Settings {
   public showOrbitLines: boolean = true
   public showMarkers: boolean = true
+  public showClouds = true
+  public cloudQuality: CloudQuality = 'medium'
+
+  public setCloudQuality(value: CloudQuality): void {
+    if (!['low', 'medium', 'high'].includes(value)) throw new RangeError('Invalid cloud quality')
+    this.cloudQuality = value
+  }
 
   public constructor() {
     makeAutoObservable(this)

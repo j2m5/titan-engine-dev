@@ -5,7 +5,6 @@ import { snoiseGrad3, type NoiseGrad3 } from '@/core/terrain/simplexNoise3'
 import {
   MIDBAND_ASPECT,
   MIDBAND_ENVELOPE_MAX,
-  MIDBAND_GRAD_BOUND,
   MIDBAND_NYQUIST_HI,
   MIDBAND_NYQUIST_LO,
   MIDBAND_OCTAVES,
@@ -21,6 +20,31 @@ const R_M = 1737400
 const LAMBDA0 = 1600
 const flatEnv: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
 const wallEnv: MidbandEnvelope = { slopeTan: 0.3, curvature: 0.8, downE: 0.6, downN: 0.8 }
+
+describe('MidbandField: непрерывная полярная область', () => {
+  const field = new MidbandField(MIDBAND_DEFAULTS, 3000, 1000000)
+  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
+  const height = (colat: number, south: boolean, lon = 0.3): number =>
+    field.sample(
+      -Math.sin(colat) * Math.cos(lon),
+      (south ? -1 : 1) * Math.cos(colat),
+      Math.sin(colat) * Math.sin(lon),
+      flatEnv,
+      0,
+      out
+    ).heightMeters
+
+  it.each([false, true])('исчезает скачок на старой границе отключения warp, south=%s', (south) => {
+    const boundary = Math.asin(1e-4)
+    const difference = Math.abs(height(boundary + 5e-11, south) - height(boundary - 5e-11, south))
+    expect(difference).toBeLessThan(0.001)
+  })
+
+  it.each([false, true])('полоса плавно приходит к нулю независимо от долготы, south=%s', (south) => {
+    expect(height(0, south)).toBe(0)
+    for (let i = 0; i < 12; i++) expect(Math.abs(height(1e-9, south, (i * Math.PI) / 6))).toBeLessThan(1e-5)
+  })
+})
 
 function dirs(n: number): Vector3[] {
   return Array.from({ length: n }, (_, k) => {
@@ -60,7 +84,6 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
       expect(s.tiltN).toBe(0)
     }
     expect(off.maxAmplitudeMeters).toBe(0)
-    expect(off.slopeBound).toBe(0)
   })
 
   it('детерминизм и масштаб: |mid| ≤ maxAmplitude, суммарный уклон стены — порядка 0.1, не 1.5', () => {
@@ -74,7 +97,6 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
       maxTilt = Math.max(maxTilt, t)
     }
     expect(maxAbs).toBeLessThanOrEqual(field.maxAmplitudeMeters)
-    expect(maxTilt).toBeLessThanOrEqual(field.slopeBound)
     expect(maxTilt).toBeLessThan(1.0) // этап 5 давал ~1.5 суммарного уклона; типичный наклон полосы ≈ 0.1, редкие пики выше
     expect(maxAbs).toBeGreaterThan(20) // полоса не вырождена
   })
@@ -89,20 +111,37 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
       const s = field.sample(d.x, d.y, d.z, wallEnv, 500, out)
       const tE = s.tiltE
       const tN = s.tiltN
-      const dE1 = d.clone().addScaledVector(e, hArc / R_M).normalize()
-      const dE0 = d.clone().addScaledVector(e, -hArc / R_M).normalize()
-      const fdE = (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, 500, out).heightMeters - field.sample(dE0.x, dE0.y, dE0.z, wallEnv, 500, out).heightMeters) / (2 * hArc)
-      const dN1 = d.clone().addScaledVector(n, hArc / R_M).normalize()
-      const dN0 = d.clone().addScaledVector(n, -hArc / R_M).normalize()
-      const fdN = (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, 500, out).heightMeters - field.sample(dN0.x, dN0.y, dN0.z, wallEnv, 500, out).heightMeters) / (2 * hArc)
+      const dE1 = d
+        .clone()
+        .addScaledVector(e, hArc / R_M)
+        .normalize()
+      const dE0 = d
+        .clone()
+        .addScaledVector(e, -hArc / R_M)
+        .normalize()
+      const fdE =
+        (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, 500, out).heightMeters -
+          field.sample(dE0.x, dE0.y, dE0.z, wallEnv, 500, out).heightMeters) /
+        (2 * hArc)
+      const dN1 = d
+        .clone()
+        .addScaledVector(n, hArc / R_M)
+        .normalize()
+      const dN0 = d
+        .clone()
+        .addScaledVector(n, -hArc / R_M)
+        .normalize()
+      const fdN =
+        (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, 500, out).heightMeters -
+          field.sample(dN0.x, dN0.y, dN0.z, wallEnv, 500, out).heightMeters) /
+        (2 * hArc)
       worst = Math.max(worst, Math.abs(tE - fdE), Math.abs(tN - fdN))
     }
     expect(worst).toBeLessThan(2e-3)
   })
 
-  it('страж констант: MIDBAND_GRAD_BOUND накрывает эмпирический max |∇snoise| (аналитический градиент, 100k точек); формула maxAmplitude', () => {
+  it('эмпирическая амплитуда шума и формула maxAmplitude', () => {
     const g: NoiseGrad3 = { value: 0, dx: 0, dy: 0, dz: 0 }
-    let maxGrad = 0
     let maxAbs = 0
     for (let k = 0; k < 100000; k++) {
       // обход домена, независимый от решётки симплекса, без Math.random
@@ -110,12 +149,9 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
       const y = 9.7 * Math.cos(k * 1.1173) - 0.011 * k
       const z = 5.3 * Math.sin(k * 0.2931 + 2.0) + 0.007 * k
       snoiseGrad3(x, y, z, g)
-      maxGrad = Math.max(maxGrad, Math.hypot(g.dx, g.dy, g.dz))
       maxAbs = Math.max(maxAbs, Math.abs(1 - Math.abs(g.value) - MIDBAND_RIDGE_MEAN))
     }
-    expect(maxGrad * 1.1).toBeLessThanOrEqual(MIDBAND_GRAD_BOUND)
     expect(maxAbs).toBeLessThanOrEqual(MIDBAND_P99)
-    // при провале НЕ подгонять тест: впиши в константу maxGrad·1.1 с округлением вверх до 0.5 и сообщи число
     const unit = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 1, midbandRidge: 0 }, 1000, 1000 / (2 * Math.PI))
     expect(unit.maxAmplitudeMeters).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * (30 + 15 + 7.5), 6)
   })
@@ -146,7 +182,6 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
     const mean = sum / ds.length
     expect(Math.abs(mean)).toBeLessThan(0.05 * unitEnvelopeField.maxAmplitudeMeters)
   })
-
 })
 
 describe('MidbandField: веса октав по шагу вершин', () => {
@@ -195,12 +230,30 @@ describe('MidbandField: веса октав по шагу вершин', () => {
       const s = field.sample(d.x, d.y, d.z, wallEnv, 500, out, step)
       const tE = s.tiltE
       const tN = s.tiltN
-      const dE1 = d.clone().addScaledVector(e, hArc / R_M).normalize()
-      const dE0 = d.clone().addScaledVector(e, -hArc / R_M).normalize()
-      const fdE = (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, 500, out, step).heightMeters - field.sample(dE0.x, dE0.y, dE0.z, wallEnv, 500, out, step).heightMeters) / (2 * hArc)
-      const dN1 = d.clone().addScaledVector(n, hArc / R_M).normalize()
-      const dN0 = d.clone().addScaledVector(n, -hArc / R_M).normalize()
-      const fdN = (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, 500, out, step).heightMeters - field.sample(dN0.x, dN0.y, dN0.z, wallEnv, 500, out, step).heightMeters) / (2 * hArc)
+      const dE1 = d
+        .clone()
+        .addScaledVector(e, hArc / R_M)
+        .normalize()
+      const dE0 = d
+        .clone()
+        .addScaledVector(e, -hArc / R_M)
+        .normalize()
+      const fdE =
+        (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, 500, out, step).heightMeters -
+          field.sample(dE0.x, dE0.y, dE0.z, wallEnv, 500, out, step).heightMeters) /
+        (2 * hArc)
+      const dN1 = d
+        .clone()
+        .addScaledVector(n, hArc / R_M)
+        .normalize()
+      const dN0 = d
+        .clone()
+        .addScaledVector(n, -hArc / R_M)
+        .normalize()
+      const fdN =
+        (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, 500, out, step).heightMeters -
+          field.sample(dN0.x, dN0.y, dN0.z, wallEnv, 500, out, step).heightMeters) /
+        (2 * hArc)
       worst = Math.max(worst, Math.abs(tE - fdE), Math.abs(tN - fdN))
     }
     expect(worst).toBeLessThan(2e-3)
@@ -269,7 +322,10 @@ describe('MidbandField: огибающая у уровня воды', () => {
     expect(dry.envelope(wallEnv, 0)).toBeCloseTo(dry.envelope(wallEnv, 5000), 12)
     const d = dirs(1)[0]
     expect(wet.sample(d.x, d.y, d.z, wallEnv, 0, out).heightMeters).toBe(0)
-    expect(wet.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters).toBeCloseTo(dry.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters, 12)
+    expect(wet.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters).toBeCloseTo(
+      dry.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters,
+      12
+    )
   })
 
   // огибающая уходит потребителю (midShade.y): гейт пиксельного fbm читает
@@ -286,7 +342,11 @@ describe('MidbandField: огибающая у уровня воды', () => {
   })
 
   it('явная ширина W перекрывает 2·A₀', () => {
-    const narrow = new MidbandField({ ...MIDBAND_DEFAULTS, waterLevelMeters: 10, midbandWaterFadeMeters: 20 }, LAMBDA0, R_M)
+    const narrow = new MidbandField(
+      { ...MIDBAND_DEFAULTS, waterLevelMeters: 10, midbandWaterFadeMeters: 20 },
+      LAMBDA0,
+      R_M
+    )
     expect(narrow.waterFadeMeters).toBe(20)
     expect(narrow.envelope(wallEnv, 10)).toBe(0)
     expect(narrow.envelope(wallEnv, 30)).toBeCloseTo(dry.envelope(wallEnv, 30), 12)
@@ -296,12 +356,20 @@ describe('MidbandField: огибающая у уровня воды', () => {
 describe('MidbandField: parentOut — вторая сумма октав за один проход', () => {
   const field = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
   const fresh = (): MidbandSample => ({ heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 })
-  const cases: Array<[number, number]> = [[150, 300], [600, 1200], [1500, 3000], [0, 50]]
+  const cases: Array<[number, number]> = [
+    [150, 300],
+    [600, 1200],
+    [1500, 3000],
+    [0, 50]
+  ]
 
   for (const dir of [...dirs(6), new Vector3(0.01, 0.99995, 0).normalize(), new Vector3(1e-5, 1, 0).normalize()]) {
     for (const [step, parentStep] of cases) {
       it(`равна отдельному вызову: шаг ${step}→${parentStep}, dir ${dir.toArray().map((x) => x.toFixed(2))}`, () => {
-        const own = fresh(), parent = fresh(), ref = fresh(), ownRef = fresh()
+        const own = fresh(),
+          parent = fresh(),
+          ref = fresh(),
+          ownRef = fresh()
         field.sample(dir.x, dir.y, dir.z, wallEnv, 500, own, step, 1e-4, -2e-4, parentStep, parent)
         field.sample(dir.x, dir.y, dir.z, wallEnv, 500, ref, parentStep, 1e-4, -2e-4)
         field.sample(dir.x, dir.y, dir.z, wallEnv, 500, ownRef, step, 1e-4, -2e-4)
@@ -313,7 +381,8 @@ describe('MidbandField: parentOut — вторая сумма октав за о
 
   it('ранний выход (огибающая 0) — parentOut как у отдельного вызова', () => {
     const noFlat = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 0 }, LAMBDA0, R_M)
-    const parent = fresh(), ref = fresh()
+    const parent = fresh(),
+      ref = fresh()
     noFlat.sample(0.3, 0.8, 0.52, flatEnv, 500, fresh(), 150, 0, 0, 300, parent)
     noFlat.sample(0.3, 0.8, 0.52, flatEnv, 500, ref, 300)
     expect(parent).toEqual(ref)
@@ -321,14 +390,18 @@ describe('MidbandField: parentOut — вторая сумма октав за о
 
   it('ранний выход (strength 0) — parentOut как у отдельного вызова', () => {
     const off = new MidbandField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }, LAMBDA0, R_M)
-    const parent = fresh(), ref = fresh()
+    const parent = fresh(),
+      ref = fresh()
     off.sample(0.3, 0.8, 0.52, wallEnv, 500, fresh(), 150, 0, 0, 300, parent)
     off.sample(0.3, 0.8, 0.52, wallEnv, 500, ref, 300)
     expect(parent).toEqual(ref)
   })
 
   it('ранний выход (ребёнок грубее всех октав) — parentOut как у отдельного вызова', () => {
-    const parent = fresh(), ref = fresh(), own = fresh(), ownRef = fresh()
+    const parent = fresh(),
+      ref = fresh(),
+      own = fresh(),
+      ownRef = fresh()
     field.sample(0.3, 0.8, 0.52, wallEnv, 500, own, 1e6, 0, 0, 2e6, parent)
     field.sample(0.3, 0.8, 0.52, wallEnv, 500, ref, 2e6)
     field.sample(0.3, 0.8, 0.52, wallEnv, 500, ownRef, 1e6)
@@ -337,7 +410,9 @@ describe('MidbandField: parentOut — вторая сумма октав за о
   })
 
   it('родительский шаг грубее всех октав — нули и доля 0, своя сумма не тронута', () => {
-    const parent = fresh(), own = fresh(), ownRef = fresh()
+    const parent = fresh(),
+      own = fresh(),
+      ownRef = fresh()
     field.sample(0.3, 0.8, 0.52, wallEnv, 500, own, 150, 0, 0, 1e6, parent)
     field.sample(0.3, 0.8, 0.52, wallEnv, 500, ownRef, 150)
     expect(parent).toEqual(fresh())

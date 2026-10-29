@@ -230,9 +230,15 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
   })
 
   it('каждая проекция реориентирована СВОИМ свизлом ДО суммирования — X→.zyx, Y→.xzy, Z→.xyz (порядок triplanarBlendNormal)', () => {
-    expect(frag).toContain('vec3 fromX = getNoiseWeighted(p.zy, waveWeights).zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);')
-    expect(frag).toContain('vec3 fromY = getNoiseWeighted(p.xz, waveWeights).xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);')
-    expect(frag).toContain('vec3 fromZ = getNoiseWeighted(p.xy, waveWeights).xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);')
+    expect(frag).toContain(
+      'vec3 fromX = getNoiseWeighted(p.zy, waveWeights).zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);'
+    )
+    expect(frag).toContain(
+      'vec3 fromY = getNoiseWeighted(p.xz, waveWeights).xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);'
+    )
+    expect(frag).toContain(
+      'vec3 fromZ = getNoiseWeighted(p.xy, waveWeights).xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);'
+    )
   })
 
   it('Y-проекция (.xzy) — дословно одноплоскостная формула Water.js (world.xz + up=world.y), знаковая поправка отдельным множителем', () => {
@@ -520,8 +526,24 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
       alpha2: 0.3 // широкий лепесток: блик в этой геометрии ненулевой
     }
 
-    const foundation = foundationColor(inputs.baseColor, inputs.fresnelTint, inputs.normal, inputs.viewDir, inputs.lightDir, inputs.nightFloor)
-    const waves = wavesColor(inputs.baseColor, inputs.reflectionSample, inputs.skyColor, inputs.waveNormal, inputs.viewDir, inputs.lightDir, inputs.sunColor, inputs.nightFloor)
+    const foundation = foundationColor(
+      inputs.baseColor,
+      inputs.fresnelTint,
+      inputs.normal,
+      inputs.viewDir,
+      inputs.lightDir,
+      inputs.nightFloor
+    )
+    const waves = wavesColor(
+      inputs.baseColor,
+      inputs.reflectionSample,
+      inputs.skyColor,
+      inputs.waveNormal,
+      inputs.viewDir,
+      inputs.lightDir,
+      inputs.sunColor,
+      inputs.nightFloor
+    )
     const glint = glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2)
     expect(glint).toBeGreaterThan(0)
 
@@ -531,7 +553,8 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
       const blended = blendedColor(inputs, fade)
 
       for (let c = 0; c < 3; c++) {
-        const expected = foundation[c] + fade * (waves[c] - foundation[c]) + Math.min(sunColor[c] * glint, WATER_GLINT_CEILING)
+        const expected =
+          foundation[c] + fade * (waves[c] - foundation[c]) + Math.min(sunColor[c] * glint, WATER_GLINT_CEILING)
 
         expect(blended[c]).toBeCloseTo(expected, 12)
       }
@@ -830,7 +853,6 @@ const BASELINE_FRAGMENT_SHADER = `
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
       // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
       vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
-      // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
       float cloudShadow = 1.0;
       color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);
 
@@ -864,9 +886,15 @@ describe('Паритет: без USE_WATER_WAVES компилируемый фр
   // во фрагментник живёт под своим гейтом, вне гейта прибавилось только
   // объявление варьинга vLocalLightDirection — оно в снимке выше.
   it('вырезав все блоки #ifdef USE_WATER_WAVES...#endif, получаем ровно снимок ДО Task 1', () => {
-    const stripped = stripGuardedBlock(stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'), 'USE_SUN_TINT')
+    const colorFrag = stripGuardedBlock(stripGuardedBlock(frag, 'SCENE_CLOUD_WATER_DEPTH'), 'SCENE_CLOUD_RECEIVER')
+    const stripped = stripGuardedBlock(
+      stripGuardedBlock(stripGuardedBlock(colorFrag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'),
+      'USE_SUN_TINT'
+    )
 
-    expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER)))
+    expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(
+      normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER))
+    )
   })
 })
 
@@ -910,7 +938,10 @@ describe('WaterShader: дистанционного fade больше нет —
     expect(WaterShaderTemplate.uniforms).not.toHaveProperty('uWaterWaveFadeMeters')
     // номинальный кадр 50°/1080p до первого setPixelAngle: с 0 все веса были бы 1 с орбиты
     expect(shader.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
-    expect(WaterShaderTemplate.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
+    expect(WaterShaderTemplate.uniforms.uWaterPixelAngle.value).toBeCloseTo(
+      (2 * Math.tan((50 * Math.PI) / 360)) / 1080,
+      15
+    )
   })
 })
 

@@ -25,7 +25,8 @@ const FACTOR_LINE =
 // в ноль, и общий множитель обнулил бы пол на всей ночной стороне.
 const DAY_TINT_LINE = 'color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow * eclipse, dayFactor);'
 const WAVES_TINT_LINE = 'wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);'
-// Ветки «дефайна нет» несут cloudShadow (≡ 1 без USE_WATER_CLOUD); страж: без гейта картинка прежняя.
+// Without SunTint, direct light still receives scene cloud visibility and eclipse; the night floor stays separate.
+// Numerical shadow/neutral-receiver behavior is covered in scene/receivers.gpu.ts.
 const DAY_PLAIN_LINE = 'color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);'
 const WAVES_PLAIN_LINE = 'wavesColor *= mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);'
 
@@ -66,6 +67,8 @@ function config(): AtmosphereConfig {
 function entry(): AtmosphereEntry {
   return {
     actorId: ATMO_ACTOR_ID,
+    generation: 0,
+    ready: true,
     name: 'EarthAtmosphere',
     object: new Object3D(),
     config: config(),
@@ -105,8 +108,8 @@ describe('WaterShaderTemplate: тинт солнца — контракт шей
     expect(frag).not.toContain('color *= mix(vec3(1.0), sunTint(')
   })
 
-  it('ветка без дефайна — прежняя картинка (cloudShadow ≡ 1 без USE_WATER_CLOUD): тинт не трогает картинку тел без атмосферы', () => {
-    expect(frag).toContain(DAY_PLAIN_LINE)
+  it('without SunTint, the plain branch preserves scene shadow visibility and the night floor', () => {
+    expect(frag).toContain(`#else\n        ${DAY_PLAIN_LINE}\n      #endif`)
     expect(frag).toContain(WAVES_PLAIN_LINE)
   })
 

@@ -29,7 +29,7 @@ export function checkAtmosphereOutput(): unknown {
     new MeshBasicMaterial({ color: new Color(2, 0.6, 0.3) }))
   planet.position.set(-0.2, 0.1, -12)
   scene.add(planet); scene.updateMatrixWorld(true); camera.updateMatrixWorld(true)
-  const entry = { actorId: 47, name: 'Earth fixture', object: planet, config, lut }
+  const entry = { actorId: 47, generation: 0, ready: true, name: 'Earth fixture', object: planet, config, lut }
   const originalBlit = gl.blitFramebuffer
   let blits = 0
   gl.blitFramebuffer = function (...args) { blits++; return originalBlit.apply(this, args) }

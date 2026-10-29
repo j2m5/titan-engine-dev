@@ -27,7 +27,7 @@ const vertexShader: string = `
     vRowUv2 = uv + texelSize * vec2(0.0, 2.0);
     vRowUv3 = uv + texelSize * vec2(2.0, 2.0);
     vRowUv4 = uv + texelSize * vec2(-2.0, 0.0);
-    vRowUv5 = uv + texelSize;
+    vRowUv5 = uv;
     vRowUv6 = uv + texelSize * vec2(2.0, 0.0);
     vRowUv7 = uv + texelSize * vec2(-2.0, -2.0);
     vRowUv8 = uv + texelSize * vec2(0.0, -2.0);
@@ -95,10 +95,10 @@ const fragmentShader: string = `
     weight =
       0.125 *
       vec4(
-        clampToBorder(vRowUv2),
-        clampToBorder(vRowUv4),
-        clampToBorder(vRowUv6),
-        clampToBorder(vRowUv8)
+        clampToBorder(vCenterUv1),
+        clampToBorder(vCenterUv2),
+        clampToBorder(vCenterUv3),
+        clampToBorder(vCenterUv4)
       );
     color += weight.x * texture(inputBuffer, vec2(vCenterUv1)).rgb;
     color += weight.y * texture(inputBuffer, vec2(vCenterUv2)).rgb;

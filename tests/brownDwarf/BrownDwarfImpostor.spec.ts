@@ -241,7 +241,7 @@ describe('импостор коричневого карлика', () => {
     camera.position.set(10, 0, 0)
     camera.updateMatrixWorld(true)
 
-    impostor.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+    impostor.updateView(camera)
     impostor.updateMatrixWorld(true)
     impostor.onBeforeRender(fakeRenderer, new Scene(), camera, impostor.geometry, impostor.material, null as never)
 
@@ -334,7 +334,7 @@ describe('вращение тела карлика (категория 8 в ORIE
     // --- Импостор: билборд в начале координат, смотрит на ту же камеру ---
     const impostor = new BrownDwarfImpostor(body, fakeRenderer)
 
-    impostor.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+    impostor.updateView(camera)
     impostor.updateMatrixWorld(true)
     impostor.onBeforeRender(fakeRenderer, new Scene(), camera, impostor.geometry, impostor.material, null as never)
 

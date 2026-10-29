@@ -2,6 +2,23 @@ import { describe, it, expect } from 'vitest'
 import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
 import { shippedSnapshot } from './helpers/shippedSnapshot'
 import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
+import { validCloudConfig } from './clouds/cloudFixtures'
+
+it('validates explicit clouds against actor resource links and reports actor and cloud field', () => {
+  const db = baseSnapshot()
+  db.actors.push(planet(11, 10))
+  const clouds = validCloudConfig()
+  db.renderingObjects.push({ id: 91, actorId: 11, data: { clouds } } as never)
+  db.resources.push({ id: 32, resourceType: 'diffuse', lifecycle: 'resident', path: 'cloud.png' })
+  db.actorResource.push({ id: 1, actorId: 10, resourceId: 32 })
+  expect(validateDatabase(db).errors).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ entity: 11, message: expect.stringContaining('clouds.layers[0].pattern.map') })
+    ])
+  )
+  db.actorResource.push({ id: 2, actorId: 11, resourceId: 32 })
+  expect(validateDatabase(db).errors.filter((issue) => issue.message.includes('clouds.'))).toEqual([])
+})
 
 /**
  * Минимальный валидный снимок: один анкор-актор (barycenter) без обязательных связей.
@@ -118,7 +135,7 @@ describe('validateDatabase — форма данных атмосфер', () => 
     } as Record<string, unknown>
   })
 
-  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number | 'atmosphere' = 2): DatabaseSnapshot {
+  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number = 2): DatabaseSnapshot {
     const db = baseSnapshot()
     db.categories.push({ id: 5, alias: 'atmosphere', name: 'Atmosphere' })
     db.actors.push({ ...planet(11, 10), categoryId })
@@ -126,7 +143,8 @@ describe('validateDatabase — форма данных атмосфер', () => 
     return db
   }
 
-  it.each([5, 'atmosphere'] as const)('checks missing irradiance using atmosphere category %s', (categoryId) => {
+  it('checks missing irradiance using the atmosphere category', () => {
+    const categoryId = 5
     const row = atmosphereRow()
     expect(validateDatabase(snapshotWith(row, categoryId)).errors).toEqual([])
     delete row.data.solarIrradiance
@@ -135,7 +153,8 @@ describe('validateDatabase — форма данных атмосфер', () => 
     }))
   })
 
-  it.each([5, 'atmosphere'] as const)('rejects empty atmosphere data for category %s', (categoryId) => {
+  it('rejects empty atmosphere data for its category', () => {
+    const categoryId = 5
     const row = { ...atmosphereRow(), data: {} }
     const result = validateDatabase(snapshotWith(row, categoryId))
     for (const field of ['solarIrradiance', 'rayleighDensity', 'sunAngularRadius', 'miePhaseFunctionG', 'muSMin']) {
@@ -148,12 +167,12 @@ describe('validateDatabase — форма данных атмосфер', () => 
     for (const value of [undefined, null, '0', false, NaN, Infinity]) {
       const row = atmosphereRow()
       row.data[field] = value
-      expect(validateDatabase(snapshotWith(row, 'atmosphere')).errors.some((e) =>
+      expect(validateDatabase(snapshotWith(row, 5)).errors.some((e) =>
         e.message.includes(`data.${field}`)), String(value)).toBe(true)
     }
     const row = atmosphereRow()
     row.data[field] = 0
-    expect(validateDatabase(snapshotWith(row, 'atmosphere')).errors).toEqual([])
+    expect(validateDatabase(snapshotWith(row, 5)).errors).toEqual([])
   })
 
   it('keeps radius and extent checks active without irradiance', () => {
@@ -356,21 +375,12 @@ describe('validateDatabase — внешние ключи', () => {
     expect(result.errors.some((e) => /categoryId=999/.test(e.message))).toBe(true)
   })
 
-  it('принимает строковый алиас категории', () => {
-    const db = baseSnapshot()
-    db.actors.push({ id: 11, categoryId: 'planet', parentId: 10, name: 'X', description: '', color: '#fff' })
-
-    const result = validateDatabase(db)
-
-    expect(result.errors.some((e) => /categoryId/.test(e.message))).toBe(false)
-  })
-
-  it('ловит неизвестный строковый алиас категории', () => {
+  it.each(['planet', 'wormhole', '2'])('отклоняет строковый categoryId=%s из нетипизированных данных', (categoryId) => {
     const db = baseSnapshot()
     db.actors.push({
       id: 11,
-      // намеренно битое значение: валидатор обязан поймать несуществующую категорию
-      categoryId: 'wormhole' as unknown as number,
+      // Как при загрузке старого JSON: типы TS не защищают runtime-вход.
+      categoryId: categoryId as unknown as number,
       parentId: 10,
       name: 'X',
       description: '',
@@ -379,7 +389,10 @@ describe('validateDatabase — внешние ключи', () => {
 
     const result = validateDatabase(db)
 
-    expect(result.errors.some((e) => /not a known category alias/.test(e.message))).toBe(true)
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: 11, message: expect.stringMatching(/categoryId.*numeric/)
+    }))
   })
 
   it('ловит висячий parentId', () => {
@@ -601,10 +614,7 @@ describe('validateDatabase — режимы позиционирования', (
   /** Снимок с полным набором категорий, включая статическую туманность */
   function positioningSnapshot(): DatabaseSnapshot {
     const db = baseSnapshot()
-    db.categories.push(
-      { id: 4, alias: 'atmosphere', name: 'Atmosphere' },
-      { id: 5, alias: 'nebula', name: 'Nebula' }
-    )
+    db.categories.push({ id: 4, alias: 'atmosphere', name: 'Atmosphere' }, { id: 5, alias: 'nebula', name: 'Nebula' })
     // планета (кеплерова), туманность (статическая), атмосфера (примонтированная)
     db.actors.push(
       planet(11, 10),
@@ -887,7 +897,14 @@ describe('validateDatabase — лунки колец', () => {
   function ringSnapshot(m: Record<string, unknown>): DatabaseSnapshot {
     const db = baseSnapshot()
     db.categories.push({ id: 6, alias: 'ring', name: 'Ring' })
-    db.actors.push(planet(11, 10), { id: 12, categoryId: 6, parentId: 11, name: 'Ring', description: '', color: '#fff' })
+    db.actors.push(planet(11, 10), {
+      id: 12,
+      categoryId: 6,
+      parentId: 11,
+      name: 'Ring',
+      description: '',
+      color: '#fff'
+    })
     db.renderingObjects.push({ id: 1, actorId: 12, data: { innerRadius: 75000, outerRadius: 126000, moonlets: [m] } })
     return db
   }
@@ -902,7 +919,9 @@ describe('validateDatabase — лунки колец', () => {
     const errors = validateDatabase(ringSnapshot({ ...moonlet, radiusKm: 130000 })).errors
 
     expect(
-      errors.some((e) => e.collection === 'renderingObjects' && e.entity === 1 && e.message.includes('moonlets[0].radiusKm'))
+      errors.some(
+        (e) => e.collection === 'renderingObjects' && e.entity === 1 && e.message.includes('moonlets[0].radiusKm')
+      )
     ).toBe(true)
   })
 })
@@ -1020,5 +1039,45 @@ describe('validateDatabase — реальный database (базлайн)', () =
     }
 
     expect(result.errors).toHaveLength(0)
+  })
+})
+
+describe('validateDatabase — rendering JSON boundary', () => {
+  it.each([null, true, false, 1, 0, 'text', '', [], [1, 2]].map((data) => ({ data })))(
+    'reports non-object rendering data $data without throwing', ({ data }) => {
+      const db = baseSnapshot()
+      // Valid JSON can come from the editor without satisfying the TS model.
+      db.renderingObjects.push({ id: 1, actorId: 10, data: data as never })
+
+      const result = validateDatabase(db)
+
+      expect(result.ok).toBe(false)
+      expect(result.errors).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'renderingObjects', entity: 1, message: expect.stringMatching(/data.*object/i) })
+      ]))
+    }
+  )
+
+  it('accepts an object containing nested arrays, booleans and null', () => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: { values: [0, false, null, { value: 'text' }] } })
+
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+
+  it.each([
+    { text: '{"emission":1e400}', path: 'data.emission' },
+    { text: '{"surface":{"layers":[{"strength":-1e400}]}}', path: 'data.surface.layers[0].strength' }
+  ])('rejects overflowing JSON numbers at $path', ({ text, path }) => {
+    const db = baseSnapshot()
+    db.renderingObjects.push({ id: 1, actorId: 10, data: JSON.parse(text) })
+
+    const result = validateDatabase(db)
+
+    expect(result.ok).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'renderingObjects', entity: 1,
+        message: expect.stringContaining(`${path} must be a finite number`) })
+    ]))
   })
 })

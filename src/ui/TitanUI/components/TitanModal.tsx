@@ -5,14 +5,27 @@ import TitanDivider from '@titanui/components/TitanDivider'
 import { isEditable, openModals, registerModal, unregisterModal, topModalElement } from '@titanui/components/modalStack'
 
 const FOCUSABLE: string =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  'button, [href], input, select, textarea, [tabindex], details > summary:first-of-type'
 
-/** Элементы для обхода Tab — без скрытых через display/visibility (скрытый input файла плеера) */
+/** Tab stops must be enabled and visible through their ancestors, including closed details. */
 function focusablesIn(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((element: HTMLElement): boolean => {
+    if (element.tabIndex < 0 || element.matches(':disabled')) return false
+
     const style: CSSStyleDeclaration = getComputedStyle(element)
 
-    return style.display !== 'none' && style.visibility !== 'hidden'
+    if (style.visibility === 'hidden' || style.visibility === 'collapse') return false
+
+    for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+      if (getComputedStyle(current).display === 'none') return false
+
+      const parent: HTMLElement | null = current.parentElement
+
+      if (parent instanceof HTMLDetailsElement && !parent.open && current !== parent.querySelector(':scope > summary')) return false
+      if (current === root) break
+    }
+
+    return true
   })
 }
 

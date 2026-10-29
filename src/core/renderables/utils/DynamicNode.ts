@@ -3,7 +3,6 @@ import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
 import { Actor } from '@/core/models/Actor'
-import { AllowedCategory } from '@/core/models/types'
 import { OrbitLine } from '@/core/renderables/utils/OrbitLine'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { OrientationModel } from '@/core/libs/OrientationModel'
@@ -26,6 +25,25 @@ import { UpdateContext } from '@/core/UpdateContext'
 const ORIENTED_CATEGORIES: Set<number> = new Set([3, 4, 8, 10])
 
 class DynamicNode extends Group implements Acceptable<IObject3DVisitor>, ShouldRenderOrbitLine {
+  private releaseCloudRegistration: (() => void) | null = null
+  private cloudReceivers: Array<() => void> = []
+  public setCloudRegistration(release: () => void): void {
+    this.releaseCloudRegistration?.()
+    this.releaseCloudRegistration = release
+  }
+  public setCloudReceivers(releases: Array<() => void>): void {
+    this.clearCloudReceivers()
+    this.cloudReceivers = releases
+  }
+  public clearCloudReceivers(): void {
+    for (const release of this.cloudReceivers) release()
+    this.cloudReceivers = []
+  }
+  public dispose(): void {
+    this.clearCloudReceivers()
+    this.releaseCloudRegistration?.()
+    this.releaseCloudRegistration = null
+  }
   public model: Actor
   public renderable: RenderableObject3D | null = null
   /** Экваториальная рамка: наклонена по полюсу тела, но не вращается — сюда цепляются кольца и атмосферы */
@@ -55,11 +73,9 @@ class DynamicNode extends Group implements Acceptable<IObject3DVisitor>, ShouldR
   }
 
   private get isOriented(): boolean {
-    // categoryId в схеме — `number | AllowedCategory`, в наборе только числовые id;
-    // алиас-строка или отсутствие категории корректно дают false
-    const categoryId: number | AllowedCategory | undefined = this.model.getAttribute('categoryId')
+    const categoryId: number | undefined = this.model.getAttribute('categoryId')
 
-    return typeof categoryId === 'number' && ORIENTED_CATEGORIES.has(categoryId)
+    return categoryId !== undefined && ORIENTED_CATEGORIES.has(categoryId)
   }
 
   public updateObject(ctx: UpdateContext): void {

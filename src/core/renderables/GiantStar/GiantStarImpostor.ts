@@ -3,6 +3,7 @@ import {
   Matrix4,
   Mesh,
   NormalBlending,
+  PerspectiveCamera,
   PlaneGeometry,
   ShaderMaterial,
   UniformsUtils,
@@ -11,7 +12,6 @@ import {
 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { frameHeightAt, GIANT_STAR_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
-import { UpdateContext } from '@/core/UpdateContext'
 import { GiantStar } from '@/core/renderables/GiantStar/GiantStar'
 import { GiantStarShell } from '@/core/renderables/GiantStar/GiantStarShell'
 import { GiantStarImpostorShaderTemplate } from '@/core/renderables/GiantStar/GiantStarImpostorShaderTemplate'
@@ -84,7 +84,7 @@ class GiantStarImpostor extends Mesh {
 
     // Нормаль псевдосферы живёт в системе БИЛБОРДА, а не камеры: матрица
     // камеры крутила бы узор при панорамировании. Считается в onBeforeRender —
-    // lookAt из updateObject попадает в matrixWorld уже внутри рендера
+    // lookAt из updateView попадает в matrixWorld уже внутри рендера
     this.onBeforeRender = (): void => {
       this.bodyRotation.extractRotation(this.body.matrixWorld).invert()
       this.billboardRotation.extractRotation(this.matrixWorld)
@@ -93,8 +93,8 @@ class GiantStarImpostor extends Mesh {
     }
   }
 
-  public updateObject(ctx: UpdateContext): void {
-    const cameraPosition: Vector3 = ctx.camera.getWorldPosition(this.cameraPosition)
+  public updateView(camera: PerspectiveCamera): void {
+    const cameraPosition: Vector3 = camera.getWorldPosition(this.cameraPosition)
 
     this.lookAt(cameraPosition)
 
@@ -102,7 +102,7 @@ class GiantStarImpostor extends Mesh {
     const distance: number = this.getWorldPosition(this.worldPosition).distanceTo(cameraPosition)
     const viewportHeight: number = this.renderer.domElement.height
     const worldSize: number =
-      ((GIANT_STAR_IMPOSTOR_PIXELS * this.quadScale) / viewportHeight) * frameHeightAt(distance, ctx.camera.fov)
+      ((GIANT_STAR_IMPOSTOR_PIXELS * this.quadScale) / viewportHeight) * frameHeightAt(distance, camera.fov)
 
     this.scale.setScalar(worldSize)
   }

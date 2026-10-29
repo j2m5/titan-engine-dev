@@ -9,6 +9,7 @@ import DataEditorModal from '@/ui/editor/DataEditorModal'
 import { renderingObjectsSpec } from '@/ui/editor/forms/namedSpecs'
 import { renderingDataTemplates } from '@/ui/editor/forms/dataTemplates'
 import { createAtmosphereUniforms, type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { actorsSpec } from '@/ui/editor/forms/namedSpecs'
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean
@@ -24,6 +25,17 @@ let editor: UseEditorDraft
 
 /** Пустая база валидна и генерируется — для проверки транспорта содержимое не нужно */
 const EMPTY_DATABASE = new Map<string, unknown[]>()
+
+/** Старый JSON ещё может содержать alias вместо числового внешнего ключа. */
+const LEGACY_ACTOR_DATABASE = new Map<string, unknown[]>([
+  ['categories', [{ id: 4, alias: 'planet', name: 'Planet' }]],
+  ['actors', [{ id: 10, categoryId: 'planet', parentId: null, name: 'Legacy world', description: '', color: '#fff' }]]
+])
+
+function LegacyActorEditor() {
+  editor = useEditorDraft(LEGACY_ACTOR_DATABASE, [])
+  return <TablePanel spec={actorsSpec} editor={editor} />
+}
 
 function Probe(): null {
   editor = useEditorDraft(EMPTY_DATABASE, [])
@@ -45,6 +57,33 @@ afterEach(() => {
 })
 
 describe('Редактор данных: сохранение', () => {
+  it('отклоняет старый alias и сохраняет числовой categoryId после выбора категории в форме', async () => {
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    act(() => root.render(<LegacyActorEditor />))
+    expect(editor.validation.ok).toBe(false)
+
+    await act(async () => editor.save())
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.saveStatus).toContain('Cannot save:')
+
+    act(() => container.querySelector<HTMLButtonElement>('.titan-editor-row')!.click())
+    const select = Array.from(container.querySelectorAll('label'))
+      .find((label) => label.querySelector('.titan-field-label')?.textContent === 'Category')!
+      .querySelector('select')!
+    act(() => {
+      select.value = '4'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(editor.draft.actors[0].categoryId).toBe(4)
+    expect(editor.validation.ok).toBe(true)
+
+    await act(async () => editor.save())
+    expect(saveSpy).toHaveBeenCalledTimes(1)
+    const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+    expect(files.find((file) => file.path.endsWith('/actors.ts'))!.content).toContain('categoryId: 4')
+    expect(editor.saveStatus).toContain('Saved')
+  })
+
   it('двойной клик до перерисовки — один набор файлов уходит на сервер', async () => {
     let finish: (result: SaveResult) => void = () => {}
 
@@ -82,6 +121,42 @@ describe('Редактор данных: сохранение', () => {
 
     expect(saveSpy).toHaveBeenCalledTimes(2)
   })
+})
+
+it.each([
+  { table: 'Rotation', field: 'Direction', key: 'direction', selected: '1', file: 'rotationObjects.ts' },
+  { table: 'Placements', field: 'Lagrange point of parent orbit (empty = XYZ)', key: 'lagrange', selected: '4', file: 'placements.ts' }
+])('clearing optional $key omits it from generated database rows', async ({ table, field, key, selected, file }) => {
+  saveSpy.mockResolvedValue({ ok: true, written: [] })
+  act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
+  const tab = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
+    .find((button) => button.textContent?.startsWith(table))!
+  act(() => tab.click())
+  act(() => container.querySelector<HTMLButtonElement>('.titan-editor-row')!.click())
+  const select = Array.from(container.querySelectorAll('label'))
+    .find((label) => label.querySelector('.titan-field-label')?.textContent === field)!
+    .querySelector('select')!
+  expect(select.value).toBe(selected)
+
+  act(() => {
+    select.value = ''
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  const saveButton = Array.from(container.querySelectorAll('button'))
+    .find((button) => button.textContent === 'Save to generated')!
+  expect(select.value).toBe('')
+  expect(saveButton.disabled).toBe(false)
+  await act(async () => saveButton.click())
+
+  const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+  const content = files.find((entry) => entry.path.endsWith(`/${file}`))!.content
+  const editedRow = content.split('\n').find((line) => /^ {2}\{ id: 1,/.test(line))!
+  expect(editedRow).toBeDefined()
+  expect(editedRow).not.toContain(`${key}:`)
+  // Clearing optional enums must not erase required nullable foreign keys.
+  const actorContent = files.find((entry) => entry.path.endsWith('/actors.ts'))!.content
+  expect(actorContent).toContain('parentId: null')
 })
 
 const JSON_DATABASE = new Map<string, unknown[]>([
@@ -257,3 +332,25 @@ it('blocks saving an atmosphere without irradiance, then exports a config usable
   expect(uniforms.u_solar_irradiance.value.toArray()).toEqual(initial.solarIrradiance)
   expect(uniforms.u_sun_angular_radius.value).toBe(initial.sunAngularRadius)
 })
+it.each(['1', 'true', '"text"', '[]', 'null', '{"emission":1e400}', '{"nested":[-1e400]}'])(
+  'the real editor keeps invalid rendering data %s editable and blocks saving it', async (text) => {
+    act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
+    const rendering = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
+      .find((button) => button.textContent?.startsWith('Rendering'))!
+    act(() => rendering.click())
+    act(() => container.querySelector<HTMLElement>('.titan-list-item')!.click())
+    const original = container.querySelector('textarea')!.value
+    const saveButton = (): HTMLButtonElement => Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save to generated')!
+
+    act(() => inputJson(text))
+
+    expect(container.querySelector('textarea')!.value).toBe(text)
+    expect(saveButton().disabled).toBe(true)
+    await act(async () => saveButton().click())
+    expect(saveSpy).not.toHaveBeenCalled()
+
+    act(() => inputJson(original))
+    expect(saveButton().disabled).toBe(false)
+  }
+)

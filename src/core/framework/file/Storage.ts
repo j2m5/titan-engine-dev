@@ -4,11 +4,7 @@ import { S3FileSystemDriver } from '@/core/framework/file/S3FileSystemDriver'
 import { LocalFileSystemDriver } from '@/core/framework/file/LocalFileSystemDriver'
 
 class Storage {
-  private static driver: FileSystemDrivers = config('driver')
-
-  public static disk(driver: FileSystemDrivers): Storage {
-    return (this.driver = driver)
-  }
+  private static readonly driver: FileSystemDrivers = config('driver')
 
   public static url(filename: string): string {
     switch (this.driver) {

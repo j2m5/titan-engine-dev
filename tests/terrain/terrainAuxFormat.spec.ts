@@ -10,6 +10,8 @@ import {
   type TerrainAuxPayload
 } from '@/core/terrain/terrainAuxFormat'
 import { TERRAIN_MODEL_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { encodeTerrainAux } from '../../scripts/lib/terrainAuxEncode'
 
@@ -38,6 +40,15 @@ function payload(withPyramid: boolean = true): TerrainAuxPayload {
     nodeMaxHeightMetersPyramid: withPyramid ? new Float32Array([10, 20, 30, 40]) : null,
     nodeErrorMetersPyramid: withPyramid ? new Float32Array([1, 2, 3, 4]) : null
   }
+}
+
+/** Фикстура принятия кеша: настоящая модель; payload выше проверяет только бинарный round-trip. */
+function computedPayload(source: HeightMapData): TerrainAuxPayload {
+  return new TerrainHeightField(source, 1, { ...MIDBAND_DEFAULTS, midbandStrength: 0 }).exportAux()
+}
+
+function parsedPayload(source: HeightMapData, aux: TerrainAuxPayload = computedPayload(source)) {
+  return parseTerrainAux(toArrayBuffer(encodeTerrainAux(aux, source)))
 }
 
 describe('Формат компаньона карты высот: round-trip энкодер ↔ парсер', () => {
@@ -82,7 +93,7 @@ describe('Формат компаньона карты высот: round-trip э
     expect(currentTerrainAuxCalibration().quadtreeMaxLevel).toBe(TERRAIN_MODEL_LEVEL)
 
     const source = map()
-    const parsed = parseTerrainAux(toArrayBuffer(encodeTerrainAux(payload(), source)))
+    const parsed = parsedPayload(source)
     expect(parsed.calibration.quadtreeMaxLevel).toBe(TERRAIN_MODEL_LEVEL)
     // компаньон, посчитанный на текущей калибровке, обязан быть принят —
     // расхождения по калибровке нет (это и есть «существующие компаньоны
@@ -184,13 +195,13 @@ describe('heightMapFingerprint: отпечаток карты', () => {
 describe('terrainAuxMismatch: страж протухания', () => {
   it('свой компаньон своей карты — расхождения нет', () => {
     const source = map()
-    const parsed = parseTerrainAux(toArrayBuffer(encodeTerrainAux(payload(), source)))
+    const parsed = parsedPayload(source)
 
     expect(terrainAuxMismatch(parsed, source)).toBeNull()
   })
 
   it('компаньон от другой версии карты — расхождение по отпечатку', () => {
-    const parsed = parseTerrainAux(toArrayBuffer(encodeTerrainAux(payload(), map())))
+    const parsed = parsedPayload(map())
     const rebuilt = map()
     rebuilt.data[3] = 1
 
@@ -198,7 +209,8 @@ describe('terrainAuxMismatch: страж протухания', () => {
   })
 
   it('компаньон под другую калибровку — расхождение по калибровке', () => {
-    const encoded = encodeTerrainAux(payload(), map())
+    const source = map()
+    const encoded = encodeTerrainAux(computedPayload(source), source)
     // смещение 28 — clearanceGridBaseSegments (см. раскладку в terrainAuxFormat)
     encoded.writeUInt32LE(777, 28)
     const parsed = parseTerrainAux(toArrayBuffer(encoded))
@@ -207,11 +219,56 @@ describe('terrainAuxMismatch: страж протухания', () => {
   })
 
   it('компаньон под другую модель провиса — расхождение, даже когда карта та же', () => {
-    const encoded = encodeTerrainAux(payload(), map())
+    const source = map()
+    const encoded = encodeTerrainAux(computedPayload(source), source)
     // смещение 46 — sagModelVersion (см. раскладку в terrainAuxFormat)
     encoded.writeUInt16LE(999, 46)
     const parsed = parseTerrainAux(toArrayBuffer(encoded))
 
     expect(terrainAuxMismatch(parsed, map())).toMatch(/калибров/i)
+  })
+})
+
+describe('terrainAuxMismatch: форма данных должна соответствовать карте и текущей модели', () => {
+  const source = map()
+  const valid = computedPayload(source)
+
+  it.each([
+    ['пустая таблица ошибок', { levelErrorMeters: new Float64Array(0) }],
+    ['короткая таблица ошибок', { levelErrorMeters: valid.levelErrorMeters.slice(1) }],
+    ['лишний уровень ошибок', { levelErrorMeters: new Float64Array(valid.levelErrorMeters.length + 1) }],
+    ['нулевая ширина сетки', { blocksX: 0, clearanceGrid: new Float32Array(0) }],
+    ['другая ширина сетки', { blocksX: 5, clearanceGrid: new Float32Array(10) }],
+    ['нулевая высота сетки', { blocksY: 0, clearanceGrid: new Float32Array(0) }],
+    ['другая высота сетки', { blocksY: 3, clearanceGrid: new Float32Array(12) }],
+    ['нет пирамид обычной карты', { nodeMaxHeightMetersPyramid: null, nodeErrorMetersPyramid: null }],
+    ['короткие пирамиды', { nodeMaxHeightMetersPyramid: new Float32Array(4), nodeErrorMetersPyramid: new Float32Array(4) }]
+  ])('%s: контейнер и отпечаток валидны, но кеш отвергается', (_name, changed) => {
+    // Реальный путь загрузки: encode -> parse сохраняет длину контейнера,
+    // отпечаток и калибровку; именно принятие кеша обязано заметить чужую форму.
+    const parsed = parsedPayload(source, { ...valid, ...changed })
+    expect(parsed.fingerprint).toEqual(heightMapFingerprint(source))
+    expect(parsed.calibration).toEqual(currentTerrainAuxCalibration())
+    expect(terrainAuxMismatch(parsed, source)).not.toBeNull()
+  })
+
+  it('неполный массив сетки и одна отсутствующая пирамида не принимаются', () => {
+    const parsed = parsedPayload(source, valid)
+    expect(terrainAuxMismatch({ ...parsed, clearanceGrid: new Float32Array(0) }, source)).not.toBeNull()
+    expect(terrainAuxMismatch({ ...parsed, nodeMaxHeightMetersPyramid: null }, source)).not.toBeNull()
+    expect(terrainAuxMismatch({ ...parsed, nodeErrorMetersPyramid: null }, source)).not.toBeNull()
+    expect(terrainAuxMismatch({ ...parsed, nodeErrorMetersPyramid: new Float32Array(4) }, source)).not.toBeNull()
+  })
+
+  it('константная карта принимает модель без пирамид, а лишние пирамиды отвергает', () => {
+    const constant = { ...source, minMeters: 123, maxMeters: 123 }
+    const own = computedPayload(constant)
+    expect(terrainAuxMismatch(parsedPayload(constant, own), constant)).toBeNull()
+    const withPyramids = {
+      ...own,
+      nodeMaxHeightMetersPyramid: valid.nodeMaxHeightMetersPyramid,
+      nodeErrorMetersPyramid: valid.nodeErrorMetersPyramid
+    }
+    expect(terrainAuxMismatch(parsedPayload(constant, withPyramids), constant)).not.toBeNull()
   })
 })

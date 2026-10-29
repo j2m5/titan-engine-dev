@@ -41,10 +41,10 @@ export const three: ThreeConfig = {
     fov: 50,
     aspect: window.innerWidth / window.innerHeight,
     near: 0.000001,
-    // Куб-прокси объёмной туманности клипится far по глубине вида: нужно
-    // дистанция камеры + size·√3 < far. Лог-глубина: цена шага far 2000 → 5000 а.е.
-    // около 5 % разрешения буфера
-    far: fromAstronomicalUnits(5000)
+    // Прокси NebulaVolume — куб [-2,2]: требуется дистанция + 2·size·√3 < far.
+    // Crab при отъезде на 30 % занимает до 5471 а.е. по глубине в любом ракурсе.
+    // Переход 5000 → 6000 а.е. увеличивает шаг лог-глубины примерно на 0,92 %.
+    far: fromAstronomicalUnits(6000)
   },
   renderer: {
     logarithmicDepthBuffer: true,

@@ -7,22 +7,20 @@ import {
   EffectComposer,
   EffectPass,
   Pass,
-  RenderPass,
   ToneMappingEffect,
   ToneMappingMode
 } from 'postprocessing'
 import { AtmosphereEffect } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
+import { captureAtmosphereFrame } from './effects/atmosphere/atmosphereFrame'
+import { atmosphereSkyVisibility, skyAtmosphereUniforms } from '@/core/sky/atmosphereSkyVisibility'
+import { createSceneEndpointPasses } from './sceneEndpointPasses'
+import type { LensFrontSorter } from './passes/LensFrontSorter'
+import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
+import { CloudBlendPass } from './clouds/CloudBlendPass'
+import { SceneCloudComposition, CloudEndpointCapturePass } from './clouds/SceneCloudComposition'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { LensRegistry } from '@/core/services/LensRegistry'
-import { createGravitationalLensPass } from '@/core/graphic/effects/lens/GravitationalLensEffect'
-import { SkyLayer } from '@/core/graphic/passes/SkyLayer'
-import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
-import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
-import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
-import { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
-import { LensFrontSplitPass } from '@/core/graphic/passes/LensFrontSplitPass'
-import { LensFrontPass } from '@/core/graphic/passes/LensFrontPass'
 import { createAtmosphereEffectPasses, createTerminalEffectPasses } from '@/core/graphic/passes/TerminalEffectPasses'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
@@ -30,6 +28,7 @@ import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffec
 import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffect'
 import { config } from '@/core/framework/config'
 import { screenshotSize, type ScreenshotSize } from '@/core/graphic/screenshot'
+import type { Settings } from '@/core/ports/Settings'
 
 // Опции эффектов вынесены в константы под контракт-тесты
 // (tests/graphic/PostprocessingContract.spec.ts)
@@ -44,10 +43,11 @@ import { screenshotSize, type ScreenshotSize } from '@/core/graphic/screenshot'
  * radius — вес mix(резкий уровень, размытый нижний), 0..1; выше 1 это
  * экстраполяция с отрицательным вкладом. intensity — сила.
  * Ручки связаны: вклад самого широкого мипа равен radius^(levels − 1).
- * Шесть уровней оставляют мягкую кромку без почти постоянной засветки кадра
- * от самых грубых мипов. Малая intensity сохраняет детали крупных источников.
- * Настройки общие для всех звёзд, дисков ЧД и остальных HDR-источников;
- * порог не участвует в настройке ореола — это часть bloom-guard.
+ *
+ * Сдержанное фотографичное свечение: ограничиваем охват мипов, чтобы яркий
+ * источник сохранял мягкую кромку, а гало не засвечивало весь кадр.
+ * Порог остаётся частью bloom-guard. Настройка общая для звёзд, диска ЧД,
+ * туманностей и глинта океана.
  *
  * ADD корректно добавляет рассеянный свет в HDR. SCREEN при dst > 1 и
  * слабом bloom мог ЗАТЕМНЯТЬ поверхность: src - min(dst * src, 1) < 0.
@@ -55,12 +55,12 @@ import { screenshotSize, type ScreenshotSize } from '@/core/graphic/screenshot'
  */
 export const BLOOM_OPTIONS = {
   radius: 0.8,
-  levels: 6,
+  levels: 7,
   blendFunction: BlendFunction.ADD,
   mipmapBlur: true,
   luminanceThreshold: 1,
   luminanceSmoothing: 0.0025,
-  intensity: 0.3
+  intensity: 0.6
 } as const
 
 // A/B-сравнение кривой: заменить mode на ToneMappingMode.ACES_FILMIC
@@ -99,15 +99,6 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
   return createTerminalEffectPasses(camera, ...createColorEffects())
 }
 
-/** Separate atmosphere/HDR/LDR passes with single-sample color between them. */
-function createAtmospherePasses(
-  camera: PerspectiveCamera,
-  registry: AtmosphereRegistry,
-  debugView: number
-): readonly [EffectPass, EffectPass, EffectPass] {
-  return createAtmosphereEffectPasses(camera, new AtmosphereEffect(camera, registry, { debugView }), ...createColorEffects())
-}
-
 function createColorEffects(): readonly [readonly Effect[], readonly Effect[]] {
   const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
 
@@ -132,8 +123,8 @@ function createColorEffects(): readonly [readonly Effect[], readonly Effect[]] {
   })
 
   const chromaticAberrationEffect: ChromaticAberrationEffect = new ChromaticAberrationEffect({
-    blendFunction: BlendFunction.SCREEN,
-    offset: new Vector2(0.0005, 0.0005),
+    // Нейтральная оптика: звёзды и контуры сохраняют совпадающие цветовые каналы.
+    offset: new Vector2(0, 0),
     radialModulation: true,
     modulationOffset: 0.4
   })
@@ -177,6 +168,34 @@ export function readAtmosphereDebugView(search: string = location.search): numbe
 
 class Postprocessing {
   public composer: EffectComposer | null = null
+  private prefix: readonly Pass[] = []
+  private atmosphere: AtmosphereEffect | null = null
+  private composition: SceneCloudComposition | null = null
+  private blend = new CloudBlendPass()
+  private serial = 0
+  private contextLost = false
+  private restoreAfterLoss = false
+  private readonly onContextLost = (event: Event): void => {
+    event.preventDefault()
+    this.restoreAfterLoss ||= this.composer !== null
+    this.contextLost = true
+    this.cloudRuntime?.setContextLost(true)
+    this.blend.setNear(null, 0)
+    this.atmosphere?.setCloudOverlay(null)
+    this.releaseComposers()
+  }
+  private readonly onContextRestored = (): void => {
+    if (!this.contextLost) return
+    const initialized = this.restoreAfterLoss
+    this.restoreAfterLoss = false
+    this.contextLost = false
+    this.cloudRuntime?.setContextLost(false)
+    if (initialized) {
+      this.initialize()
+      const size = this.renderer.getSize(new Vector2())
+      this.setSize(size.x, size.y)
+    }
+  }
   private lensFront: LensFrontSorter | null = null
 
   public constructor(
@@ -185,8 +204,17 @@ class Postprocessing {
     private readonly camera: PerspectiveCamera,
     private readonly atmosphereRegistry: AtmosphereRegistry,
     private readonly depthVolumeRegistry: DepthVolumeRegistry,
-    private readonly lensRegistry: LensRegistry = new LensRegistry()
-  ) {}
+    private readonly lensRegistry: LensRegistry = new LensRegistry(),
+    public readonly cloudRuntime?: SceneCloudRuntime,
+    private readonly settings?: Pick<Settings, 'showClouds' | 'cloudQuality'>
+  ) {
+    this.cloudRuntime?.bindRenderer(this.renderer)
+    this.attachContextListeners()
+  }
+  private attachContextListeners(): void {
+    this.renderer.domElement?.addEventListener?.('webglcontextlost', this.onContextLost)
+    this.renderer.domElement?.addEventListener?.('webglcontextrestored', this.onContextRestored)
+  }
 
   /**
    * Список пассов в порядке рендера. Вынесен из `initialize()`: composer
@@ -214,29 +242,35 @@ class Postprocessing {
    * уже затуманенный кадр.
    */
   public buildPasses(): readonly Pass[] {
-    const [atmospherePass, hdrPass, ldrPass] = createAtmospherePasses(
-      this.camera, this.atmosphereRegistry, readAtmosphereDebugView()
+    const atmosphereDebugView = readAtmosphereDebugView()
+    const atmosphere = new AtmosphereEffect(this.camera, this.atmosphereRegistry, { debugView: atmosphereDebugView })
+    const [atmospherePass, hdrPass, ldrPass] = createAtmosphereEffectPasses(
+      this.camera, atmosphere, ...createColorEffects(), () => !this.cloudRuntime || !this.blend.enabled
     )
-    const lensFront = new LensFrontSorter(this.scene, this.camera, this.lensRegistry, this.depthVolumeRegistry)
-    this.lensFront = lensFront
-    // Слой видимого неба: рисует BlackHolePass, читает дальнее поле линзы
-    const skyLayer = new SkyLayer()
-
-    return [
-      new LensFrontSplitPass(lensFront),
-      new RenderPass(this.scene, this.camera),
-      new DepthVolumePass(this.camera, this.depthVolumeRegistry, lensFront),
-      new BlackHolePass(this.camera, this.lensRegistry, skyLayer),
-      createGravitationalLensPass(this.camera, this.lensRegistry, skyLayer),
-      new LensFrontPass(this.scene, this.camera, lensFront),
-      new OverlayPass(this.scene, this.camera),
-      atmospherePass,
-      hdrPass,
-      ldrPass
-    ]
+    const endpoint = createSceneEndpointPasses({
+      scene: this.scene,
+      camera: this.camera,
+      atmosphereRegistry: this.atmosphereRegistry,
+      depthVolumeRegistry: this.depthVolumeRegistry,
+      lensRegistry: this.lensRegistry,
+      atmosphereDebugView
+    }, { effect: atmosphere, pass: atmospherePass })
+    this.lensFront = endpoint.lensFront
+    this.prefix = endpoint.passes
+    this.atmosphere = endpoint.atmosphere
+    return [...endpoint.passes, ...(this.cloudRuntime ? [this.blend] : []), hdrPass, ldrPass]
   }
 
   public initialize(): void {
+    this.attachContextListeners()
+    this.contextLost = this.renderer.getContext?.().isContextLost?.() ?? this.contextLost
+    this.cloudRuntime?.setContextLost(this.contextLost)
+    if (this.contextLost) {
+      this.restoreAfterLoss = true
+      return
+    }
+    if (this.composer) return
+    this.blend = new CloudBlendPass()
     this.composer = new EffectComposer(this.renderer, {
       depthBuffer: true,
       frameBufferType: HalfFloatType,
@@ -244,13 +278,74 @@ class Postprocessing {
     })
 
     for (const pass of this.buildPasses()) this.composer.addPass(pass)
+    if (this.cloudRuntime)
+      this.composition = new SceneCloudComposition(this.renderer, this.scene, this.camera, this.cloudRuntime, () => {
+        const endpoint = createSceneEndpointPasses({
+          scene: this.scene,
+          camera: this.camera,
+          atmosphereRegistry: this.atmosphereRegistry,
+          depthVolumeRegistry: this.depthVolumeRegistry,
+          lensRegistry: this.lensRegistry,
+          atmosphereDebugView: readAtmosphereDebugView()
+        })
+        const composer = new EffectComposer(this.renderer, {
+          depthBuffer: true,
+          frameBufferType: HalfFloatType,
+          multisampling: 8
+        })
+        composer.autoRenderToScreen = false
+        const capture = new CloudEndpointCapturePass()
+        for (const pass of [...endpoint.passes, capture]) {
+          pass.renderToScreen = false
+          composer.addPass(pass)
+        }
+        return { composer, atmosphere: endpoint.atmosphere, capture, lensFront: endpoint.lensFront }
+      })
   }
 
   public render(delta?: number): void {
+    if (!this.composer || this.contextLost) return
+    if (this.settings) this.cloudRuntime?.setOptions(this.settings.showClouds, this.settings.cloudQuality)
+    this.scene.updateMatrixWorld(true)
+    this.camera.updateMatrixWorld(true)
+    const snapshot = captureAtmosphereFrame(this.camera, this.atmosphereRegistry, ++this.serial)
+    const skyVisibility = skyAtmosphereUniforms.uSkyAtmosphereVisibility
+    const previousVisibility = skyVisibility.value
+    skyVisibility.value = atmosphereSkyVisibility(snapshot)
     try {
-      this.composer?.render(delta)
+      this.atmosphere?.setFrame(snapshot)
+      this.atmosphere?.setCloudOverlay(null)
+      const lensActive = this.lensRegistry.entries().some((entry) => {
+        let visible = true
+        entry.object.traverseAncestors((parent) => {
+          if (!parent.visible) visible = false
+        })
+        return visible && entry.object.visible
+      })
+      const plan = this.cloudRuntime?.beginFrame(
+        this.camera,
+        this.renderer.getDrawingBufferSize(new Vector2()),
+        this.serial,
+        delta ?? 0,
+        snapshot,
+        lensActive,
+        readAtmosphereDebugView()
+      )
+      const blendReady = plan ? this.blend.prepare(this.renderer, this.composer.inputBuffer) : false
+      if (!plan) this.composition?.cancelPreparation()
+      const near = plan
+        ? blendReady
+          ? this.composition?.prepare(plan, snapshot)
+          : this.cloudRuntime?.deferVolume(plan)
+        : null
+      for (const pass of this.prefix) pass.enabled = !near || near.weight < 1
+      this.blend.setNear(near?.texture ?? null, near?.weight ?? 0)
+      this.composer.render(delta)
+      this.cloudRuntime?.recordPasses({ farRenders: !near || near.weight < 1 ? 1 : 0, finalRenders: 1 })
     } finally {
-      // Earlier passes can fail before LensFrontPass gets to restore the split.
+      skyVisibility.value = previousVisibility
+      this.blend.setNear(null, 0)
+      this.atmosphere?.setFrame(null)
       this.lensFront?.restore()
     }
   }
@@ -262,6 +357,12 @@ class Postprocessing {
    */
   public setSize(width: number, height: number): void {
     this.composer?.setSize(width, height)
+    this.composition?.setSize(width, height)
+  }
+  public invalidateCloudHistory(): void {
+    this.blend.setNear(null, 0)
+    this.atmosphere?.setCloudOverlay(null)
+    this.cloudRuntime?.resetHistory()
   }
 
   /**
@@ -293,29 +394,56 @@ class Postprocessing {
     const canvas: HTMLCanvasElement = this.renderer.domElement
     let blob: Promise<Blob | null>
 
-    this.renderer.setPixelRatio(1)
-
     try {
+      this.invalidateCloudHistory()
+      this.renderer.setPixelRatio(1)
       this.composer?.setSize(size.width, size.height, false)
-      this.render()
+      this.composition?.setSize(size.width, size.height)
+      this.render(0)
       blob = new Promise((resolve: (value: Blob | null) => void): void => canvas.toBlob(resolve, 'image/png'))
     } finally {
       this.renderer.setSize(cssSize.width, cssSize.height, false)
       this.renderer.setPixelRatio(pixelRatio)
       this.composer?.setSize(cssSize.width, cssSize.height, false)
+      this.composition?.setSize(cssSize.width, cssSize.height)
+      this.invalidateCloudHistory()
     }
 
     return blob
   }
 
-  public dispose(): void {
+  private releaseComposers(): void {
+    const target = this.renderer.getRenderTarget?.()
+    if (
+      target &&
+      this.composer &&
+      (target === this.composer.inputBuffer || target === this.composer.outputBuffer) &&
+      !this.renderer.getContext?.().isContextLost?.()
+    )
+      this.renderer.setRenderTarget(null)
     try {
-      this.composer?.dispose()
+      this.composition?.dispose()
     } finally {
-      const lensFront = this.lensFront
-      this.lensFront = null
-      lensFront?.restore()
+      try {
+        this.composer?.dispose()
+      } finally {
+        this.composition = null
+        this.composer = null
+        this.prefix = []
+        this.atmosphere = null
+        const lensFront = this.lensFront
+        this.lensFront = null
+        lensFront?.restore()
+      }
     }
+  }
+  public dispose(): void {
+    this.restoreAfterLoss = false
+    this.renderer.domElement?.removeEventListener?.('webglcontextlost', this.onContextLost)
+    this.renderer.domElement?.removeEventListener?.('webglcontextrestored', this.onContextRestored)
+    this.cloudRuntime?.resetScenario()
+    this.releaseComposers()
+    this.contextLost = false
   }
 }
 

@@ -9,6 +9,7 @@ import { readGeoTiffFloat32 } from '../../scripts/lib/geoTiffFloat32'
 function buildFloatTiff(opts: {
   le: boolean
   rows: number[][]
+  imageHeight?: number
   rowsPerStrip?: number
   bitsPerSample?: number
   sampleFormat?: number | 'absent'
@@ -51,7 +52,7 @@ function buildFloatTiff(opts: {
   type Field = { tag: number; type: 3 | 4 | 2; values?: number[]; text?: string }
   const fields: Field[] = [
     { tag: 256, type: 3, values: [width] },
-    { tag: 257, type: 3, values: [height] },
+    { tag: 257, type: 3, values: [opts.imageHeight ?? height] },
     { tag: 258, type: 3, values: [opts.bitsPerSample ?? 32] },
     { tag: 259, type: 3, values: [1] },
     { tag: 273, type: 4, values: stripBuffers.map(() => 0) }, // StripOffsets — патчится ниже
@@ -137,6 +138,12 @@ function buildFloatTiff(opts: {
 }
 
 describe('readGeoTiffFloat32: strip-based float32 GeoTIFF', () => {
+  it.each([true, false])('отвергает недостающие страйпы, не подставляя нулевые высоты (LE=%s)', (le) => {
+    const tiff = buildFloatTiff({ le, rows: [[1.5, 2.5]], rowsPerStrip: 1, imageHeight: 2 })
+
+    expect(() => readGeoTiffFloat32(tiff)).toThrow(/страйп/i)
+  })
+
   it('LE, один страйп — значения совпадают, scale/offset/nodata дефолтные', () => {
     const tiff = buildFloatTiff({ le: true, rows: [[-2.675, 2.278], [0.5, -0.25]] })
     const result = readGeoTiffFloat32(tiff)

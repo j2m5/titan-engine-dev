@@ -120,7 +120,7 @@ describe('фрагмент эффекта', () => {
   it('K слотов развёрнуты и гейтятся uCount', () => {
     expect(ATMOSPHERE_SLOTS).toBe(3)
     for (let i = 0; i < ATMOSPHERE_SLOTS; i++) {
-      expect(frag).toContain(`if (uCount > ${i}) applySlot${i}(dirWorld, distKm, color);`)
+      expect(frag).toMatch(new RegExp(`if \\(uCount > ${i}\\) \\{\\s+applySlot${i}\\(dirWorld, distKm, color\\);`))
     }
   })
 

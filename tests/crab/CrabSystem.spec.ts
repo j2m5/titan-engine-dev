@@ -8,6 +8,8 @@ import { Actor } from '@/core/models/Actor'
 import { shapeRotationMatrix } from '@/core/renderables/Nebula/fields/NebulaField'
 import { OrientationModel } from '@/core/libs/OrientationModel'
 import type { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
+import { mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
+import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
 import type { IPulsarRenderingObject } from '@/core/models/types'
 
 const byName = (name: string) => {
@@ -124,10 +126,20 @@ describe('сцена Краб: пульсар и остаток', () => {
   it('куб-прокси оболочки остаётся внутри far при обзоре с запасом 1.3× на отъезд в любой ориентации', () => {
     const scenario = Scenarios.find((s) => s.id === 14)!
     const cameraDistance = new Vector3(...scenario.defaultCameraPosition).length()
-    for (const name of ['Crab shell', 'Crab synchrotron glow']) {
-      // Прокси объёма — куб, клипится far по глубине; худший случай — камера на диагонали куба
-      const cubeDiagonal = fromAstronomicalUnits(nebulaOf(name).size!) * Math.sqrt(3)
-      expect(cameraDistance * 1.3 + cubeDiagonal, name).toBeLessThan(three.camera.far)
+    const volume = new NebulaVolume(mergeNebulaParams())
+    try {
+      // Берём настоящий raster proxy, а не границу плотности/импостора:
+      // boundingRadius у объёма описывает их, а геометрия может быть больше.
+      volume.geometry.computeBoundingSphere()
+      const proxyRadius = volume.geometry.boundingSphere!.radius
+      for (const name of ['Crab shell', 'Crab synchrotron glow']) {
+        const worldRadius = fromAstronomicalUnits(nebulaOf(name).size!) * proxyRadius
+        expect(cameraDistance * 1.3 + worldRadius, name).toBeLessThan(three.camera.far)
+      }
+    } finally {
+      volume.dispose()
+      volume.geometry.dispose()
+      volume.material.dispose()
     }
   })
 

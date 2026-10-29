@@ -14,6 +14,8 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'ring dust analytic program', path: 'ringDust/analyticProgram', name: 'checkRingDustAnalyticProgram' },
   { title: 'asteroid geometry visibility', path: 'asteroidBelt/geometryVisibility', name: 'checkGeometryVisibility' },
   { title: 'asteroid archetype indexing', path: 'asteroidArchetypes/indexing', name: 'checkArchetypeIndexing' },
+  { title: 'lens flare filter symmetry', path: 'graphic/downsampleThreshold', name: 'checkDownsampleThreshold' },
+  { title: 'eclipse distance order', path: 'eclipse/distance', name: 'checkEclipseDistance' },
   { title: 'water ocean surface', path: 'water/oceanView', name: 'checkOceanView' },
   { title: 'nebula seed', path: 'nebula/rendering', name: 'checkNebulaSeed' },
   { title: 'nebula world precision', path: 'nebula/rendering', name: 'checkNebulaWorldPrecision' },
@@ -37,8 +39,10 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula dust LOD', path: 'nebula/rendering', name: 'checkNebulaLodComposition', args: [{ density: 0 }] },
   { title: 'nebula lighting LOD', path: 'nebula/lightTransport', name: 'checkNebulaLightingLod' },
   { title: 'nebula diagonal bake', path: 'nebula/rendering', name: 'checkNebulaDiagonalBake' },
+  { title: 'crab far plane', path: 'crab/farPlane', name: 'checkCrabFarPlane' },
   { title: 'nebula incremental baking', path: 'nebula/rendering', name: 'checkNebulaIncrementalBaking' },
   { title: 'atmosphere terminator', path: 'atmosphere/terminator', name: 'checkAtmosphereTerminator' },
+  { title: 'atmosphere sky visibility', path: 'atmosphere/skyVisibility', name: 'checkAtmosphereSkyVisibility' },
   { title: 'black hole depth (0 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [0] },
   { title: 'black hole background sampling', path: 'blackHole/backgroundSampling', name: 'checkBlackHoleBackgroundSampling' },
   { title: 'black hole depth (4 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [4] },
@@ -48,6 +52,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'star camera finalization', path: 'star/cameraFinalization', name: 'checkStarCameraFinalization' },
   { title: 'star prominences', path: 'star/prominences', name: 'checkStarProminences' },
   { title: 'stellar bloom', path: 'graphic/stellarBloom', name: 'checkStellarBloom' },
+  { title: 'gaia context restoration', path: 'sky/contextRecovery', name: 'checkGaiaContextRecovery' },
   { title: 'bitmap context restoration', path: 'textures/ImageBitmapLifecycle', name: 'checkImageBitmapLifecycle' }
 ]
 

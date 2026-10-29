@@ -3,6 +3,7 @@ import {
   Matrix4,
   Mesh,
   NormalBlending,
+  PerspectiveCamera,
   PlaneGeometry,
   ShaderMaterial,
   UniformsUtils,
@@ -85,7 +86,7 @@ class BrownDwarfImpostor extends Mesh {
     }
 
     // Поворот считается в onBeforeRender по той же причине, что у диска:
-    // lookAt в updateObject меняет НАШУ матрицу, а пересчитывает её
+    // lookAt в updateView меняет НАШУ матрицу, а пересчитывает её
     // scene.updateMatrixWorld() уже внутри рендера.
     //
     // Ключевое: нормаль псевдосферы живёт в системе САМОГО БИЛБОРДА (её задают
@@ -103,17 +104,20 @@ class BrownDwarfImpostor extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    const cameraPosition: Vector3 = ctx.camera.getWorldPosition(this.cameraPosition)
+    this.material.uniforms.time.value = ctx.elapsed
+  }
+
+  public updateView(camera: PerspectiveCamera): void {
+    // После слежения и коллизий, до отсечения: те же финальные координаты, что у LOD.
+    const cameraPosition: Vector3 = camera.getWorldPosition(this.cameraPosition)
 
     this.lookAt(cameraPosition)
-
-    this.material.uniforms.time.value = ctx.elapsed
 
     // Позиция мировая, а не локальная: билборд висит в нуле родительского узла.
     // Ту же величину меряет LOD.update, выбирая между диском и билбордом
     const distance: number = this.getWorldPosition(this.worldPosition).distanceTo(cameraPosition)
     const viewportHeight: number = this.renderer.domElement.height
-    const worldSize: number = (BROWN_DWARF_IMPOSTOR_PIXELS / viewportHeight) * frameHeightAt(distance, ctx.camera.fov)
+    const worldSize: number = (BROWN_DWARF_IMPOSTOR_PIXELS / viewportHeight) * frameHeightAt(distance, camera.fov)
 
     this.scale.setScalar(worldSize)
   }

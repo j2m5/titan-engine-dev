@@ -9,12 +9,6 @@ export interface TerrainLightParams {
   terrainOcclusionDirect: number
   /** Вес небесного амбиента из irradiance-LUT атмосферы против серого пола: 0 — прежний вид. */
   skyAmbientStrength: number
-  /** Сила тени облаков на земле; 0 — выключено. */
-  cloudShadowStrength: number
-  /** Высота облачного слоя, км: сдвиг тени облаков и параллакс слоя (одна высота на оба). */
-  cloudHeightKm: number
-  /** Мягкость терминатора облаков (многократное рассеяние) поверх геометрического сдвига; ≥ 0. */
-  cloudLightSoftness: number
   /** Сила собственной тени рельефа (марш по низкой карте высот) на ПРЯМОМ свете; 0 — выключено. */
   terrainShadowStrength: number
   /** Множитель полутени тени рельефа; 1 — честная от углового радиуса солнца (с полом). */
@@ -28,9 +22,6 @@ export interface TerrainLightParams {
 const DEFAULTS: TerrainLightParams = {
   terrainOcclusionDirect: 0.35,
   skyAmbientStrength: 1,
-  cloudShadowStrength: 0.6,
-  cloudHeightKm: 6,
-  cloudLightSoftness: 0.1,
   terrainShadowStrength: 1,
   terrainShadowSoftness: 1,
   iceGlintStrength: 0,
@@ -53,21 +44,24 @@ export function resolveTerrainLightParams(data: Raw | undefined, context: string
   const params: TerrainLightParams = {
     terrainOcclusionDirect: read('terrainOcclusionDirect'),
     skyAmbientStrength: read('skyAmbientStrength'),
-    cloudShadowStrength: read('cloudShadowStrength'),
-    cloudHeightKm: read('cloudHeightKm'),
-    cloudLightSoftness: read('cloudLightSoftness'),
     terrainShadowStrength: read('terrainShadowStrength'),
     terrainShadowSoftness: read('terrainShadowSoftness'),
     iceGlintStrength: read('iceGlintStrength'),
     nearShadowStrength: read('nearShadowStrength')
   }
 
-  for (const field of ['terrainOcclusionDirect', 'skyAmbientStrength', 'cloudShadowStrength', 'terrainShadowStrength', 'iceGlintStrength', 'nearShadowStrength'] as const) {
-    if (params[field] < 0 || params[field] > 1) throw new Error(`terrainLight ${context}: ${field} должен быть в [0, 1]: ${params[field]}`)
+  for (const field of [
+    'terrainOcclusionDirect',
+    'skyAmbientStrength',
+    'terrainShadowStrength',
+    'iceGlintStrength',
+    'nearShadowStrength'
+  ] as const) {
+    if (params[field] < 0 || params[field] > 1)
+      throw new Error(`terrainLight ${context}: ${field} должен быть в [0, 1]: ${params[field]}`)
   }
-  if (params.cloudHeightKm <= 0) throw new Error(`terrainLight ${context}: cloudHeightKm должен быть > 0: ${params.cloudHeightKm}`)
-  if (params.cloudLightSoftness < 0) throw new Error(`terrainLight ${context}: cloudLightSoftness должен быть >= 0: ${params.cloudLightSoftness}`)
-  if (params.terrainShadowSoftness <= 0) throw new Error(`terrainLight ${context}: terrainShadowSoftness должен быть > 0: ${params.terrainShadowSoftness}`)
+  if (params.terrainShadowSoftness <= 0)
+    throw new Error(`terrainLight ${context}: terrainShadowSoftness должен быть > 0: ${params.terrainShadowSoftness}`)
 
   return params
 }

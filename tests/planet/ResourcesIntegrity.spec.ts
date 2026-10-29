@@ -1,6 +1,7 @@
 import { Actors, ActorResource, Resources, RenderingObjects } from '@storage/database'
 import { IActor, IActorResource, IResource, IRenderingObject } from '@/core/models/types'
 import { isValidSlopeRange, SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import { sceneCloudPresets } from '@/config/clouds'
 
 const RING_CATEGORY_ID = 6 // categories.ts: alias "ring"
 
@@ -71,15 +72,18 @@ describe('Целостность ресурсов планет', () => {
     expect((rheaRenderingObject?.data as { bumpScale?: number })?.bumpScale).toBeGreaterThan(0)
   })
 
-  it('страж: карты облаков и ночных огней читаются как sRGB', () => {
-    // Обе — художественные картинки в sRGB, а не данные: без colorSpace
-    // загрузчик берёт линейное чтение, и середина шкалы уезжает вверх
-    // (облака бледнеют, огни городов пересвечены). Политика единая на тип.
-    const wrong = Resources.filter(
-      (r: IResource) => (r.resourceType === 'cloud' || r.resourceType === 'night') && r.colorSpace !== 'srgb'
+  it('keeps artistic cloud/night images sRGB and declared linear coverage masks unconverted', () => {
+    const linearMasks = new Set(
+      [...sceneCloudPresets.values()].flatMap(({ far }) =>
+        far?.pattern.encoding !== 'rgb-cloud-map' && far?.pattern.decode.sampleSpace === 'linear'
+          ? [far.pattern.map.resourceId]
+          : []
+      )
     )
-
-    expect(wrong).toEqual([])
+    for (const resource of Resources.filter((r) => r.resourceType === 'cloud' || r.resourceType === 'night')) {
+      const expected = resource.resourceType === 'cloud' && linearMasks.has(resource.id) ? '' : 'srgb'
+      expect(resource.colorSpace, resource.path).toBe(expected)
+    }
   })
 
   it('height-ресурсы всегда resident: streamable-провал на неизвестном расширении откатывает все ресурсы актора', () => {

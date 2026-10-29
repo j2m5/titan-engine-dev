@@ -1398,7 +1398,7 @@ class AsteroidRingSystem extends Group {
   }
 
   /**
-   * Проверка, видна ли система (учитывает LOD-переключения родителя).
+   * Проверка видимости системы и предков (включая LOD-переключения пояса).
    */
   private isEffectivelyVisible(): boolean {
     if (!this.visible) return false

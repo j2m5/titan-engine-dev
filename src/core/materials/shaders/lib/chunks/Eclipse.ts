@@ -37,6 +37,7 @@ export const eclipseFunctions = /* glsl */ `
       vec3 vO = occ[i].xyz - p;
       if (dot(vO, vS) <= 0.0) continue;
       float dO = length(vO);
+      if (dO >= dS) continue;
       float aO = asin(min(1.0, occ[i].w / dO));
       float v = eclipseVisible(aS, aO, eclipseSeparation(nS, vO / dO));
       visible *= v;

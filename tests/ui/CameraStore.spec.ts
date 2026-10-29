@@ -2,6 +2,26 @@ import { describe, expect, it } from 'vitest'
 import { Object3D } from 'three'
 import { CameraController } from '@/core/camera/CameraController'
 import { cameraStore } from '@/ui/mobx/CameraStore'
+import { AU, LightSpeed } from '@/core/constants'
+import { formatter } from '@/ui/helpers'
+
+describe('CameraStore: speed display boundaries', () => {
+  it.each([
+    [LightSpeed - 1, '299,791 km/s'],
+    [LightSpeed, '1 c'],
+    [LightSpeed + 1, '1 c'],
+    [AU - 1, '499 c'],
+    [AU, '1 au/s'],
+    [AU + 1, '1 au/s']
+  ])('formats %s km/s as %s', (speed, expected) => {
+    const controller = new CameraController()
+    cameraStore.connect(controller)
+    controller.setSpeed(speed)
+
+    const display = cameraStore.formatSpeed
+    expect(`${formatter().format(display.speed)} ${display.unit}`).toBe(expected)
+  })
+})
 
 describe('CameraStore: toggle позиционного слежения', () => {
   it('зеркалит включение, честное переключение цели и повторное отключение', () => {

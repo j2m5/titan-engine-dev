@@ -238,7 +238,13 @@ export function buildAtmosphereEffectFragment(): string {
   const slots = Array.from({ length: ATMOSPHERE_SLOTS }, (_, i) => buildSlotGlsl(i)).join('\n')
   const calls = Array.from(
     { length: ATMOSPHERE_SLOTS },
-    (_, i) => `    if (uCount > ${i}) applySlot${i}(dirWorld, distKm, color);`
+    (_, i) => `    if (uCount > ${i}) {
+      applySlot${i}(dirWorld, distKm, color);
+      if (sceneCloudSlot == ${i}) {
+        vec4 cloud = texture2D(sceneCloudOverlay, uv);
+        color = color * (1.0 - cloud.a) + cloud.rgb;
+      }
+    }`
   ).join('\n')
 
   return /* glsl */ `
@@ -250,6 +256,8 @@ export function buildAtmosphereEffectFragment(): string {
   uniform float uLogFarFactor;
   uniform float uInverseSpaceScale;
   uniform float uDebugView;
+  uniform int sceneCloudSlot;
+  uniform sampler2D sceneCloudOverlay;
 
   ${buildAtmosphereCoreGlsl()}
   ${SLOT_HELPERS_GLSL}

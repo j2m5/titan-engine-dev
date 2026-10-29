@@ -42,11 +42,13 @@ export function readRawInt16Dem(
 }
 
 /**
- * Даунсемпл DEM усреднением по площади: каждый целевой пиксель — среднее всех
- * исходных, чьи центры попадают в его футпринт. Для карт высот это корректнее
- * lanczos: точечные данные без звона и выбросов на кромках кратеров, а
- * апсемпла в нашем конвейере не бывает (исходники всегда плотнее целевых
- * 8192×4096).
+ * Даунсемпл DEM усреднением по площади пересечения исходных и целевых ячеек.
+ * Дробный коэффициент сохраняет среднее растра: крайние ячейки учитываются
+ * лишь своей долей, а не как целые. Положительные веса не создают звона или
+ * выбросов за диапазон исходных высот.
+ *
+ * Здесь площадь в координатах растра (pixel-is-area, исходная ячейка 1×1),
+ * не площадь на сфере; геопривязку источника функция не преобразует.
  */
 export function resampleDemGrid(
   data: Float32Array,
@@ -62,22 +64,32 @@ export function resampleDemGrid(
   const yRatio = srcHeight / dstHeight
 
   for (let dy = 0; dy < dstHeight; dy++) {
-    const y0 = Math.floor(dy * yRatio)
-    const y1 = Math.min(Math.max(Math.ceil((dy + 1) * yRatio), y0 + 1), srcHeight)
+    const yStart = dy * yRatio
+    const yEnd = Math.min((dy + 1) * yRatio, srcHeight)
+    const y0 = Math.floor(yStart)
+    const y1 = Math.ceil(yEnd)
 
     for (let dx = 0; dx < dstWidth; dx++) {
-      const x0 = Math.floor(dx * xRatio)
-      const x1 = Math.min(Math.max(Math.ceil((dx + 1) * xRatio), x0 + 1), srcWidth)
+      const xStart = dx * xRatio
+      const xEnd = Math.min((dx + 1) * xRatio, srcWidth)
+      const x0 = Math.floor(xStart)
+      const x1 = Math.ceil(xEnd)
 
       let sum = 0
 
       for (let y = y0; y < y1; y++) {
+        const yWeight = Math.min(y + 1, yEnd) - Math.max(y, yStart)
+        let rowSum = 0
+
         for (let x = x0; x < x1; x++) {
-          sum += data[y * srcWidth + x]
+          const xWeight = Math.min(x + 1, xEnd) - Math.max(x, xStart)
+          rowSum += data[y * srcWidth + x] * xWeight
         }
+
+        sum += rowSum * yWeight
       }
 
-      out[dy * dstWidth + dx] = sum / ((x1 - x0) * (y1 - y0))
+      out[dy * dstWidth + dx] = sum / ((xEnd - xStart) * (yEnd - yStart))
     }
   }
 

@@ -378,33 +378,33 @@ describe('WaterMaterial: slope-путь резолвится один раз (н
     return { actor, whereSpy }
   }
 
-  it('resources.where зовётся дважды в конструкторе (slope + waterNormal, Task 1), НЕ на каждый updateMaterial()', () => {
+  it('caches slope, waterNormal and the terrain class lookup used for scene receiver ambient defaults', () => {
     seedSlopeTexture()
     const { actor, whereSpy } = stubActorWithSpy()
 
     const material = new WaterMaterial(actor)
-    expect(whereSpy).toHaveBeenCalledTimes(2)
+    expect(whereSpy).toHaveBeenCalledTimes(3)
 
     material.updateMaterial()
     material.updateMaterial()
     material.updateMaterial()
 
     // ни один кадровый updateMaterial не тронул resources — джойн не повторён
-    expect(whereSpy).toHaveBeenCalledTimes(2)
+    expect(whereSpy).toHaveBeenCalledTimes(3)
     expect(material.defines.USE_WATER_DEPTH).toBe('1') // сам гейт при этом работает штатно
   })
 
   it('resetMaterial освежает оба пути — второй (и только второй) раунд вызовов resources.where', () => {
     const { actor, whereSpy } = stubActorWithSpy()
     const material = new WaterMaterial(actor)
-    expect(whereSpy).toHaveBeenCalledTimes(2)
+    expect(whereSpy).toHaveBeenCalledTimes(3)
 
     material.resetMaterial()
-    expect(whereSpy).toHaveBeenCalledTimes(4)
+    expect(whereSpy).toHaveBeenCalledTimes(5)
 
     material.updateMaterial()
     material.updateMaterial()
-    expect(whereSpy).toHaveBeenCalledTimes(4) // после resetMaterial кадровые вызовы всё ещё не трогают resources
+    expect(whereSpy).toHaveBeenCalledTimes(5) // после resetMaterial кадровые вызовы всё ещё не трогают resources
   })
 })
 
@@ -511,7 +511,9 @@ describe('WaterMaterial: пена прибоя — ручки и тексель 
 
   it('uSlopeTexel/uSlopeTexelMeters ставятся при приходе slope-карты, до того — нули; сброс обнуляет', () => {
     const actor = stubActor({ data: {} })
-    ;(actor as unknown as { physicalObject: { getAttribute: () => number } }).physicalObject = { getAttribute: () => 6360 }
+    ;(actor as unknown as { physicalObject: { getAttribute: () => number } }).physicalObject = {
+      getAttribute: () => 6360
+    }
     const material = new WaterMaterial(actor)
     expect((material.uniforms.uSlopeTexelMeters.value as Vector2).x).toBe(0)
     expect((material.uniforms.uSlopeTexelMeters.value as Vector2).y).toBe(0)

@@ -9,7 +9,6 @@ import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
 import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
-import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
 import { createWaterSkyUniforms, type WaterSkyUniformValues } from './lib/chunks/WaterSky'
@@ -80,18 +79,12 @@ interface WaterUniforms extends WaterSkyUniformValues {
   uWaterGlintGain: number
   uWaterDepthRangeMeters: number
   uWaterPixelAngle: number
-  uWaterCloudMap: Texture | null
-  uWaterCloudOpacity: number
   uBodyRadiusUnits: number
-  uCloudHeightUnits: number
   uEclipseCount: number
   uEclipseOccluders: Vector4[]
   uEclipseStar: Vector3
   uEclipseStarRadius: number
   uEclipseUmbra: Vector4[]
-  uCloudHeightKm: number
-  uCloudLightSoftness: number
-  uCloudShadowStrength: number
   uSkyHighlightThreshold: number
   uSkyHighlightBoost: number
   uSkyFloor: number
@@ -143,9 +136,6 @@ type WaterRenderingData = Pick<
   | 'waterWaveSpeed'
   | 'waterDistortion'
   | 'waterRoughness'
-  | 'cloudHeightKm'
-  | 'cloudLightSoftness'
-  | 'cloudShadowStrength'
   | 'waterAbsorption'
   | 'waterRippleStrength'
   | 'sunTintStrength'
@@ -172,9 +162,8 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     // (schema БД не различает конфиги по категориям, форма утверждается
     // локально); отсутствие data целиком (актор без ручек) — нейтральный
     // фолбэк на дефолты движка, ноль ручек не должен ронять конструктор.
-    const waterData: WaterRenderingData = (this.model.renderingObject?.getAttribute('data') as
-      | WaterRenderingData
-      | undefined) ?? {}
+    const waterData: WaterRenderingData =
+      (this.model.renderingObject?.getAttribute('data') as WaterRenderingData | undefined) ?? {}
 
     // Радиус тела, метры — единственный вход uWaterWaveScale (см. её докблок
     // юниформа в WaterShaderTemplate): дословный аналог worldPosition.xz
@@ -185,9 +174,6 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     // physicalObject: волны там всё равно выключены (нет waterNormal-текстуры),
     // масштаб 0 безвреден.
     const radiusMeters = (this.model.physicalObject?.getAttribute('radius') ?? 0) * 1000
-    // Ручки облачного слоя — тот же резолвер и те же данные тела, что у TerrainShader: облака
-    // над водой и над сушей одного тела совпадают на береговой линии
-    const cloudLight = resolveTerrainLightParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
     const waveScaleHandle = waterData.waterWaveScale ?? DEFAULT_WATER_WAVE_SCALE
 
     // Пена прибоя — тот же приём именования тела в ошибках, что у шейдеров поверхности.
@@ -243,14 +229,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uWaterDepthRangeMeters: new Uniform(WATER_SHALLOW_RANGE_METERS),
       // угол пикселя, рад: ставит материал по размеру вьюпорта и fov; до того — номинал 50°/1080p
       uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),
-      // облачный слой — от материала рельефа каждый кадр (WaterMaterial.syncClouds)
-      uWaterCloudMap: new Uniform(null),
-      uWaterCloudOpacity: new Uniform(1),
       uBodyRadiusUnits: new Uniform(toThreeJSUnits(radiusMeters / 1000)),
-      uCloudHeightUnits: new Uniform(toThreeJSUnits(cloudLight.cloudHeightKm)),
-      uCloudHeightKm: new Uniform(cloudLight.cloudHeightKm),
-      uCloudLightSoftness: new Uniform(cloudLight.cloudLightSoftness),
-      uCloudShadowStrength: new Uniform(cloudLight.cloudShadowStrength),
       uSkyboxMap: new Uniform(null),
       uSkyHighlightThreshold: skySampleUniforms.uSkyHighlightThreshold,
       uSkyHighlightBoost: skySampleUniforms.uSkyHighlightBoost,

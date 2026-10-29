@@ -10,6 +10,7 @@ import type {
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import type { ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
+import type { CloudConfig } from '@/core/clouds/CloudConfig'
 import type { BeltStructure } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 
 export type ValueOf<T> = T[keyof T]
@@ -79,7 +80,8 @@ export interface ICategory {
 
 export interface IActor {
   readonly id: number
-  readonly categoryId: number | AllowedCategory
+  /** Внешний ключ categories.id; строковый alias хранится только у категории. */
+  readonly categoryId: number
   readonly parentId: number | null
   name: string
   description: string
@@ -176,6 +178,7 @@ export interface IActorBoundResource extends IResource {
 }
 
 export interface IPlanetRenderingObject {
+  clouds?: CloudConfig
   emission: number
   /** Множитель наклона нормали из slope-карты (чанк SlopeNormal, USE_SLOPE): 1 = физически честно. Отсутствие поля = 0 → плоско. */
   bumpScale?: number
@@ -398,11 +401,6 @@ export interface IPlanetRenderingObject {
   /** Композиция света суши (арка «Свет»): резолвер terrainLightParams.ts, дефолты глобальные. */
   terrainOcclusionDirect?: number
   skyAmbientStrength?: number
-  cloudShadowStrength?: number
-  /** Высота облачного слоя, км (тень и параллакс); дефолт 6 */
-  cloudHeightKm?: number
-  /** Мягкость терминатора облаков; дефолт 0.1 */
-  cloudLightSoftness?: number
   /** Доля закона реголита (Lommel–Seeliger) против ламберта, [0, 1]; дефолт — 1 без атмосферы, 0 с ней */
   regolithMix?: number
   /** Сила оппозиционного всплеска реголита; дефолт 0.3; при regolithMix = 0 не действует */
