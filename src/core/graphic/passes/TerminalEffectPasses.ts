@@ -1,23 +1,55 @@
 import { Effect, EffectPass } from 'postprocessing'
 import type { Camera, WebGLRenderer, WebGLRenderTarget } from 'three'
 
-/** Keep the composer pair and its swaps; only the final HDR color needs no MSAA. */
+/** Adjacent composer passes in the returned order; only final HDR color needs no MSAA. */
 export function createTerminalEffectPasses(
   camera: Camera,
   hdrEffects: readonly Effect[],
   ldrEffects: readonly Effect[]
 ): readonly [EffectPass, EffectPass] {
-  // Closures keep the peer out of Pass.dispose's shallow disposable-property scan.
-  const hdr: TerminalHdrPass = new TerminalHdrPass(camera, () => ldr, ...hdrEffects)
-  const ldr: TerminalLdrPass = new TerminalLdrPass(camera, () => hdr, ...ldrEffects)
-  return [hdr, ldr]
+  const passes = createColorPasses(camera, [hdrEffects, ldrEffects])
+  return [passes[0], passes[1]]
 }
 
-class TerminalHdrPass extends EffectPass {
+/** Keep these passes adjacent: bloom must see the completed atmosphere color. */
+export function createAtmosphereEffectPasses(
+  camera: Camera,
+  atmosphere: Effect,
+  hdrEffects: readonly Effect[],
+  ldrEffects: readonly Effect[]
+): readonly [EffectPass, EffectPass, EffectPass] {
+  const passes = createColorPasses(camera, [[atmosphere], hdrEffects, ldrEffects])
+  return [passes[0], passes[1], passes[2]]
+}
+
+function createColorPasses(camera: Camera, effects: readonly (readonly Effect[])[]): ColorOutputPass[] {
+  // Closures keep peers out of Pass.dispose's shallow disposable-property scan.
+  const passes: ColorOutputPass[] = effects.map((group, index) => new ColorOutputPass(
+    camera,
+    () => passes[index - 1] ?? null,
+    () => {
+      for (let next = index + 1; next < passes.length; next++) {
+        const pass = passes[next]
+        if (!pass.enabled || !pass.needsSwap ||
+          (next === passes.length - 1 ? !pass.renderToScreen : pass.renderToScreen)) return false
+      }
+      return index < passes.length - 1
+    },
+    ...group
+  ))
+  return passes
+}
+
+class ColorOutputPass extends EffectPass {
   private colorTarget: WebGLRenderTarget | null = null
   private expectedInput: WebGLRenderTarget | null = null
 
-  public constructor(camera: Camera, private readonly destination: () => EffectPass, ...effects: Effect[]) {
+  public constructor(
+    camera: Camera,
+    private readonly source: () => ColorOutputPass | null,
+    private readonly canRedirect: () => boolean,
+    ...effects: Effect[]
+  ) {
     super(camera, ...effects)
   }
 
@@ -29,10 +61,10 @@ class TerminalHdrPass extends EffectPass {
     stencilTest?: boolean
   ): void {
     this.expectedInput = null
-    const ldr = this.destination()
-    if (this.renderToScreen || !this.needsSwap || !ldr.enabled || !ldr.needsSwap ||
-      !ldr.renderToScreen || stencilTest || !outputBuffer || outputBuffer.samples === 0) {
-      super.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest)
+    const input = this.source()?.takeOutput(inputBuffer) ?? inputBuffer
+    if (this.renderToScreen || !this.needsSwap || !this.canRedirect() ||
+      stencilTest || !outputBuffer || outputBuffer.samples === 0) {
+      super.render(renderer, input, outputBuffer, deltaTime, stencilTest)
       return
     }
 
@@ -45,7 +77,7 @@ class TerminalHdrPass extends EffectPass {
       this.colorTarget.depthBuffer = false
       this.colorTarget.stencilBuffer = false
     }
-    super.render(renderer, inputBuffer, this.colorTarget, deltaTime, stencilTest)
+    super.render(renderer, input, this.colorTarget, deltaTime, stencilTest)
     this.expectedInput = outputBuffer
   }
 
@@ -81,22 +113,5 @@ class TerminalHdrPass extends EffectPass {
     } finally {
       super.dispose()
     }
-  }
-}
-
-class TerminalLdrPass extends EffectPass {
-  public constructor(camera: Camera, private readonly source: () => TerminalHdrPass, ...effects: Effect[]) {
-    super(camera, ...effects)
-  }
-
-  public override render(
-    renderer: WebGLRenderer,
-    inputBuffer: WebGLRenderTarget | null,
-    outputBuffer: WebGLRenderTarget | null,
-    deltaTime?: number,
-    stencilTest?: boolean
-  ): void {
-    const input = this.source().takeOutput(inputBuffer) ?? inputBuffer
-    super.render(renderer, input, outputBuffer, deltaTime, stencilTest)
   }
 }

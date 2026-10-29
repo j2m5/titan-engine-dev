@@ -1,6 +1,7 @@
 import { test, runProbe } from './probe'
 
 const probes: { title: string; path: string; name: string; args?: unknown[] }[] = [
+  { title: 'atmosphere output', path: 'graphic/atmosphereOutput', name: 'checkAtmosphereOutput' },
   { title: 'terminal HDR output', path: 'graphic/terminalEffects', name: 'checkTerminalEffects' },
   { title: 'volume MSAA batch', path: 'graphic/volumeBatch', name: 'checkVolumeBatch' },
   { title: 'front volume MSAA batch', path: 'graphic/volumeBatch', name: 'checkVolumeBatch', args: [true] },

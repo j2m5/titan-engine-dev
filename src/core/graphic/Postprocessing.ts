@@ -3,6 +3,7 @@ import {
   BlendFunction,
   BloomEffect,
   ChromaticAberrationEffect,
+  type Effect,
   EffectComposer,
   EffectPass,
   Pass,
@@ -10,7 +11,7 @@ import {
   ToneMappingEffect,
   ToneMappingMode
 } from 'postprocessing'
-import { createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
+import { AtmosphereEffect } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { LensRegistry } from '@/core/services/LensRegistry'
@@ -22,7 +23,7 @@ import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
 import { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
 import { LensFrontSplitPass } from '@/core/graphic/passes/LensFrontSplitPass'
 import { LensFrontPass } from '@/core/graphic/passes/LensFrontPass'
-import { createTerminalEffectPasses } from '@/core/graphic/passes/TerminalEffectPasses'
+import { createAtmosphereEffectPasses, createTerminalEffectPasses } from '@/core/graphic/passes/TerminalEffectPasses'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -95,6 +96,19 @@ export const LDR_EFFECT_ORDER = ['chromaticAberration', 'colorGrade', 'dithering
  * ручек читают СОБРАННЫЙ пасс, а не константы и не свои копии эффектов.
  */
 export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectPass, EffectPass] {
+  return createTerminalEffectPasses(camera, ...createColorEffects())
+}
+
+/** Separate atmosphere/HDR/LDR passes with single-sample color between them. */
+function createAtmospherePasses(
+  camera: PerspectiveCamera,
+  registry: AtmosphereRegistry,
+  debugView: number
+): readonly [EffectPass, EffectPass, EffectPass] {
+  return createAtmosphereEffectPasses(camera, new AtmosphereEffect(camera, registry, { debugView }), ...createColorEffects())
+}
+
+function createColorEffects(): readonly [readonly Effect[], readonly Effect[]] {
   const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
 
   const lensFlareEffect: LensFlareEffect = new LensFlareEffect({
@@ -148,11 +162,10 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
     dithering: new DitheringEffect()
   } as const
 
-  return createTerminalEffectPasses(
-    camera,
+  return [
     HDR_EFFECT_ORDER.map((key) => hdrEffects[key]),
     LDR_EFFECT_ORDER.map((key) => ldrEffects[key])
-  )
+  ]
 }
 
 /** `?atmoDebug=<1|2|3|4>` — дебаг-вид эффекта атмосферы в основной сцене (0 — выключен). */
@@ -201,7 +214,9 @@ class Postprocessing {
    * уже затуманенный кадр.
    */
   public buildPasses(): readonly Pass[] {
-    const [hdrPass, ldrPass] = createEffectPasses(this.camera)
+    const [atmospherePass, hdrPass, ldrPass] = createAtmospherePasses(
+      this.camera, this.atmosphereRegistry, readAtmosphereDebugView()
+    )
     const lensFront = new LensFrontSorter(this.scene, this.camera, this.lensRegistry, this.depthVolumeRegistry)
     this.lensFront = lensFront
     // Слой видимого неба: рисует BlackHolePass, читает дальнее поле линзы
@@ -215,7 +230,7 @@ class Postprocessing {
       createGravitationalLensPass(this.camera, this.lensRegistry, skyLayer),
       new LensFrontPass(this.scene, this.camera, lensFront),
       new OverlayPass(this.scene, this.camera),
-      createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
+      atmospherePass,
       hdrPass,
       ldrPass
     ]
