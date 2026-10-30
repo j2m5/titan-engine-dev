@@ -16,6 +16,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'asteroid archetype indexing', path: 'asteroidArchetypes/indexing', name: 'checkArchetypeIndexing' },
   { title: 'lens flare filter symmetry', path: 'graphic/downsampleThreshold', name: 'checkDownsampleThreshold' },
   { title: 'eclipse distance order', path: 'eclipse/distance', name: 'checkEclipseDistance' },
+  { title: 'ring shadow gradients', path: 'eclipse/ringShadowGradients', name: 'checkRingShadowGradients' },
   { title: 'water ocean surface', path: 'water/oceanView', name: 'checkOceanView' },
   { title: 'nebula seed', path: 'nebula/rendering', name: 'checkNebulaSeed' },
   { title: 'nebula world precision', path: 'nebula/rendering', name: 'checkNebulaWorldPrecision' },

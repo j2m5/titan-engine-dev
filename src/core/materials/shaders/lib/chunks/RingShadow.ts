@@ -12,20 +12,28 @@ export const ringShadowFunctions = `
   // маска ringGapMask тапа есть только здесь); вне кольца — прозрачно
   vec3 getShadowFromRings(vec3 lightColor, vec3 lightDir) {
     vec3 ringNormal = vec3(0.0, 1.0, 0.0);
-    float d = dot(vPosition, ringNormal) / dot(lightDir, ringNormal);
-    if (!(d > 0.0)) return lightColor;
+    float directionOnNormal = dot(lightDir, ringNormal);
+    float d = directionOnNormal == 0.0 ? 0.0 : dot(vPosition, ringNormal) / directionOnNormal;
     vec3 pointOnRingPlane = -d * lightDir + vPosition;
     float distanceOnPlane = length(pointOnRingPlane - dot(pointOnRingPlane, ringNormal) * ringNormal);
     float span = shadowRingsOuterRadius - shadowRingsInnerRadius;
     float u = (distanceOnPlane - shadowRingsInnerRadius) / span;
     float du = min(d * uRingSunTan / span, 4.0);
+    // Производные до неоднородного return: иначе implicit LOD не определён.
+    // Смещение каждого тапа тоже меняется по экрану вместе с шириной полутени.
+    vec2 ringDx = dFdx(vec2(u, du));
+    vec2 ringDy = dFdy(vec2(u, du));
+    if (!(d > 0.0)) return lightColor;
     float opacity = 0.0;
     for (int k = 0; k < 5; k++) {
       float weight = k == 2 ? 3.0 : (k == 1 || k == 3 ? 2.0 : 1.0);
-      float uk = u + (float(k) - 2.0) * 0.5 * du;
-      // маска вместо ветвления: выборка в однородном потоке;
-      // щели лунок — маска радиуса тапа, чанк RingGap
-      float a = texture2D(shadowRingsTexture, vec2(uk, 0.0)).a * step(0.0, uk) * step(uk, 1.0) * ringGapMask(shadowRingsInnerRadius + uk * span);
+      float offset = (float(k) - 2.0) * 0.5;
+      float uk = u + offset * du;
+      // Щели лунок — маска радиуса тапа, чанк RingGap.
+      float a = texture2DGradEXT(shadowRingsTexture, vec2(uk, 0.0),
+        vec2(ringDx.x + offset * ringDx.y, 0.0),
+        vec2(ringDy.x + offset * ringDy.y, 0.0)).a
+        * step(0.0, uk) * step(uk, 1.0) * ringGapMask(shadowRingsInnerRadius + uk * span);
       opacity += weight * a;
     }
     return lightColor * (1.0 - opacity / 9.0);

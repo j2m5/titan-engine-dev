@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { ringShadowFunctions, ringShadowUniforms } from '@/core/materials/shaders/lib/chunks/RingShadow'
 import { RING_PENUMBRA_WEIGHTS, ringShadowTransmission } from '@/core/eclipse/ringPenumbraMath'
 import { AppUniformsChunk } from '@/core/materials/shaders/lib/chunks'
 
@@ -25,12 +24,9 @@ describe('ringShadowTransmission — CPU-зеркало полутени', () =>
   })
 })
 
-describe('RingShadow GLSL', () => {
-  it('юниформ полутени и пять выборок с маской вместо ветвления', () => {
-    expect(ringShadowUniforms).toContain('uniform float uRingSunTan;')
-    expect(ringShadowFunctions).toContain('float du = min(d * uRingSunTan / span, 4.0);')
-    expect(ringShadowFunctions).toContain('float a = texture2D(shadowRingsTexture, vec2(uk, 0.0)).a * step(0.0, uk) * step(uk, 1.0) * ringGapMask(shadowRingsInnerRadius + uk * span);')
-    expect(ringShadowFunctions).toContain('return lightColor * (1.0 - opacity / 9.0);')
+describe('RingShadow defaults', () => {
+  // GPU sampling, mip selection and gap masks are exercised in ringShadowGradients.gpu.ts.
+  it('полутень выключена до установки углового размера солнца', () => {
     expect(AppUniformsChunk.ringShadowUniforms.uRingSunTan.value).toBe(0)
   })
 })
