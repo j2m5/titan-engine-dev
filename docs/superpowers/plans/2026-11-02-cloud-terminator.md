@@ -4,7 +4,7 @@
 
 **Goal:** Remove the diagnosed empty-shadow NaNs from real terminator lighting on SwiftShader, preserving valid shadow motion and the existing allocation/draw budget.
 
-**Architecture:** Extend the existing production shadow numerics adapter. A march with no contributing samples retains zero extinction/optical depth and bounds only its unused distance sentinel to `[0,65504]`. Its private history depth is `-1` with zero motion, and resolve skips absent neighbors. For an occupied ray, bound pixel motion to the shadow resolution: a component outside that interval already places the previous UV outside the image, so its exact magnitude is irrelevant to history rejection. Keep the optical data and all in-bounds motion unchanged.
+**Architecture:** Extend the existing production shadow numerics adapter. A march with no contributing samples retains zero extinction/optical depth and bounds only its unused distance sentinel to `[0,65504]`. Its private history depth is `-1` with zero motion, and resolve distinguishes marker collisions using the existing optical extinction, preserving signed occupied depths. For an occupied ray, bound pixel motion to the shadow resolution: a component outside that interval already places the previous UV outside the image, so its exact magnitude is irrelevant to history rejection. Keep the optical data and all in-bounds motion unchanged.
 
 **Tech Stack:** TypeScript, Three.js, Takram GLSL ES 3, Vitest, native AMD ANGLE and SwiftShader.
 
@@ -39,8 +39,8 @@
 - [x] Extend the existing adapter with exact upstream anchors for the empty return, neutral empty export and bounded velocity. Expected: no changed packing/layout/draw contract; occupied optical data unchanged.
 - [x] Run isolated GPU regression and full lighting/pipeline on native and SwiftShader sequentially. Expected: all functional assertions pass; expected shader-failure diagnostics remain bounded by their reported time windows. Record exact compiler diagnostics. CDP ReadPixels performance notices are not GL errors, and must remain retained separately from actual GL errors.
 - [x] Run typecheck, lint, full Vitest and production build. Expected: all pass, no new warning suppression.
-- [ ] Archive source-bound evidence and executable verifier, update audit, commit in Russian Conventional Commit format. Expected: verifier validates source hashes, required probe cases, raw failures and successful checks.
-- [ ] Run task completion verifier; request one fresh whole-branch review, adjudicate findings, archive review/ledger, and remove only this plan's scratch workspace.
+- [x] Archive source-bound evidence and executable verifier, update audit, commit in Russian Conventional Commit format. Expected: verifier validates source hashes, required probe cases, raw failures and successful checks.
+- [x] Run task completion verifier; request one fresh whole-branch review, adjudicate findings, archive review/ledger, and remove only this plan's scratch workspace.
 
 **Task completion command:** `node benchmark-results/cloud-terminator-2026-11-02/verify-result.mjs` (expected exit 0).
 
@@ -51,3 +51,7 @@ Empty current depth uses `-1` with zero motion, and `adaptSceneCloudShadowResolv
 ## Optical-edge correction diagnosed before final review
 
 A zero empty optical front pulls a linearly filtered occupied front toward the light. Preserve the empty maxRayDistance within [0,65504], the finite half-float range, while keeping its extinction/optical depth zero. This changes only the empty sentinel, never occupied depths. Keep the separate absent history depth -1. Extend actual-march GPU cases to a short interval of 100 metres, retain 1e6/1e30, and check that interpolation with an empty neighbor cannot move a representable occupied front toward the light. RED red-optical-edge: 18/79. Repeat final-source regression, full GPU and CLI checks using sources-v3.json; previous successful v2 evidence remains archived.
+
+## Final review fix pass
+
+The single final reviewer found valid negative occupied depth from TEMPORAL_JITTER. The actual march now reproduces -0.5 and -1; mixed and all-negative occupied neighborhoods must retain closest motion. RED red-signed-depth: 5/94 failed. Keep the finite empty marker -1, but distinguish a marker collision by extinction in the existing optical layer; all other signed depths retain the original ordering. Only a colliding candidate needs the additional optical lookup. Validate all nine expanded offsets before replacing. No new texture, pass, or renderer branch. Re-run full checks on sources-v4.json and record the single TDD fix pass; do not request a second review.

@@ -52,11 +52,19 @@ export function adaptSceneCloudShadowNumerics(source: string): string {
   )
 }
 
-/** Empty rays must not replace an occupied neighbor's reprojection. A negative
- * depth marks absence without excluding a real cloud sample at distance zero. */
+/** Jitter can produce occupied negative depths, including the empty marker -1.
+ * Resolve that collision from the existing optical layer's extinction. */
 export function adaptSceneCloudShadowResolveNumerics(source: string): string {
   // Takram expands this fixed 3x3 loop before exposing the material source.
-  const parts = source.split('if (neighbor.r < result.r) {')
-  if (parts.length !== 10) throw new Error('Scene cloud shadow history must contain nine neighbor comparisons')
-  return parts.join('if (neighbor.r >= 0.0 && neighbor.r < result.r) {')
+  const pattern = /neighborOffsets\[(\d)\]\s*\);\s*if \(neighbor\.r < result\.r\) \{/g
+  const matches = [...source.matchAll(pattern)]
+  if (matches.length !== 9 || matches.some((match, index) => Number(match[1]) !== index))
+    throw new Error('Scene cloud shadow history must contain nine ordered neighbor comparisons')
+  return source.replace(pattern, (match, index: string) =>
+    match.replace(
+      'if (neighbor.r < result.r) {',
+      `if (neighbor.r < result.r && (neighbor.r != -1.0 ||
+      texelFetchOffset(inputBuffer, coord, 0, neighborOffsets[${index}]).g > 0.0)) {`
+    )
+  )
 }

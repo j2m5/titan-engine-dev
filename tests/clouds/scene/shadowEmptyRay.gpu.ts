@@ -15,15 +15,17 @@ export function checkSceneCloudShadowEmptyRay(
   if (start < 0 || end <= start || exportStart < end || exportEnd < exportStart)
     throw new Error('Missing production shadow march/export for empty-ray regression')
   const march = `
+#define TEMPORAL_JITTER
 uniform float fixtureExtinction, fixtureDistance;
+uniform float fixtureJitter, fixtureOffset, minStepSize, maxStepSize, minTransmittance;
 const int maxIterationCount = 2;
-const float minStepSize = 1.0, maxStepSize = 1.0, minExtinction = 1e-7, minDensity = 0.0;
-const float minTransmittance = 0.0, opticalDepthTailScale = 1.0, bottomRadius = 1.0;
+const float minExtinction = 1e-7, minDensity = 0.0;
+const float opticalDepthTailScale = 1.0, bottomRadius = 1.0;
 struct WeatherSample { vec4 density; };
 struct MediaSample { float extinction; };
 vec3 getStructureNormal(vec3 direction, float jitter) { return direction; }
 void intersectStructuredPlanes(vec3 normal, vec3 origin, vec3 direction, float size,
-  out float distance, out float stepSize) { distance = 1.0; stepSize = size; }
+  out float distance, out float stepSize) { distance = fixtureOffset; stepSize = size; }
 bool insideLayerIntervals(float height) { return false; }
 vec2 getGlobeUv(vec3 position) { return vec2(0.0); }
 WeatherSample sampleWeather(vec2 uv, float height, float mip) { return WeatherSample(vec4(1.0)); }
@@ -31,9 +33,17 @@ MediaSample sampleMedia(WeatherSample weather, vec3 position, vec2 uv, float mip
   return MediaSample(fixtureExtinction);
 }
 ${source.slice(start, end)}
-void main() { gl_FragColor = marchClouds(vec3(0.0), vec3(0.0,0.0,1.0), fixtureDistance, 0.0, 0.0); }
+void main() { gl_FragColor = marchClouds(vec3(0.0), vec3(0.0,0.0,1.0), fixtureDistance, fixtureJitter, 0.0); }
 `
-  const marchUniforms = { fixtureExtinction: { value: 0 }, fixtureDistance: { value: 1e6 } }
+  const marchUniforms = {
+    fixtureExtinction: { value: 0 },
+    fixtureDistance: { value: 1e6 },
+    fixtureJitter: { value: 0 },
+    fixtureOffset: { value: 1 },
+    minStepSize: { value: 1 },
+    maxStepSize: { value: 1 },
+    minTransmittance: { value: 0 }
+  }
   for (const [distance, emptyDepth] of [
     [100, 100],
     [1e6, 65504],
@@ -58,6 +68,27 @@ void main() { gl_FragColor = marchClouds(vec3(0.0), vec3(0.0,0.0,1.0), fixtureDi
         check(mixedFront >= 2, `empty neighbor does not move shadow front toward light: ${mixedFront}`)
       }
     }
+  }
+
+  // A ray starting inside cloud can contribute before its origin after jitter.
+  // Use real march results in the export checks, including the empty marker -1.
+  const negativeOccupied: number[][] = []
+  marchUniforms.fixtureDistance.value = 1e6
+  marchUniforms.fixtureExtinction.value = 0.25
+  marchUniforms.minTransmittance.value = 0.9
+  for (const [step, offset, jitter, depth] of [
+    [1, 0.25, 0.75, -0.5],
+    [10, 0, 0.1, -1]
+  ]) {
+    marchUniforms.minStepSize.value = marchUniforms.maxStepSize.value = step
+    marchUniforms.fixtureOffset.value = offset
+    marchUniforms.fixtureJitter.value = jitter
+    const actual = draw(march, marchUniforms)
+    check(
+      actual.every(Number.isFinite) && actual[0] === depth && actual[1] > 0,
+      `jittered occupied shadow has signed depth ${depth}: ${actual}`
+    )
+    negativeOccupied.push(actual)
   }
 
   const fragment = `
@@ -85,16 +116,20 @@ void main() { vec4 color; vec3 velocity; exportShadow(color, velocity);
     resolution: { value: new Vector2(7, 5) },
     fixtureVelocity: { value: false }
   }
-  for (const empty of [false, true]) {
-    const color = empty ? [65504, 0, 0, 0] : [123, 2e-7, 0.25, 0.5]
+  for (const color of [[123, 2e-7, 0.25, 0.5], [65504, 0, 0, 0], ...negativeOccupied]) {
+    const empty = color[1] === 0
     uniforms.fixtureColor.value.fromArray(color)
-    for (const uv of [
-      [0.5, 0.5],
-      [0, 1],
-      [0.25, 0.75],
-      [-1e6, 1e6],
-      [1e30, -1e30]
-    ]) {
+    const positions =
+      color[0] < 0
+        ? [[0.25, 0.75]]
+        : [
+            [0.5, 0.5],
+            [0, 1],
+            [0.25, 0.75],
+            [-1e6, 1e6],
+            [1e30, -1e30]
+          ]
+    for (const uv of positions) {
       uniforms.fixturePreviousUv.value.fromArray(uv)
       uniforms.fixtureVelocity.value = false
       const actualColor = draw(fragment, uniforms)
@@ -139,25 +174,50 @@ void main() { vec4 color; vec3 velocity; exportShadow(color, velocity);
   const closest = `
 #define CASCADE_COUNT 1
 uniform vec4 fixtureNeighbors[9];
+uniform float fixtureExtinctions[9];
 const int inputBuffer = 0;
 vec4 fixtureFetch(int sampler, ivec3 coord, int lod, ivec2 offset) {
-  return fixtureNeighbors[(offset.x + 1) * 3 + offset.y + 1];
+  int index = (offset.x + 1) * 3 + offset.y + 1;
+  return coord.z == 0 ? vec4(0.0, fixtureExtinctions[index], 0.0, 0.0) : fixtureNeighbors[index];
 }
 #define texelFetchOffset fixtureFetch
 ${resolveSource.slice(closestStart, closestEnd)}
 void main() { gl_FragColor = getClosestFragment(ivec3(1,1,0)); }
 `
   const neighbors = Array.from({ length: 9 }, () => new Vector4(-1, 0, 0, 0))
+  const extinctions = new Float32Array(9)
+  const closestUniforms = { fixtureNeighbors: { value: neighbors }, fixtureExtinctions: { value: extinctions } }
   for (const [depth, expected] of [
     [-1, [1e7, 0, 0, 0]],
     [100, [100, 0.25, -0.5, 0]],
-    [0, [0, 0.25, -0.5, 0]]
+    [0, [0, 0.25, -0.5, 0]],
+    [-0.5, [-0.5, 0.25, -0.5, 0]],
+    [-1, [-1, 0.25, -0.5, 0]],
+    [-2, [-2, 0.25, -0.5, 0]]
   ] as const) {
-    neighbors[4].set(depth, depth < 0 ? 0 : 0.25, depth < 0 ? 0 : -0.5, 0)
-    const actual = draw(closest, { fixtureNeighbors: { value: neighbors } })
+    neighbors[4].set(depth, expected[1], expected[2], 0)
+    extinctions[4] = expected[0] === 1e7 ? 0 : 0.25
+    const actual = draw(closest, closestUniforms)
     check(
       actual.every((value, i) => value === expected[i]),
       `empty neighbors do not steal occupied history depth=${depth}: ${actual}`
     )
   }
+  neighbors.forEach((value, index) => value.set(-index - 0.25, (index + 1) * 0.25, -(index + 1) * 0.5, 0))
+  extinctions.fill(0.25)
+  let actual = draw(closest, closestUniforms)
+  check(
+    actual.every((value, i) => value === neighbors[8].toArray()[i]),
+    `all-negative occupied neighborhood retains nearest motion: ${actual}`
+  )
+  neighbors.forEach((value) => value.set(-1, 0, 0, 0))
+  extinctions.fill(0)
+  neighbors[2].set(-0.5, 0.75, -0.25, 0)
+  neighbors[4].set(100, 0.25, -0.5, 0)
+  extinctions[2] = extinctions[4] = 0.25
+  actual = draw(closest, closestUniforms)
+  check(
+    actual.every((value, i) => value === neighbors[2].toArray()[i]),
+    `mixed signed neighborhood retains nearest occupied motion: ${actual}`
+  )
 }
