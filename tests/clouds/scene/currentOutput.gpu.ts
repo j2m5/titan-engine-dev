@@ -13,7 +13,8 @@ import { prepareCloudCurrentOutput } from '@/core/clouds/takram/prepareCloudCurr
 
 /** Compare the actual GPU export against the previous MRT half-float conversion.
  * Covers all seven channels, early returns, HDR, signed motion, half overflow and
- * odd viewport dimensions. It does not duplicate the packing/unpacking formula.
+ * odd viewport dimensions. Overflowing depth must not corrupt adjacent motion.
+ * It does not duplicate the packing/unpacking formula.
  */
 export function checkSceneCloudCurrentOutput(
   renderer: WebGLRenderer,
@@ -49,7 +50,11 @@ void main() {
   const samples = [
     { color: [0.1, 0.5, 0.9, 0.3], depth: [1000, -0.25, 0.125] },
     { color: [12.5, -0.2, 65504, 1], depth: [1e30, 0.003, -0.0007] },
-    { color: [0, 1e-7, 0.00003, 0], depth: [0, -0.0, 0] }
+    { color: [0, 1e-7, 0.00003, 0], depth: [0, -0.0, 0] },
+    ...[65504, 65520, 65536, 1e5, 1e10, 1e30, -1e30].map((depth) => ({
+      color: [0.1, 0.5, 0.9, 0.3],
+      depth: [depth, 0.003025, -0.0007]
+    }))
   ]
   let binding: ReturnType<typeof prepareCloudCurrentOutput> | undefined
   const render = (sample: (typeof samples)[number]): Uint16Array[] => {

@@ -37,19 +37,21 @@ export function checkSceneCloudShadowOutput(
   const main = material.fragmentShader.slice(material.fragmentShader.lastIndexOf('void main()'))
   material.fragmentShader = `precision highp float;
 uniform float sampleFrame;
+uniform float testDepth[7];
 in vec2 vUv;
 ${material.fragmentShader.slice(declarationStart, declarationEnd)}
 void cascade(const int index, const float mip, out vec4 color, out vec3 depthVelocity) {
   float k = float(index + 1);
   color = vec4(k * 20.0 + gl_FragCoord.x, k * 0.03125, vUv.y + sampleFrame * 0.125, mip + 0.5);
   depthVelocity = vec3(k * 20.0, k * 0.03125, -k * 0.0625);
-  if (gl_FragCoord.x < 1.0) depthVelocity.r = 1e30;
+  if (gl_FragCoord.x < 7.0) depthVelocity.r = testDepth[int(gl_FragCoord.x)];
   if (gl_FragCoord.y < 1.0) { color.gba = vec3(0.0); return; }
   color.g += vUv.x * 0.0001;
 }
 const float mipLevels[4] = float[4](0.0, 0.5, 1.0, 2.0);
 ${main}`
   material.uniforms.sampleFrame = new Uniform(0)
+  material.uniforms.testDepth = new Uniform([1e30, 65504, 65520, 65536, 1e5, 1e10, -1e30])
   const current = new WebGLArrayRenderTarget(1, 1, 1, { depthBuffer: false })
   const resolved = new WebGLArrayRenderTarget(1, 1, 1, { depthBuffer: false })
   current.texture.type = resolved.texture.type = HalfFloatType

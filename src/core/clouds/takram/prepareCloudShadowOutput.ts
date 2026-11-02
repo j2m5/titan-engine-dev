@@ -38,6 +38,8 @@ function singleOutputShader(source: string, current: boolean): string {
   }
   // Keep the original body, including any diagnostic injection, compilable.
   // Only the new entry point exports a framebuffer output.
+  // As in current cloud output, keep depth float32 until the final MRT write:
+  // overflowing half packing on SwiftShader can also corrupt adjacent motion.
   replace('void main() {', 'void sceneCloudShadowOriginalMain() {', 'entry point')
   return `precision highp int;\n${source}
 uniform int ${CASCADE};
@@ -49,7 +51,7 @@ void main() {
   vec3 depthVelocity;
   cascade(${CASCADE}, mipLevels[${CASCADE}], color, depthVelocity);
   sceneCloudShadowPacked = uvec4(packHalf2x16(color.rg), packHalf2x16(color.ba),
-    packHalf2x16(depthVelocity.rg), packHalf2x16(vec2(depthVelocity.b, 0.0)));
+    floatBitsToUint(depthVelocity.r), packHalf2x16(depthVelocity.gb));
 }`
     : `layout(location = 0) out vec4 sceneCloudShadowResolved;
 void main() { cascade(${CASCADE}, sceneCloudShadowResolved); }`
@@ -154,7 +156,7 @@ layout(location = 1) out vec4 depthVelocity;
 void main() {
   uvec4 p = texelFetch(packedShadow, ivec2(gl_FragCoord.xy), 0);
   color = vec4(unpackHalf2x16(p.x), unpackHalf2x16(p.y));
-  depthVelocity = vec4(unpackHalf2x16(p.z), unpackHalf2x16(p.w).x, 0.0);
+  depthVelocity = vec4(uintBitsToFloat(p.z), unpackHalf2x16(p.w), 0.0);
 }`
   })
   appendProgramCacheKey(unpackMaterial, programCacheKey)
@@ -168,7 +170,7 @@ void main() {
       shader.fragmentShader = singleOutputShader(shader.fragmentShader, index === 0)
     }
     material.customProgramCacheKey = function () {
-      return `${hooks[index].key.call(this)};${hooks[index].compile.toString()};scene-cloud-single-shadow-v3-${index}`
+      return `${hooks[index].key.call(this)};${hooks[index].compile.toString()};scene-cloud-single-shadow-v4-${index}`
     }
     material.needsUpdate = true
   })

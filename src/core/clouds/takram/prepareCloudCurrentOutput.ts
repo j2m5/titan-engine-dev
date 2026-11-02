@@ -22,13 +22,16 @@ function packedShader(source: string): string {
   ])
     source = replaceExactlyOnce(source, from, to, 'scene cloud packed output', from)
   // The wrapper also exports early returns (clear rays and diagnostic views).
+  // Keep depth as float32 until MRT export. Half packing can overflow large
+  // depths on SwiftShader and contaminate the neighboring motion component.
+  // Four half color channels + two half motion channels leave a full depth word.
   return `precision highp int;\n${source}
 layout(location = 0) out highp uvec4 sceneCloudPacked;
 void main() {
   sceneCloudCurrentMain();
   sceneCloudPacked = uvec4(
     packHalf2x16(outputColor.rg), packHalf2x16(outputColor.ba),
-    packHalf2x16(outputDepthVelocity.rg), packHalf2x16(vec2(outputDepthVelocity.b, 0.0))
+    floatBitsToUint(outputDepthVelocity.r), packHalf2x16(outputDepthVelocity.gb)
   );
 }`
 }
@@ -82,7 +85,7 @@ layout(location = 1) out vec3 outputDepthVelocity;
 void main() {
   uvec4 data = texelFetch(packedCloudBuffer, ivec2(gl_FragCoord.xy), 0);
   outputColor = vec4(unpackHalf2x16(data.x), unpackHalf2x16(data.y));
-  outputDepthVelocity = vec3(unpackHalf2x16(data.z), unpackHalf2x16(data.w).x);
+  outputDepthVelocity = vec3(uintBitsToFloat(data.z), unpackHalf2x16(data.w));
 }`
   })
   appendProgramCacheKey(unpackMaterial, programCacheKey)
@@ -92,7 +95,7 @@ void main() {
     shader.fragmentShader = packedShader(shader.fragmentShader)
   }
   material.customProgramCacheKey = function () {
-    return `${originalKey.call(this)};${originalCompile.toString()};scene-cloud-packed-current-v1`
+    return `${originalKey.call(this)};${originalCompile.toString()};scene-cloud-packed-current-v2`
   }
   material.needsUpdate = true
   pass.render = function (renderer, input, output, delta, stencil) {
