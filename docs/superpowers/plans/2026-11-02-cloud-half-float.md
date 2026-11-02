@@ -43,7 +43,7 @@
 - [x] Run exact GPU output checks on SwiftShader and native, existing unit coverage, lighting and pipeline probes on both backends. Expected: no failed assertions, unexpected browser/GL errors or resource imbalance.
 - [x] Run typecheck, full Vitest suite, lint and production build; inspect outputs. Expected: all required checks pass; no suppression of new shader errors.
 - [x] Archive immutable results, source hashes and executable verifier; update audit with cause, scope and limits; commit using Russian Conventional Commit wording.
-- [ ] One fresh whole-branch review; adjudicate all findings, fix Important/Critical issues test-first once, archive review/ledger and remove only this plan's scratch directory.
+- [x] One fresh whole-branch review; adjudicate all findings, fix Important/Critical issues test-first once, archive review/ledger and remove only this plan's scratch directory.
 
 **Task completion command:** `node benchmark-results/cloud-half-float-2026-11-02/verify-result.mjs` (recomputes all meaningful-channel comparisons, identities and required check outcomes; expected exit 0).
 
