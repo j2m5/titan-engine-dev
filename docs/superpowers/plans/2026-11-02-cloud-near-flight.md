@@ -41,7 +41,7 @@
 - [x] Run the full matrix and two motion windows per scene sequentially, then revisit each scene and recheck activation/teardown. Expected:all cases present, unique RAF stamps, one engine callback, no unexpected GL/network/runtime errors.
 - [x] Independently recalculate half-float validity, route coverage, timing distributions and resource checks; use corrupted copies to prove rejection of missing cases, nonfinite pixels, false readiness, wrong pose, duplicate RAF and leaked resources.
 - [x] Save audit/evidence with explicit limits, commit locally, run `node benchmark-results/cloud-near-flight-2026-11-02/verify-result.mjs`. Expected:source-bound evidence validates after full CLI checks for the collision correction.
-- [ ] One fresh whole-branch review, adjudicate findings, fix material evidence defects once, archive the completed ledger and remove only this plan's scratch directory.
+- [x] One fresh whole-branch review, adjudicate findings, fix material evidence defects once, archive the completed ledger and remove only this plan's scratch directory.
 
 **Task completion command:** `node benchmark-results/cloud-near-flight-2026-11-02/verify-result.mjs` (expected exit0).
 
@@ -59,4 +59,6 @@ Files: `src/core/services/CameraCollision.ts`, `tests/services/CameraCollision.s
 
 ## Verification result
 
-RED:12 failed/4 passed. Focused GREEN:94/94. Full CLI:6303 passed/7 skipped,617 passed files/2 skipped; typecheck/lint/build exit0. Production:28 captures,480 motion frames,4 menu teardowns,622 successful S3 responses, one WebGL context. Independent verifier:12976128 full resolved pixels,52107264 half words including sampled current/shadow tiles,7 corrupted reports rejected. Final source/build identity:1481/52. Twenty-three large raw pixel files remain local with size/SHA manifests; the full verifier fails clearly if they are missing. Timings are diagnostic frame intervals, not GPU time or an FPS gain claim.
+RED:12 failed/4 passed. Focused GREEN:94/94. Full CLI:6303 passed/7 skipped,617 passed files/2 skipped; typecheck/lint/build exit0. Production:28 captures,480 motion frames,4 menu teardowns,622 successful S3 responses, one WebGL context. Independent verifier:12976128 full resolved pixels,52107264 half words including sampled current/shadow tiles,14 corrupted reports rejected after review hardening. Final source/build identity:1481/52. Twenty-three large raw pixel files remain local with size/SHA manifests; the full verifier fails clearly if they are missing. Timings are diagnostic frame intervals, not GPU time or an FPS gain claim.
+
+One fresh review: Ready to merge: Yes;0Critical/0Important/1Minor. The saved trajectories were independently confirmed, but self-consistent trajectory substitutions could bypass the validator. Following the user's explicit instruction to fix all findings, this Minor was fixed in the same pass instead of deferred:7RED/1pass to8GREEN; independent catalog-based functional/motion expectations and recorded follow/time assertions. All14negative controls pass. No product/probe/capture changes after review, no new full app-suite run or recapture needed, no second review. Five declined-to-judge boundaries have explicit ledger rulings and costs.
