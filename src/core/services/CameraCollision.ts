@@ -27,14 +27,15 @@ export type Collider = {
 }
 
 /**
- * Минимальная дистанция камеры до центра тела = R × COLLISION_GAP. Зазор для
- * тел БЕЗ карты высот (сфера — вся коллизия, какая для них есть); терраформные
- * тела зовут свой локальный `clearance(dir̂)` из TerrainHeightField, GAP их не касается.
+ * Пропорциональный зазор тел без карты высот. Для сферических планет он
+ * ограничен километром: R × 0.001 у гигантов закрывает весь облачный слой.
+ * Терраформные тела используют локальный clearance(dir̂) из TerrainHeightField.
  */
 export const COLLISION_GAP = 1.001
+const MAX_PLANET_GAP_KM = 1
 
 /**
- * Коллайдеры из снапшота наблюдаемых тел: сферы (`R × GAP`) или, если у тела
+ * Коллайдеры из снапшота наблюдаемых тел: сферы с защитным зазором или, если у тела
  * есть карта высот, терраформный `heightField` (широкая фаза — сфера
  * `R + maxH + maxClearance`, узкая — рельеф, см. `marchTerrain`/`pushOutTerrain`).
  *
@@ -98,7 +99,13 @@ export function collectColliders(objects: Object3D[]): Collider[] {
             heightField,
             waterLevelMeters
           }
-        : { object, radius: toThreeJSUnits(radius) * COLLISION_GAP }
+        : {
+            object,
+            radius:
+              object.userData.type === 'planet'
+                ? toThreeJSUnits(radius + Math.min(radius * (COLLISION_GAP - 1), MAX_PLANET_GAP_KM))
+                : toThreeJSUnits(radius) * COLLISION_GAP
+          }
     )
   }
 

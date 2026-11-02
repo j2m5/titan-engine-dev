@@ -15,7 +15,7 @@ import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { makeBody, makeModel, makeCollision, type ModelStub } from './cameraCollisionStubs'
 
 const EARTH_RADIUS_KM = 6360
-const R = toThreeJSUnits(EARTH_RADIUS_KM) * COLLISION_GAP
+const R = toThreeJSUnits(EARTH_RADIUS_KM + 1)
 
 const MOON_HEIGHT_PATH = 'planets/moon/moon_height.raw'
 
@@ -121,7 +121,7 @@ describe('collectColliders: состав кэша', () => {
     const colliders = collectColliders([makeBody('planet', EARTH_RADIUS_KM)])
 
     expect(colliders).toHaveLength(1)
-    expect(colliders[0].radius).toBeCloseTo(toThreeJSUnits(EARTH_RADIUS_KM) * COLLISION_GAP, 10)
+    expect(colliders[0].radius).toBeCloseTo(toThreeJSUnits(EARTH_RADIUS_KM + 1), 10)
   })
 
   it('исключает чёрную дыру', () => {
@@ -173,13 +173,13 @@ describe('collectColliders: терраформные тела', () => {
     )
   })
 
-  it('height-строка есть, но карта не загрузилась — тело остаётся сферой R×GAP', () => {
+  it('height-строка есть, но карта не загрузилась — тело остаётся сферой с зазором', () => {
     const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
 
     const colliders = collectColliders([body])
 
     expect(colliders[0].heightField).toBeUndefined()
-    expect(colliders[0].radius).toBeCloseTo(toThreeJSUnits(1736) * COLLISION_GAP, 10)
+    expect(colliders[0].radius).toBeCloseTo(toThreeJSUnits(1737), 10)
   })
 })
 
@@ -227,9 +227,7 @@ describe('CameraCollision: пуш-аут', () => {
     collision.resolve()
 
     expect(camera.position.length()).toBeGreaterThanOrEqual(R - 1e-9)
-    expect(camera.position.distanceTo(moon.position)).toBeGreaterThanOrEqual(
-      toThreeJSUnits(moonKm) * COLLISION_GAP - 1e-9
-    )
+    expect(camera.position.distanceTo(moon.position)).toBeGreaterThanOrEqual(toThreeJSUnits(moonKm + 1) - 1e-9)
   })
 
   it('пустой снапшот — no-op без исключений', () => {
@@ -1528,7 +1526,7 @@ describe('CameraCollision.nearestSurface: высота камеры над бл�
     const { collision } = makeCollision([big, small], new Vector3(R * 3 - R * 0.02, 0, 0))
     collision.resolve()
 
-    expect(collision.nearestSurface()!.surfaceRadius).toBeCloseTo(R / 100, 9)
+    expect(collision.nearestSurface()!.surfaceRadius).toBeCloseTo(toThreeJSUnits(63.6636), 9)
   })
 
   it('терраформное тело: высота над рельефом под камерой, а не над сферой широкой фазы', () => {
