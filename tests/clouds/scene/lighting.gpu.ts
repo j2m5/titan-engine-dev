@@ -44,6 +44,7 @@ import { checkSceneCloudReprojection } from './reprojection.gpu'
 import { checkSceneCloudCurrentOutput } from './currentOutput.gpu'
 import { checkSceneCloudShadowOutput } from './shadowOutput.gpu'
 import { checkSceneCloudShadowNumerics } from './shadowNumerics.gpu'
+import { checkSceneCloudShadowEmptyRay } from './shadowEmptyRay.gpu'
 import { checkSceneCloudCurrentNumerics } from './currentNumerics.gpu'
 import { checkSceneCloudDensityProfile } from './densityProfile.gpu'
 import { checkSceneCloudStationaryWeather } from './stationaryWeather.gpu'
@@ -327,6 +328,13 @@ void main() {
       )
       report.cases.push(`${quality}-shadow-ray-intervals`)
     }
+    checkSceneCloudShadowEmptyRay(
+      activeEffect().shadowPass.currentMaterial.fragmentShader,
+      activeEffect().shadowPass.resolveMaterial.fragmentShader,
+      draw,
+      check
+    )
+    report.cases.push('neutral-empty-shadow-rays')
     checkSceneCloudCurrentNumerics(renderer, activeEffect().cloudsPass.currentMaterial.fragmentShader, check)
     report.cases.push('current-ray-intervals')
     checkSceneCloudDensityProfile(activeEffect().cloudsPass.currentMaterial.fragmentShader, draw, check)
@@ -713,6 +721,10 @@ void main() {
       const resolvedDepth = sampleDepthVelocity(effect.cloudsPass.resolveMaterial.uniforms.depthVelocityBuffer.value!)
       const resolvedShadow = sample(effect.atmosphereShadow!.map, true)
       check(fresh.every(Number.isFinite) && resolved.every(Number.isFinite), `${label} finite marched HDR`)
+      check(
+        [...freshCurrent, ...resolvedCurrent, ...freshShadow, ...resolvedShadow].every(Number.isFinite),
+        `${label} finite current HDR and resolved optical shadow`
+      )
       check(fresh[3] > 0.01 && fresh[3] <= 1, `${label} nonempty actual march`)
       if (label === 'noon') noon = fresh[0] + fresh[1] + fresh[2]
       if (label === 'night') check(fresh[0] + fresh[1] + fresh[2] < noon, 'night has no added daylight floor')

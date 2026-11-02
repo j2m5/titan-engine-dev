@@ -166,6 +166,7 @@ export const sceneCloudProbeRegistry: Partial<
       'low-shadow-ray-intervals',
       'medium-shadow-ray-intervals',
       'high-shadow-ray-intervals',
+      'neutral-empty-shadow-rays',
       'current-ray-intervals',
       'linear-density-profile',
       'stationary-weather-evolution',
