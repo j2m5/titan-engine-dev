@@ -42,7 +42,9 @@
 - [x] Recalculate per-window statistics, correlate tails only where evidence supports it, and inspect trace/GL events. Expected:documented localization or explicit remaining uncertainty; no unsupported speedup/root-cause claim.
 - [x] Implement independent validator with corrupted-report controls for missing/duplicate query samples, disjoint/loss, wrong/self-consistent stationary routes, extraRAF, unready clouds and leaked resources. Expected:accepted original plus rejected controls.
 - [x] Save source-bound audit/evidence, commit locally, run `node benchmark-results/cloud-frame-profile-2026-11-02/verify-result.mjs`. Expected:exit0, exact archive/source identities and independently recomputed results.
-- [ ] One fresh whole-branch review, adjudicate all findings/boundaries, fix confirmed findings once under the user's all-findings priority, verify and archive the completed journal, clean only this plan's scratch directory.
+- [x] One fresh whole-branch review, adjudicate all findings/boundaries, fix confirmed findings once under the user's all-findings priority, verify and archive the completed journal, clean only this plan's scratch directory.
+
+**Outcome:** full-v2 and control-v1 passed; product unchanged. One fresh gpt-6-astra/medium review:Ready to merge Yes,0Critical/0Important/0Minor. Seven review boundaries adjudicated in the archived progress journal; no deferred findings. Complete evidence verification and owned-scratch cleanup conclude this stage; feature branch retained locally.
 
 **Task completion command:** `node benchmark-results/cloud-frame-profile-2026-11-02/verify-result.mjs` (expected exit0).
 
