@@ -37,6 +37,7 @@ const terrainUniforms = {
   uCavityStrength: new Uniform(0),
   // Ближний слой тени рельефа (USE_TERRAIN_SHADOW): вес 0 — плитки нет
   uNearTile: new Uniform(null),
+  uNearTileManualFilter: new Uniform(true),
   uNearTileCenter: new Uniform(new Vector3(1, 0, 0)),
   uNearTileEast: new Uniform(new Vector3(0, 0, -1)),
   uNearTileNorth: new Uniform(new Vector3(0, 1, 0)),

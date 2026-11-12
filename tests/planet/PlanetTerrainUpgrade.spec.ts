@@ -58,7 +58,7 @@ function seedHeightMap(path: string = MOON_HEIGHT_PATH): void {
 
 function makeFactory(builder: TerrainPatchBuilder, refreshObservation?: () => void): RenderableFactory {
   return new RenderableFactory(
-    { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+    { domElement: { height: 1080 }, extensions: { has: () => false } } as unknown as WebGLRenderer,
     {} as unknown as ResourceObserver,
     new AtmosphereRegistry(),
     new DepthVolumeRegistry(),
@@ -141,7 +141,7 @@ describe('RenderableFactory: свап поверхности по готовно
     const builder = new FakeAsyncBuilder()
     let refreshes = 0
     const factory = new RenderableFactory(
-      { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+      { domElement: { height: 1080 }, extensions: { has: () => false } } as unknown as WebGLRenderer,
       {} as unknown as ResourceObserver,
       new AtmosphereRegistry(),
       new DepthVolumeRegistry(),

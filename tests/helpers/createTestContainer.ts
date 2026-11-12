@@ -46,6 +46,7 @@ export function createTestContainer(): Container {
 
   container.instance(Tokens.Renderer, {
     domElement: createDomElement(),
+    extensions: { has: () => false, get: () => null },
     setSize: () => {},
     setPixelRatio: () => {},
     setAnimationLoop: () => {},

@@ -181,10 +181,12 @@ class HeightFieldStorage {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const map: HeightMapData = parseHeightMap(await response.arrayBuffer())
+      // Сама карта должна успеть до дедлайна. После её готовности таймаут
+      // необязательного компаньона включает штатный расчёт блоков в рантайме.
+      request.signal.throwIfAborted()
       const auxFetch: AuxFetch = await auxPending
 
       if (epoch !== this.epoch || this.inFlight.get(path) !== request) return
-      request.signal.throwIfAborted()
 
       // о компаньоне говорим только при пришедшей карте: без неё его судьба не важна
       if (auxFetch.failure !== undefined) this.warnAuxUnused(auxPath, auxFetch.failure)

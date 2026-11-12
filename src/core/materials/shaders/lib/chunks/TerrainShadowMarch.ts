@@ -20,6 +20,7 @@ export const terrainShadowMarchUniforms = /* glsl */ `
   uniform float uTerrainShadowStrength;
   // Ближний слой: плитка высот у камеры (NearShadowTile), тело-локально; вес 0 — плитки нет
   uniform sampler2D uNearTile;
+  uniform bool uNearTileManualFilter;
   uniform vec3 uNearTileCenter;
   uniform vec3 uNearTileEast;
   uniform vec3 uNearTileNorth;

@@ -16,6 +16,7 @@ import { argument } from './lib/cliArguments'
  *   [--height 4096] [--min-meters N --max-meters N]
  *   [--in-width N --in-height N [--scale-meters K] [--big-endian]]
  *   [--scale-meters K] [--offset-meters K] [--nodata-fill N]
+ * Размеры растра — целые числа от 1 до 4294967295 (uint32 в заголовке TEHM).
  *
  * Три режима входа:
  *   - **.tif/.tiff** (strip-based, без сжатия) — читается собственными
@@ -54,24 +55,28 @@ import { argument } from './lib/cliArguments'
  */
 const input: string | undefined = argument('in')
 const output: string | undefined = argument('out')
-const width: number = Number(argument('width') ?? 8192)
-const height: number = Number(argument('height') ?? 4096)
 
 if (!input || !output) {
   console.error('Нужны --in <файл DEM> и --out <файл .raw>')
   process.exit(1)
 }
 
-// Валидация числовых флагов: если флаг задан, Number(...) должен быть конечным числом.
-// Это ловит случай «флаг без значения» (argument() возвращает следующий флаг → NaN).
-if (!Number.isFinite(width)) {
-  console.error('Флаг --width должен быть конечным числом, получено:', argument('width'))
-  process.exit(1)
+/** Проверяем до чтения DEM: дробные размеры искажают индексы растра и усекаются в заголовке. */
+function dimensionArgument(name: string, fallback?: number): number {
+  const raw = argument(name)
+  // Заданный флаг без значения — ошибка, а не запрос размера по умолчанию.
+  const value = process.argv.includes(`--${name}`) ? Number(raw) : fallback
+
+  if (value === undefined || !Number.isInteger(value) || value < 1 || value > 0xffffffff) {
+    console.error(`Флаг --${name} должен быть целым числом от 1 до 4294967295, получено:`, raw)
+    process.exit(1)
+  }
+
+  return value
 }
-if (!Number.isFinite(height)) {
-  console.error('Флаг --height должен быть конечным числом, получено:', argument('height'))
-  process.exit(1)
-}
+
+const width = dimensionArgument('width', 8192)
+const height = dimensionArgument('height', 4096)
 
 const minArg = argument('min-meters')
 const maxArg = argument('max-meters')
@@ -86,21 +91,21 @@ if (maxArg !== undefined && !Number.isFinite(Number(maxArg))) {
   process.exit(1)
 }
 
-const inWidthArg = argument('in-width')
-const inHeightArg = argument('in-height')
+const hasInWidth = process.argv.includes('--in-width')
+const hasInHeight = process.argv.includes('--in-height')
 const scaleArg = argument('scale-meters')
 
 // Сырой режим требует обеих размерностей: одна без другой — почти наверняка опечатка
-if ((inWidthArg !== undefined) !== (inHeightArg !== undefined)) {
+if (hasInWidth !== hasInHeight) {
   console.error('Флаги --in-width и --in-height задаются только парой')
   process.exit(1)
 }
+const inWidth = hasInWidth ? dimensionArgument('in-width') : undefined
+const inHeight = hasInHeight ? dimensionArgument('in-height') : undefined
 const offsetArg = argument('offset-meters')
 const nodataFillArg = argument('nodata-fill')
 
 for (const [name, value] of [
-  ['in-width', inWidthArg],
-  ['in-height', inHeightArg],
   ['scale-meters', scaleArg],
   ['offset-meters', offsetArg],
   ['nodata-fill', nodataFillArg]
@@ -115,17 +120,17 @@ const bigEndian = process.argv.includes('--big-endian')
 const isTiff = /\.tiff?$/i.test(input)
 
 const dem =
-  inWidthArg !== undefined && inHeightArg !== undefined
+  inWidth !== undefined && inHeight !== undefined
     ? await (async () => {
         const source = readRawInt16Dem(
           await readFile(input),
-          Number(inWidthArg),
-          Number(inHeightArg),
+          inWidth,
+          inHeight,
           Number(scaleArg ?? 1),
           bigEndian
         )
 
-        return { width, height, data: resampleDemGrid(source, Number(inWidthArg), Number(inHeightArg), width, height) }
+        return { width, height, data: resampleDemGrid(source, inWidth, inHeight, width, height) }
       })()
     : isTiff
       ? await (async () => {

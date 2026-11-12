@@ -57,10 +57,9 @@ function seedPlaceholderKeys(): void {
   seedTexture(moon().resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
 }
 
-// заглушка рендерера: TerrainSphere читает только domElement.height (device-пиксели
-// канваса — паттерн PlanetTerrain.spec/RenderableFactory.distanceLod)
+// Размер канваса и поддержка фильтрации — граница реального рендерера в CPU-тесте.
 function makeRenderer(height: number): WebGLRenderer {
-  return { domElement: { height } } as unknown as WebGLRenderer
+  return { domElement: { height }, extensions: { has: () => false } } as unknown as WebGLRenderer
 }
 
 // камера над (1,0,0) на altKm — высоте НАД ПОВЕРХНОСТЬЮ (радиус поля 1737.4,

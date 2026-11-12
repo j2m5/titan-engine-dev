@@ -41,7 +41,7 @@ describe('stable body cloud registration', () => {
       resourceStorage.addTexture(texture)
     }
     const factory = new RenderableFactory(
-      { domElement: { width: 1920, height: 1080 } } as never,
+      { domElement: { width: 1920, height: 1080 }, extensions: { has: () => false } } as never,
       {} as never,
       new AtmosphereRegistry(),
       new DepthVolumeRegistry(),

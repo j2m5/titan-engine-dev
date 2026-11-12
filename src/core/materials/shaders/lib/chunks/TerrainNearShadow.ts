@@ -6,7 +6,8 @@ import { NEAR_SHADOW_BIAS_SLOPE, NEAR_SHADOW_STEPS } from '@/core/terrain/terrai
  * Юниформы — в terrainShadowMarchUniforms; чанк только под USE_TERRAIN_SHADOW.
  *
  * Плитка: метры по осям E, N от центра, гномоническая проекция; строка 0 —
- * юг (v = 0, DataTexture без flipY), столбец 0 — запад; LinearFilter без мипов.
+ * юг (v = 0, DataTexture без flipY), столбец 0 — запад. Без float-linear
+ * расширения билинейную фильтрацию выполняет шейдер над NearestFilter.
  * Выборки — с явным LOD: марш идёт в неоднородной ветке и цикле с break.
  */
 export const terrainNearShadowFunctions = /* glsl */ `
@@ -26,7 +27,16 @@ export const terrainNearShadowFunctions = /* glsl */ `
 
   // высота над сферой относительно центра плитки, метры
   float terrainNearTileHeight(vec2 xy) {
-    return texture2DLodEXT(uNearTile, terrainNearTileUv(xy), 0.0).r;
+    if (!uNearTileManualFilter) return texture2DLodEXT(uNearTile, terrainNearTileUv(xy), 0.0).r;
+
+    // Texel centers and edge clamping must match LINEAR + CLAMP_TO_EDGE.
+    vec2 texel = clamp(terrainNearTileUv(xy) * uNearTileTexels - 0.5, vec2(0.0), vec2(uNearTileTexels - 1.0));
+    ivec2 p0 = ivec2(floor(texel));
+    ivec2 p1 = min(p0 + ivec2(1), ivec2(int(uNearTileTexels) - 1));
+    vec2 blend = fract(texel);
+    float south = mix(texelFetch(uNearTile, p0, 0).r, texelFetch(uNearTile, ivec2(p1.x, p0.y), 0).r, blend.x);
+    float north = mix(texelFetch(uNearTile, ivec2(p0.x, p1.y), 0).r, texelFetch(uNearTile, p1, 0).r, blend.x);
+    return mix(south, north, blend.y);
   }
 
   // 1 внутри 0.8·half, 0 на краю плитки, по max(|x|, |y|)

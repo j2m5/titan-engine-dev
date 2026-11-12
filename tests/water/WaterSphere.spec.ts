@@ -50,7 +50,7 @@ function seedHeightMap(): void {
 }
 
 function makeRenderer(height = 1080): WebGLRenderer {
-  return { domElement: { height } } as unknown as WebGLRenderer
+  return { domElement: { height }, extensions: { has: () => false } } as unknown as WebGLRenderer
 }
 
 function makeCtx(altKm: number): UpdateContext {

@@ -50,7 +50,7 @@ function flatMap(): HeightMapData {
 }
 
 function makeFactory(): RenderableFactory {
-  const renderer = { domElement: { width: 1920, height: 1080 } }
+  const renderer = { domElement: { width: 1920, height: 1080 }, extensions: { has: () => false } }
   const resourceObserver = { textureOf: vi.fn(() => null) }
 
   return new RenderableFactory(renderer as never, resourceObserver as never, new AtmosphereRegistry(), new DepthVolumeRegistry())

@@ -1,4 +1,4 @@
-import { ClampToEdgeWrapping, DataTexture, FloatType, LinearFilter, RedFormat, Vector3 } from 'three'
+import { ClampToEdgeWrapping, DataTexture, FloatType, LinearFilter, NearestFilter, RedFormat, Vector3 } from 'three'
 import type { TerrainConfig } from '@/config/terrain'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { TerrainHeightField } from './TerrainHeightField'
@@ -44,7 +44,8 @@ export class NearShadowTile {
   public constructor(
     private readonly field: TerrainHeightField,
     private readonly builder: Pick<TerrainPatchBuilder, 'requestNearTile'>,
-    private readonly config: NearShadowTileConfig
+    private readonly config: NearShadowTileConfig,
+    private readonly floatLinear: boolean = false
   ) {}
 
   /** cameraLocal — позиция камеры в системе тела, юниты сцены. null — плитки нет (выше порога или ещё не пришла). */
@@ -130,8 +131,10 @@ export class NearShadowTile {
   private install(heights: Float32Array, center: Vec3, east: Vec3, north: Vec3): void {
     const { tileTexels: texels, texelMeters } = this.config
     const texture = new DataTexture(heights, texels, texels, RedFormat, FloatType)
-    texture.minFilter = LinearFilter
-    texture.magFilter = LinearFilter
+    // R32F is linearly filterable only with OES_texture_float_linear.
+    // The shader interpolates nearest-filtered tiles when the extension is absent.
+    texture.minFilter = this.floatLinear ? LinearFilter : NearestFilter
+    texture.magFilter = this.floatLinear ? LinearFilter : NearestFilter
     texture.wrapS = ClampToEdgeWrapping
     texture.wrapT = ClampToEdgeWrapping
     texture.generateMipmaps = false

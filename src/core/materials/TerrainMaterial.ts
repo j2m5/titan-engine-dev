@@ -1,7 +1,7 @@
 import { Actor } from '@/core/models/Actor'
 import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { PlanetSurfaceMaterial, type SurfaceMaps } from '@/core/materials/PlanetSurfaceMaterial'
-import { Color, Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
+import { Color, NearestFilter, Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
@@ -104,12 +104,14 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     const u = this.uniforms
     if (!state) {
       u.uNearTile.value = null
+      u.uNearTileManualFilter.value = true
       u.uNearTileWeight.value = 0
       ;(u.uNearCameraXY.value as Vector2).set(0, 0)
 
       return
     }
     u.uNearTile.value = state.texture
+    u.uNearTileManualFilter.value = state.texture.magFilter === NearestFilter
     ;(u.uNearTileCenter.value as Vector3).fromArray(state.center)
     ;(u.uNearTileEast.value as Vector3).fromArray(state.east)
     ;(u.uNearTileNorth.value as Vector3).fromArray(state.north)

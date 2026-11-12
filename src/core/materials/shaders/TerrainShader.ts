@@ -75,6 +75,7 @@ interface TerrainUniforms extends PlanetSurfaceUniforms {
   uShadowPenumbraTan: number
   uTerrainShadowStrength: number
   uNearTile: Texture | null
+  uNearTileManualFilter: boolean
   uNearTileCenter: Vector3
   uNearTileEast: Vector3
   uNearTileNorth: Vector3
@@ -175,6 +176,7 @@ class TerrainShader extends PlanetSurfaceShader<TerrainUniformKey> {
       uTerrainShadowStrength: new Uniform(light.terrainShadowStrength),
       // Ближний слой тени: плитку ставит материал (setNearTile); вес 0 — слоя нет
       uNearTile: new Uniform(null),
+      uNearTileManualFilter: new Uniform(true),
       uNearTileCenter: new Uniform(new Vector3(1, 0, 0)),
       uNearTileEast: new Uniform(new Vector3(0, 0, -1)),
       uNearTileNorth: new Uniform(new Vector3(0, 1, 0)),

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DataTexture, Group, PerspectiveCamera, Texture, Vector2, Vector3, type WebGLRenderer } from 'three'
+import { DataTexture, Group, LinearFilter, NearestFilter, PerspectiveCamera, Texture, Vector2, Vector3, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -106,6 +106,7 @@ function makeCtx(altKm: number, eastMeters: number = 0): UpdateContext {
 
 const NEAR_UNIFORMS: Array<[string, string]> = [
   ['sampler2D', 'uNearTile'],
+  ['bool', 'uNearTileManualFilter'],
   ['vec3', 'uNearTileCenter'],
   ['vec3', 'uNearTileEast'],
   ['vec3', 'uNearTileNorth'],
@@ -215,12 +216,15 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     disposeTerrainShadowMaps()
   })
 
-  function makeSphere(builder: TerrainPatchBuilder = new OffThreadBuilder()): TerrainSphere {
+  function makeSphere(builder: TerrainPatchBuilder = new OffThreadBuilder(), floatLinear: boolean = true): TerrainSphere {
     const map = heightFieldStorage.get(MOON_HEIGHT_PATH)!
     const sphere = new TerrainSphere(
       moon(),
       new TerrainHeightField(map, RADIUS_KM),
-      { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+      {
+        domElement: { height: 1080 },
+        extensions: { has: (name: string) => name === 'OES_texture_float_linear' && floatLinear }
+      } as unknown as WebGLRenderer,
       undefined,
       undefined,
       undefined,
@@ -230,6 +234,21 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
 
     return sphere
   }
+
+  it.each([false, true])('uses the renderer capability for both texture and shader filtering (%s)', (floatLinear) => {
+    const sphere = makeSphere(new OffThreadBuilder(), floatLinear)
+    try {
+      sphere.updateObject(makeCtx(2))
+      const texture = sphere.material.uniforms.uNearTile.value as DataTexture
+
+      expect(texture.minFilter).toBe(floatLinear ? LinearFilter : NearestFilter)
+      expect(texture.magFilter).toBe(floatLinear ? LinearFilter : NearestFilter)
+      expect(sphere.material.uniforms.uNearTileManualFilter?.value).toBe(!floatLinear)
+      expect(sphere.material.uniforms.uNearTileWeight.value).toBe(1)
+    } finally {
+      sphere.dispose()
+    }
+  })
 
   it('onVisibleUpdate зовёт update плитки и setNearTile; у поверхности плитка в материале', () => {
     const sphere = makeSphere()

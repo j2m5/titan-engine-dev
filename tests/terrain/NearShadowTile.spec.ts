@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ClampToEdgeWrapping, DataTexture, FloatType, LinearFilter, RedFormat, Vector3 } from 'three'
+import { ClampToEdgeWrapping, DataTexture, FloatType, LinearFilter, NearestFilter, RedFormat, Vector3 } from 'three'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
@@ -100,8 +100,8 @@ describe('NearShadowTile: порог высоты и первый запрос',
     expect(state.texture.image.height).toBe(512)
     expect(state.texture.format).toBe(RedFormat)
     expect(state.texture.type).toBe(FloatType)
-    expect(state.texture.minFilter).toBe(LinearFilter)
-    expect(state.texture.magFilter).toBe(LinearFilter)
+    expect(state.texture.minFilter).toBe(NearestFilter)
+    expect(state.texture.magFilter).toBe(NearestFilter)
     expect(state.texture.wrapS).toBe(ClampToEdgeWrapping)
     expect(state.texture.wrapT).toBe(ClampToEdgeWrapping)
     expect(state.texture.generateMipmaps).toBe(false)
@@ -111,6 +111,21 @@ describe('NearShadowTile: порог высоты и первый запрос',
     expect(state.north).toEqual(p.north)
     expect(state.texels).toBe(512)
     expect(state.texelMeters).toBe(64)
+    tile.dispose()
+  })
+
+  it.each([false, true])('keeps installed and replacement tiles filterable (float-linear support: %s)', (floatLinear) => {
+    const field = makeField()
+    const tile = new NearShadowTile(field, new CountingSyncBuilder(), SMALL, floatLinear)
+    const first = tile.update(cameraAt(field, 2000))!
+    const next = tile.update(cameraAt(field, 2000, 10000))!
+
+    expect(next.texture).not.toBe(first.texture)
+    for (const state of [first, next]) {
+      expect(state.texture.minFilter).toBe(floatLinear ? LinearFilter : NearestFilter)
+      expect(state.texture.magFilter).toBe(floatLinear ? LinearFilter : NearestFilter)
+      expect(state.texture.image.data).toBeInstanceOf(Float32Array)
+    }
     tile.dispose()
   })
 

@@ -60,7 +60,7 @@ function seedHeightMap(): void {
 // фабрике нужны только domElement.height (порог LOD) и наблюдатель (не дёргается в createPlanet)
 function makeFactory(): RenderableFactory {
   return new RenderableFactory(
-    { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+    { domElement: { height: 1080 }, extensions: { has: () => false } } as unknown as WebGLRenderer,
     {} as unknown as ResourceObserver,
     new AtmosphereRegistry(),
     new DepthVolumeRegistry()
@@ -102,7 +102,7 @@ describe('RenderableFactory: ветка рельефа', () => {
     // генератор рендерит на GPU — здесь только регистрирует текстуру под ключом, как настоящий
     const ensureDiffuse = vi.fn((): string => (seedTexture(key), key))
     const factory = new RenderableFactory(
-      { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+      { domElement: { height: 1080 }, extensions: { has: () => false } } as unknown as WebGLRenderer,
       {} as unknown as ResourceObserver,
       new AtmosphereRegistry(),
       new DepthVolumeRegistry(),

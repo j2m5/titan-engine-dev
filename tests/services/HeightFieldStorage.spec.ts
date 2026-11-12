@@ -207,6 +207,13 @@ function stubHangingFetch(): AbortSignal[] {
   return signals
 }
 
+function rejectOnAbort<T>(signal: AbortSignal): Promise<T> {
+  return new Promise((_resolve, reject) => {
+    signal.throwIfAborted()
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+  })
+}
+
 describe('HeightFieldStorage: отмена и таймаут загрузки', () => {
   it('release cancels both requests immediately without imposing retry backoff', async () => {
     const signals = stubHangingFetch()
@@ -324,9 +331,132 @@ describe('HeightFieldStorage: отмена и таймаут загрузки', 
     expect(String(warn.mock.calls[0][0])).toContain('карта высот не загружена')
     warn.mockRestore()
   })
+
+  it.each(['headers', 'body'])('rejects map %s arriving after the deadline even if cancellation is ignored', async (stage) => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let finishMap!: () => void
+    const arrival = new Promise<void>((resolve) => { finishMap = resolve })
+    const body = validBody()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).endsWith('.aux')) return new Response(null, { status: 404 })
+      if (stage === 'headers') await arrival
+      const response = new Response()
+      vi.spyOn(response, 'arrayBuffer').mockImplementation(async () => {
+        if (stage === 'body') await arrival
+        return toArrayBuffer(body)
+      })
+      return response
+    }))
+    const before = heightFieldStorage.version
+    try {
+      heightFieldStorage.request(MAP_PATH)
+      await vi.advanceTimersByTimeAsync(config('streaming.heightMapTimeoutMs'))
+      finishMap()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(heightFieldStorage.get(MAP_PATH)).toBeUndefined()
+      expect(heightFieldStorage.heldPaths()).toEqual([])
+      expect(heightFieldStorage.version).toBe(before)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0][0])).toContain('карта высот не загружена')
+      heightFieldStorage.request(MAP_PATH)
+      expect(mapFetchCount()).toBe(1)
+    } finally {
+      finishMap()
+      heightFieldStorage.clear()
+      await vi.advanceTimersByTimeAsync(0)
+      vi.useRealTimers()
+      warn.mockRestore()
+    }
+  })
+
+  it.each(['release', 'clear'])('%s while awaiting auxiliary data cannot overwrite the same-path replacement', async (cancel) => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let finishAux!: (response: Response) => void
+    const auxPending = new Promise<Response>((resolve) => { finishAux = resolve })
+    const body = validBody()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      String(url).endsWith('.aux') ? auxPending : new Response(toArrayBuffer(body))))
+    try {
+      heightFieldStorage.request(MAP_PATH)
+      await vi.advanceTimersByTimeAsync(0)
+      if (cancel === 'clear') heightFieldStorage.clear()
+      else heightFieldStorage.release(MAP_PATH)
+
+      const replacement = encodeHeightMap({
+        width: 2, height: 2, minMeters: 0, maxMeters: 100, data: new Uint16Array([4, 5, 6, 7])
+      })
+      stubFetch(replacement)
+      heightFieldStorage.request(MAP_PATH)
+      await vi.advanceTimersByTimeAsync(0)
+      const current = heightFieldStorage.get(MAP_PATH)
+      expect(Array.from(current!.data)).toEqual([4, 5, 6, 7])
+      const currentVersion = heightFieldStorage.version
+
+      finishAux(new Response(toArrayBuffer(auxFor(body))))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(heightFieldStorage.get(MAP_PATH)).toBe(current)
+      expect(heightFieldStorage.version).toBe(currentVersion)
+      expect(heightFieldStorage.heldPaths()).toEqual([MAP_PATH])
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      finishAux(new Response(null, { status: 404 }))
+      heightFieldStorage.clear()
+      await vi.advanceTimersByTimeAsync(0)
+      vi.useRealTimers()
+      warn.mockRestore()
+    }
+  })
 })
 
 describe('HeightFieldStorage: компаньон карты высот', () => {
+  it.each(['headers', 'body'])('keeps the ready heightmap when auxiliary %s time out', async (stage) => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const body = validBody()
+    let auxSignal: AbortSignal | undefined
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('.aux')) return new Response(toArrayBuffer(body))
+      auxSignal = init!.signal!
+      if (stage === 'headers') return rejectOnAbort<Response>(auxSignal)
+      const response = new Response()
+      vi.spyOn(response, 'arrayBuffer').mockImplementation(() => rejectOnAbort<ArrayBuffer>(auxSignal!))
+      return response
+    }))
+    const before = heightFieldStorage.version
+    try {
+      heightFieldStorage.request(MAP_PATH)
+      await vi.advanceTimersByTimeAsync(0)
+      // Publication must stay atomic while the companion can still arrive.
+      expect(heightFieldStorage.get(MAP_PATH)).toBeUndefined()
+      expect(heightFieldStorage.version).toBe(before)
+
+      await vi.advanceTimersByTimeAsync(config('streaming.heightMapTimeoutMs'))
+
+      const map = heightFieldStorage.get(MAP_PATH)
+      expect(map).toBeDefined()
+      expect(Array.from(map!.data)).toEqual([0, 1, 2, 3])
+      expect(map!.aux).toBeUndefined()
+      expect(heightFieldStorage.version).toBe(before + 1)
+      expect(heightFieldStorage.heldPaths()).toEqual([MAP_PATH])
+      expect(auxSignal?.aborted).toBe(true)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0][0])).toContain(AUX_PATH)
+      expect(String(warn.mock.calls[0][0])).toContain('таймаут')
+
+      heightFieldStorage.request(MAP_PATH)
+      expect(mapFetchCount()).toBe(1)
+    } finally {
+      heightFieldStorage.clear()
+      await vi.advanceTimersByTimeAsync(0)
+      vi.useRealTimers()
+      warn.mockRestore()
+    }
+  })
+
   it('компаньон едет своим запросом по производному пути и прикрепляется к карте', async () => {
     stubFetch(validBody())
 

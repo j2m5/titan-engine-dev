@@ -92,7 +92,7 @@ class TerrainSphere extends TerrainPatchGroup {
     // карта тени строится у строителя (воркер держит копию карты); до прихода
     // материал держит заглушку — ровную сферу на датуме
     requestTerrainShadowMap(field, this.builder)
-    this.nearTile = new NearShadowTile(field, this.builder, config('terrain.nearShadow'))
+    this.nearTile = new NearShadowTile(field, this.builder, config('terrain.nearShadow'), renderer.extensions.has('OES_texture_float_linear'))
 
     this.name = this.model.getAttribute('name', '') + 'Planet'
     this.userData.type = 'planet'

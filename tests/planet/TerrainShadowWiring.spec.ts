@@ -164,7 +164,8 @@ describe('TerrainMaterial: гейт тени рельефа', () => {
   it('TerrainSphere запрашивает карту тени у строителя: синхронный ставит её в конструкторе', () => {
     const map = heightFieldStorage.get(MOON_HEIGHT_PATH)!
     const sphere = new TerrainSphere(moon(), new TerrainHeightField(map, 1737.4), {
-      domElement: { height: 1080 }
+      domElement: { height: 1080 },
+      extensions: { has: () => false }
     } as unknown as WebGLRenderer)
     const material = sphere.material
     expect(terrainShadowMapFor(map).ready).toBe(true)
