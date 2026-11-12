@@ -55,12 +55,13 @@ class MarkerManager {
     this.markers = []
   }
 
+  /** Runs after CSS2DRenderer: keep its display culling, suppress overlaps without losing layout. */
   public update(): void {
     if (!this.settings.showMarkers) {
       for (const entry of this.markers) {
         const element = entry.marker.element as HTMLElement
-        element.style.display = 'none'
-        entry.label.element.style.display = 'none'
+        element.style.visibility = 'hidden'
+        entry.label.element.style.visibility = 'hidden'
       }
       return
     }
@@ -78,17 +79,19 @@ class MarkerManager {
 
       if (!element) continue
 
+      // Zero-opacity markers still have DOM hit targets unless explicitly hidden.
+      if (element.style.display === 'none' || element.style.opacity === '0') {
+        element.style.visibility = 'hidden'
+        entry.label.element.style.visibility = 'hidden'
+        continue
+      }
+
       const rect = element.getBoundingClientRect()
       const hasIntersection = visibleRects.some((r) => this.intersects(rect, r))
 
-      if (hasIntersection) {
-        element.style.display = 'none'
-        entry.label.element.style.display = 'none'
-      } else {
-        element.style.display = 'block'
-        entry.label.element.style.display = 'block'
-        visibleRects.push(rect)
-      }
+      element.style.visibility = hasIntersection ? 'hidden' : ''
+      entry.label.element.style.visibility = hasIntersection ? 'hidden' : ''
+      if (!hasIntersection) visibleRects.push(rect)
     }
   }
 

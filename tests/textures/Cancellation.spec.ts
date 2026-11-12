@@ -79,10 +79,11 @@ describe('per-request texture cancellation', () => {
     vi.stubGlobal('fetch', fetch)
     const result = ImageBitmapStrategy.create(manager).load(request, controller.signal)
     void result.catch(() => undefined)
-    expect(fetch.mock.calls[0][1].signal).toBe(controller.signal)
+    const transportSignal = fetch.mock.calls[0][1].signal!
+    expect(transportSignal.aborted).toBe(false)
     controller.abort()
     await expect(result).rejects.toMatchObject({ name: 'AbortError' })
-    expect(fetch.mock.calls[0][1].signal).toBe(controller.signal)
+    expect(transportSignal.aborted).toBe(true)
     expect(end).toHaveBeenCalledOnce()
     expect(error).not.toHaveBeenCalled()
   })

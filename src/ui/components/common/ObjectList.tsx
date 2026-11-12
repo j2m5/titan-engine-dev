@@ -1,5 +1,6 @@
 import { JSX, KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite'
+import type { Object3D } from 'three'
 import { useInjection } from '@/ui/hooks/useInjection'
 import { Tokens } from '@/core/providers/tokens'
 import TitanList from '@titanui/components/TitanList'
@@ -16,6 +17,20 @@ import { engineStore } from '@/ui/mobx/EngineStore'
 import { cameraStore } from '@/ui/mobx/CameraStore'
 import { bodyInfoStore } from '@/ui/mobx/BodyInfoStore'
 import { filterByName } from '@/ui/components/common/objectSearch'
+
+function findObjectByActorId(root: Object3D, actorId: number | undefined): Object3D | undefined {
+  if (actorId === undefined) return undefined
+  // Prefer the persistent body node over renderable children sharing its model ID.
+  if (root.model?.getAttribute('id') === actorId) return root
+
+  for (const child of root.children) {
+    const target = findObjectByActorId(child, actorId)
+
+    if (target) return target
+  }
+
+  return undefined
+}
 
 /**
  * Горячие клавиши поиска: «/» и Ctrl+K (⌘K). По физической клавише (code) —
@@ -102,19 +117,19 @@ const ObjectList = observer(() => {
   }
 
   const handleSelect = (actor: Actor): void => {
-    const target = scene.getObjectByName(actor.getAttribute('name', ''))
+    const target = findObjectByActorId(scene, actor.getAttribute('id'))
 
     target?.add(sceneManager.crosshair)
   }
 
   const handleFollow = (actor: Actor): void => {
-    const target = scene.getObjectByName(actor.getAttribute('name', ''))
+    const target = findObjectByActorId(scene, actor.getAttribute('id'))
 
     if (target) cameraStore.toggleFollow(target)
   }
 
   const isFollowing = (actor: Actor): boolean => {
-    const target = scene.getObjectByName(actor.getAttribute('name', ''))
+    const target = findObjectByActorId(scene, actor.getAttribute('id'))
 
     return target !== undefined && cameraStore.currentTarget === target
   }

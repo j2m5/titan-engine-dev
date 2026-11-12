@@ -11,6 +11,43 @@ test('native anime moving-target flight', async ({ probePage }, testInfo) => {
   await runProbe(probePage, testInfo, '/tests/transitions/MovingTargetFlight.browser.ts', 'checkMovingTargetFlight')
 })
 
+test('native marker culling and overlap recovery', async ({ probePage }, testInfo) => {
+  await runProbe(probePage, testInfo, '/tests/markers/MarkerVisibility.browser.ts', 'checkMarkerVisibility')
+})
+
+test('native stalled texture timeout completes initial loading and closes HTTP connection', async ({ probePage }, testInfo) => {
+  let requests = 0, connectionClosed = false
+  const server = createServer((_request, response) => {
+    requests++
+    response.setHeader('Access-Control-Allow-Origin', '*')
+    response.setHeader('Content-Type', 'image/png')
+    response.writeHead(200)
+    response.flushHeaders()
+    response.on('close', () => { connectionClosed = true })
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/held.png`
+  const headers = probePage.waitForResponse(response => response.url() === url)
+  const aborted = probePage.waitForEvent('requestfailed', { predicate: request => request.url() === url })
+  void headers.catch(() => {})
+  void aborted.catch(() => {})
+  try {
+    const probe = runProbe(probePage, testInfo, '/tests/textures/TextureTimeout.browser.ts', 'checkTextureTimeout', [url])
+    void probe.catch(() => {})
+    expect((await headers).status()).toBe(200)
+    await probe
+    expect((await aborted).failure()?.errorText).toMatch(/ERR_ABORTED/)
+    expect(requests).toBe(1)
+    await expect.poll(() => connectionClosed, { message: 'Deadline must cancel the real HTTP transfer' }).toBe(true)
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  }
+})
+
 test('native texture fetch cancellation and cube orientation', async ({ probePage }, testInfo) => {
   let requests = 0
   let connectionClosed = false

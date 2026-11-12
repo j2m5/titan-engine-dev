@@ -2,16 +2,9 @@ import { act } from 'react'
 import { runInAction } from 'mobx'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ScenarioConfig } from '@/config/scenarios'
-
-// Сцена и менеджер сцены — один стаб: getObjectByName отдаёт цель с add,
-// по которому видно, повесил ли кто-то прицел (handleSelect строки)
-const { target } = vi.hoisted(() => ({ target: { add: vi.fn() } }))
-
-vi.mock('@/ui/hooks/useInjection', () => ({
-  useInjection: () => ({ crosshair: {}, getObjectByName: () => target })
-}))
-
-import ObjectList from '@/ui/components/common/ObjectList'
+import { Group } from 'three'
+import { Actor } from '@/core/models/Actor'
+import { createObjectListFixture } from './objectListFixture'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { bodyInfoStore } from '@/ui/mobx/BodyInfoStore'
 
@@ -21,6 +14,8 @@ declare global {
 
 let container: HTMLDivElement
 let root: Root
+let fixture: ReturnType<typeof createObjectListFixture>
+let target: Group
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -32,7 +27,12 @@ beforeEach(() => {
     engineStore.scenario = { rootId: 1 } as ScenarioConfig
   })
   bodyInfoStore.connect({ measure: () => null })
-  act(() => root.render(<ObjectList />))
+  fixture = createObjectListFixture()
+  const sun = Actor.find(4)!
+
+  target = Object.assign(new Group(), { model: sun, name: sun.getAttribute('name', '') })
+  fixture.scene.add(target)
+  act(() => root.render(fixture.render()))
 })
 
 afterEach(() => {
@@ -61,10 +61,11 @@ describe('ObjectList: кнопка ⓘ', () => {
   })
 
   it('не выбирает тело: клик не всплывает в строку списка (прицел не вешается)', () => {
-    target.add.mockClear()
-
     act(() => infoButtons()[0].click())
 
-    expect(target.add).not.toHaveBeenCalled()
+    expect(fixture.crosshair.parent).toBeNull()
+
+    act(() => container.querySelector<HTMLElement>('.titan-list-item')!.click())
+    expect(fixture.crosshair.parent).toBe(target)
   })
 })

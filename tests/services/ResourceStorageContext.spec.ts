@@ -6,6 +6,8 @@ import {
   resourceStorage
 } from '@/core/services/ResourceStorage'
 import { Engine } from '@/core/Engine'
+import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
+import { CubeStrategy } from '@/core/textures/strategies/CubeStrategy'
 
 afterEach(() => resourceStorage.deleteAllTextures())
 function renderer(lost = false) {
@@ -15,7 +17,77 @@ function renderer(lost = false) {
     getContext: () => ({ isContextLost: () => lost })
   } as unknown as WebGLRenderer
 }
+async function ownedTexture(kind: 'raster' | 'cube', name = 'context-bitmap') {
+  const images = Array.from({ length: kind === 'cube' ? 6 : 1 }, () => {
+    const image = { width: 2, height: 2, close: vi.fn() }
+    image.close.mockImplementation(() => { image.width = image.height = 0 })
+    return image
+  })
+  let next = 0
+  const loader = { loadAsync: async () => images[next++] as unknown as ImageBitmap }
+  const strategy = kind === 'cube' ? new CubeStrategy(loader) : new ImageBitmapStrategy(loader)
+  const texture = await strategy.load({
+    name, paths: images.map((_, face) => `${name}-${face}.png`), resourceType: kind === 'cube' ? 'cube' : 'diffuse', params: {}
+  })
+  texture.name = name
+  resourceStorage.addTexture(texture)
+  return { texture, images }
+}
+
 describe('resource owner context lifecycle', () => {
+  it.each(['raster', 'cube'] as const)('preserves owned %s sources over repeated losses until final eviction', async (kind) => {
+    const { texture, images } = await ownedTexture(kind)
+    const active = renderer(), release = bindResourceStorageContext(active)
+    const stamp = resourceStorage.getTextureSnapshot(texture.name)
+    const gpuDisposals = vi.fn()
+    texture.addEventListener('dispose', gpuDisposals)
+    try {
+      for (let cycle = 0; cycle < 2; cycle++) {
+        active.domElement.dispatchEvent(new Event('webglcontextlost'))
+        expect(images.map(image => image.width)).toEqual(kind === 'cube' ? [2, 2, 2, 2, 2, 2] : [2])
+        active.domElement.dispatchEvent(new Event('webglcontextrestored'))
+        expect(resourceStorage.getTextureSnapshot(texture.name)).toEqual(stamp)
+        expect(resourceStorage.getTexture(texture.name)).toBe(texture)
+      }
+      expect(gpuDisposals).toHaveBeenCalledTimes(2)
+      for (const image of images) expect(image.close).not.toHaveBeenCalled()
+      resourceStorage.deleteTexture(texture.name)
+      expect(images.map(image => image.width)).toEqual(kind === 'cube' ? [0, 0, 0, 0, 0, 0] : [0])
+      texture.dispose()
+      for (const image of images) expect(image.close).toHaveBeenCalledOnce()
+    } finally {
+      release()
+    }
+  })
+  it('still closes a source when evicted while the context remains lost', async () => {
+    const { texture, images } = await ownedTexture('raster')
+    const active = renderer(), release = bindResourceStorageContext(active)
+    try {
+      active.domElement.dispatchEvent(new Event('webglcontextlost'))
+      expect(images[0].width).toBe(2)
+      resourceStorage.deleteTexture(texture.name)
+      expect(images[0].width).toBe(0)
+      expect(images[0].close).toHaveBeenCalledOnce()
+      active.domElement.dispatchEvent(new Event('webglcontextrestored'))
+      expect(resourceStorage.getTexture(texture.name)).toBeUndefined()
+    } finally {
+      release()
+    }
+  })
+  it('keeps final release active after a GPU disposal listener throws', async () => {
+    const { texture, images } = await ownedTexture('raster')
+    const fail = () => { throw new Error('GPU disposal failed') }
+    texture.addEventListener('dispose', fail)
+    try {
+      expect(() => resourceStorage.invalidateTextureGpuHandles()).toThrow('GPU disposal failed')
+      expect(images[0].width).toBe(2)
+    } finally {
+      texture.removeEventListener('dispose', fail)
+    }
+    resourceStorage.deleteAllTextures()
+    expect(images[0].width).toBe(0)
+    expect(images[0].close).toHaveBeenCalledOnce()
+  })
   it('keeps a monotonic observed context generation across final release/rebind and ignores unpaired events', () => {
     const active = renderer(),
       owner = { invalidateTextureGpuHandles: vi.fn() }

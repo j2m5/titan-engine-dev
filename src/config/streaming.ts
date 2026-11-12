@@ -62,6 +62,8 @@ export interface StreamingConfig {
      * достаточно мало, чтобы пользователь не успел счесть дыру постоянной.
      */
     retryBackoffMs: number
+    /** Общий предел скачивания и декодирования одной текстуры, включая тело ответа, мс. */
+    textureTimeoutMs: number
     /**
      * Потолок загрузки карты высот с компаньоном, мс, включая скачивание тела.
      * Зависший запрос иначе пинит путь в полёте навсегда. 120 с — карта 64 МиБ
@@ -77,6 +79,7 @@ export const streaming: StreamingConfig = {
     minBodyPixels: 4,
     recomputeIntervalMs: 500,
     retryBackoffMs: 30_000,
+    textureTimeoutMs: 120_000,
     heightMapTimeoutMs: 120_000
   }
 }

@@ -3,12 +3,7 @@ import { runInAction } from 'mobx'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ScenarioConfig } from '@/config/scenarios'
 import type { Actor } from '@/core/models/Actor'
-
-const { target } = vi.hoisted(() => ({ target: { add: vi.fn() } }))
-
-vi.mock('@/ui/hooks/useInjection', () => ({
-  useInjection: () => ({ crosshair: {}, getObjectByName: () => target })
-}))
+import { createObjectListFixture } from './objectListFixture'
 
 import ObjectList from '@/ui/components/common/ObjectList'
 import TitanModal from '@titanui/components/TitanModal'
@@ -21,6 +16,7 @@ declare global {
 
 let container: HTMLDivElement
 let root: Root
+let fixture: ReturnType<typeof createObjectListFixture>
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -31,7 +27,8 @@ beforeEach(() => {
   runInAction(() => {
     engineStore.scenario = { rootId: 1 } as ScenarioConfig
   })
-  act(() => root.render(<ObjectList />))
+  fixture = createObjectListFixture()
+  act(() => root.render(fixture.render()))
 })
 
 afterEach(() => {
@@ -149,12 +146,14 @@ describe('ObjectList: поиск по объектам', () => {
   it('горячая клавиша не работает, пока открыто окно', () => {
     act(() =>
       root.render(
-        <>
-          <ObjectList />
-          <TitanModal visible={true} title="Settings" actions={null} onClose={() => {}}>
-            settings
-          </TitanModal>
-        </>
+        fixture.render(
+          <>
+            <ObjectList />
+            <TitanModal visible={true} title="Settings" actions={null} onClose={() => {}}>
+              settings
+            </TitanModal>
+          </>
+        )
       )
     )
 

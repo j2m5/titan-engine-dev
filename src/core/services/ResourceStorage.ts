@@ -1,6 +1,7 @@
 import type { Texture, WebGLRenderer } from 'three'
 import { Collection } from '@/core/framework/support/Collection'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
+import { disposeTextureGpuAllocation } from '@/core/textures/BitmapTransport'
 import type { CloudSourceStamp } from '@/core/clouds/CloudSources'
 
 class ResourceStorage {
@@ -70,7 +71,7 @@ class ResourceStorage {
     this._textures.each((texture: Texture) => {
       textures.add(texture)
     })
-    for (const texture of textures) texture.dispose()
+    for (const texture of textures) disposeTextureGpuAllocation(texture)
   }
 
   /**
