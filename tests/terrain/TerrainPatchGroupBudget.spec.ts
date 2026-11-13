@@ -1,3 +1,4 @@
+import { updateTerrainFrame } from '../helpers/updateTerrainFrame'
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Frustum, Matrix4, Mesh, PerspectiveCamera, Texture, type Mesh as ThreeMesh, type WebGLRenderer } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
@@ -158,7 +159,7 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     const group = makeGroup(sequence([0, 0, 7, 7]))
     const before = meshCount(group)
 
-    group.updateObject(makeCtx(2))
+    updateTerrainFrame(group, makeCtx(2))
 
     expect(meshCount(group) - before).toBe(1)
   })
@@ -167,7 +168,7 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     const group = makeGroup(sequence([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
     const before = meshCount(group)
 
-    group.updateObject(makeCtx(2))
+    updateTerrainFrame(group, makeCtx(2))
 
     expect(meshCount(group) - before).toBeGreaterThanOrEqual(4)
   })
@@ -178,7 +179,7 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     const ctx = makeCtx(2)
     const before = new Set(group.children.map((c) => (c as ThreeMesh).userData.terrainAddress).filter(Boolean).map(terrainNodeKey))
 
-    group.updateObject(ctx)
+    updateTerrainFrame(group, ctx)
 
     const added = group.children
       .map((c) => (c as ThreeMesh).userData.terrainAddress as TerrainNodeAddress | undefined)
@@ -219,7 +220,7 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     let maxHidden = 0
     for (let f = 0; f < 200; f++) {
       clock.startFrame()
-      group.updateObject(ctx)
+      updateTerrainFrame(group, ctx)
 
       if (exhaustedAtFrame === -1 && warnSpy.mock.calls.some((c) => String(c[0]).includes('пул патчей исчерпан'))) {
         exhaustedAtFrame = f
@@ -248,7 +249,7 @@ describe('сбой постройки патча', () => {
     const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), undefined, clock.nowMs, builder)
     for (let f = 0; f < 60; f++) {
       clock.startFrame()
-      group.updateObject(makeCtx(600))
+      updateTerrainFrame(group, makeCtx(600))
       expect(unbackedHiddenAddresses(group)).toEqual([])
       expect(fullyCovered(group)).toBe(true)
     }
@@ -301,7 +302,7 @@ describe('клапан пула', () => {
     const tail: number[] = []
     for (let f = 0; f < 300; f++) {
       clock.startFrame()
-      group.updateObject(makeCtx(600))
+      updateTerrainFrame(group, makeCtx(600))
       // покадровый пин «без дыр» в режиме давления: под клапаном своп
       // застревает недостроенным (видимым остаётся базовый набор L1), поэтому
       // пин ловит прежде всего преждевременное освобождение узла
@@ -314,7 +315,7 @@ describe('клапан пула', () => {
     // после отлёта набор возвращается к 24 — слоты освобождены, не заморожены
     for (let f = 0; f < 200; f++) {
       clock.startFrame()
-      group.updateObject(makeCtx(500000))
+      updateTerrainFrame(group, makeCtx(500000))
       expect(unbackedHiddenAddresses(group)).toEqual([])
       expect(fullyCovered(group)).toBe(true)
     }
@@ -331,13 +332,13 @@ describe('клапан пула', () => {
     const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), 32, clock.nowMs, builder)
     for (let f = 0; f < 400; f++) {
       clock.startFrame()
-      group.updateObject(makeCtx(600))
+      updateTerrainFrame(group, makeCtx(600))
     }
     const buildsBefore = builder.requests
     const counts: number[] = []
     for (let f = 0; f < 200; f++) {
       clock.startFrame()
-      group.updateObject(makeCtx(600))
+      updateTerrainFrame(group, makeCtx(600))
       expect(unbackedHiddenAddresses(group)).toEqual([])
       expect(fullyCovered(group)).toBe(true)
       counts.push(meshCount(group))
@@ -358,7 +359,7 @@ describe('клапан пула', () => {
     const counts: number[] = []
     for (let f = 0; f < 300; f++) {
       clock.startFrame()
-      group.updateObject(makeCtx(600))
+      updateTerrainFrame(group, makeCtx(600))
       expect(unbackedHiddenAddresses(group)).toEqual([])
       expect(fullyCovered(group)).toBe(true)
       counts.push(meshCount(group))
@@ -377,7 +378,7 @@ describe('клапан пула', () => {
     const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), 44, clock.nowMs)
     for (let f = 0; f < 800; f++) {
       clock.startFrame()
-      group.updateObject(makeCtx(2 + 1500 * (0.5 + 0.5 * Math.sin(f / 41))))
+      updateTerrainFrame(group, makeCtx(2 + 1500 * (0.5 + 0.5 * Math.sin(f / 41))))
       expect(unbackedHiddenAddresses(group)).toEqual([])
       expect(fullyCovered(group)).toBe(true)
     }

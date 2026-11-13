@@ -1,3 +1,4 @@
+import { updateTerrainFrame } from '../helpers/updateTerrainFrame'
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
@@ -133,7 +134,7 @@ describe('TerrainSphere: динамическое квадродерево па�
     const counts: number[] = []
     for (let f = 0; f < 200; f++) {
       clock.startFrame()
-      sphere.updateObject(ctx)
+      updateTerrainFrame(sphere, ctx)
       expect(fullyCovered(sphere)).toBe(true)
       counts.push(sphere.children.filter((c) => c instanceof Mesh && c.visible).length)
     }
@@ -177,7 +178,7 @@ describe('TerrainSphere: динамическое квадродерево па�
 
     for (let f = 0; f < 120; f++) {
       clock.startFrame()
-      sphere.updateObject(ctx)
+      updateTerrainFrame(sphere, ctx)
 
       const current = snapshot()
       const visibleKeys = visibleAddressKeys(sphere)
@@ -234,7 +235,7 @@ describe('TerrainSphere: динамическое квадродерево па�
       // и построенные под прежнюю глубину узлы не успевают быть показанными
       const altKm = 2 + 400000 * (0.5 + 0.5 * Math.sin(f / 37))
       clock.startFrame()
-      sphere.updateObject(makeCtxAt(altKm, f / 11))
+      updateTerrainFrame(sphere, makeCtxAt(altKm, f / 11))
       expect(unbackedHiddenAddresses(sphere)).toEqual([])
       expect(fullyCovered(sphere)).toBe(true)
     }
@@ -249,13 +250,13 @@ describe('TerrainSphere: динамическое квадродерево па�
 
     for (let f = 0; f < 120; f++) {
       clock.startFrame()
-      sphere.updateObject(makeCtx(2))
+      updateTerrainFrame(sphere, makeCtx(2))
       expect(unbackedHiddenAddresses(sphere)).toEqual([])
       expect(fullyCovered(sphere)).toBe(true)
     }
     for (let f = 0; f < 200; f++) {
       clock.startFrame()
-      sphere.updateObject(makeCtx(500000))
+      updateTerrainFrame(sphere, makeCtx(500000))
       expect(unbackedHiddenAddresses(sphere)).toEqual([])
       expect(fullyCovered(sphere)).toBe(true)
     }
@@ -267,7 +268,7 @@ describe('TerrainSphere: динамическое квадродерево па�
     const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     const before = sphere.children.length
     sphere.visible = false
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(sphere.children.length).toBe(before)
   })
 
@@ -280,7 +281,7 @@ describe('TerrainSphere: динамическое квадродерево па�
 
     const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, nowMs)
     const before = sphere.children.length
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(sphere.children.length - before).toBe(1)
   })
 
@@ -313,9 +314,9 @@ describe('TerrainSphere: динамическое квадродерево па�
     const FRAMES = 200
     for (let f = 0; f < FRAMES; f++) {
       clockLow.startFrame()
-      sphereLow.updateObject(makeCtx(150))
+      updateTerrainFrame(sphereLow, makeCtx(150))
       clockHigh.startFrame()
-      sphereHigh.updateObject(makeCtx(150))
+      updateTerrainFrame(sphereHigh, makeCtx(150))
     }
 
     const countLow = sphereLow.children.filter((c) => c instanceof Mesh).length
@@ -334,7 +335,7 @@ describe('TerrainSphere: динамическое квадродерево па�
     const sphere = new TerrainSphere(moon(), field, makeRenderer(1080), undefined, undefined, clock.nowMs)
     for (let f = 0; f < 200; f++) {
       clock.startFrame()
-      sphere.updateObject(makeCtx(2))
+      updateTerrainFrame(sphere, makeCtx(2))
     }
 
     const patch = sphere.children.find(

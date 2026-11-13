@@ -1,3 +1,4 @@
+import { updateTerrainFrame } from '../helpers/updateTerrainFrame'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataTexture, Group, LinearFilter, NearestFilter, PerspectiveCamera, Texture, Vector2, Vector3, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
@@ -238,7 +239,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
   it.each([false, true])('uses the renderer capability for both texture and shader filtering (%s)', (floatLinear) => {
     const sphere = makeSphere(new OffThreadBuilder(), floatLinear)
     try {
-      sphere.updateObject(makeCtx(2))
+      updateTerrainFrame(sphere, makeCtx(2))
       const texture = sphere.material.uniforms.uNearTile.value as DataTexture
 
       expect(texture.minFilter).toBe(floatLinear ? LinearFilter : NearestFilter)
@@ -254,7 +255,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     const sphere = makeSphere()
     const update = vi.spyOn(NearShadowTile.prototype, 'update')
     const setNearTile = vi.spyOn(TerrainMaterial.prototype, 'setNearTile')
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(update).toHaveBeenCalledTimes(1)
     const local = update.mock.calls[0][0]
     expect(local.x).toBeCloseTo(toThreeJSUnits(RADIUS_KM + 2), 9)
@@ -268,17 +269,17 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     const builder = new OffThreadBuilder()
     const request = vi.spyOn(builder, 'requestNearTile')
     const sphere = makeSphere(builder)
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     const xy = sphere.material.uniforms.uNearCameraXY.value as Vector2
     expect(xy.x).toBeCloseTo(0, 3)
     expect(xy.y).toBeCloseTo(0, 3)
-    sphere.updateObject(makeCtx(2, 1500))
+    updateTerrainFrame(sphere, makeCtx(2, 1500))
     expect(request).toHaveBeenCalledTimes(1)
     // восток от +X — ось E плитки; гномоническая проекция чуть длиннее дуги
     expect(xy.x).toBeGreaterThan(1499)
     expect(xy.x).toBeLessThan(1501)
     expect(xy.y).toBeCloseTo(0, 3)
-    sphere.updateObject(makeCtx(500))
+    updateTerrainFrame(sphere, makeCtx(500))
     expect(xy.toArray()).toEqual([0, 0])
     sphere.dispose()
   })
@@ -288,7 +289,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     sphere.rotation.y = Math.PI / 2
     sphere.updateMatrixWorld(true)
     const update = vi.spyOn(NearShadowTile.prototype, 'update')
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     const local = update.mock.calls[0][0]
     expect(local.x).toBeCloseTo(0, 9)
     expect(Math.abs(local.z)).toBeCloseTo(toThreeJSUnits(RADIUS_KM + 2), 9)
@@ -297,7 +298,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
 
   it('высоко — плитки нет, вес 0', () => {
     const sphere = makeSphere()
-    sphere.updateObject(makeCtx(500))
+    updateTerrainFrame(sphere, makeCtx(500))
     expect(sphere.material.uniforms.uNearTile.value).toBeNull()
     expect(sphere.material.uniforms.uNearTileWeight.value).toBe(0)
     sphere.dispose()
@@ -308,7 +309,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     try {
       const sphere = makeSphere()
       const update = vi.spyOn(NearShadowTile.prototype, 'update')
-      sphere.updateObject(makeCtx(2))
+      updateTerrainFrame(sphere, makeCtx(2))
       expect(update).not.toHaveBeenCalled()
       expect(sphere.material.uniforms.uNearTileWeight.value).toBe(0)
       sphere.dispose()
@@ -321,7 +322,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     const builder = new SyncTerrainPatchBuilder()
     const request = vi.spyOn(builder, 'requestNearTile')
     const sphere = makeSphere(builder)
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(request).not.toHaveBeenCalled()
     expect(sphere.material.uniforms.uNearTile.value).toBeNull()
     expect(sphere.material.uniforms.uNearTileWeight.value).toBe(0)
@@ -332,7 +333,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     const builder = new OffThreadBuilder()
     const request = vi.spyOn(builder, 'requestNearTile')
     const sphere = makeSphere(builder)
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(request).toHaveBeenCalledTimes(1)
     expect(sphere.material.uniforms.uNearTile.value).toBeInstanceOf(DataTexture)
     sphere.dispose()
@@ -340,14 +341,14 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
 
   it('слой выключен в живую (strength → 0) — текстура плитки освобождена, материал её не держит', () => {
     const sphere = makeSphere()
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     const texture = sphere.material.uniforms.uNearTile.value as DataTexture
     let disposed = 0
     texture.addEventListener('dispose', () => disposed++)
     lightOverride.near = 0
     try {
       sphere.material.updateMaterial()
-      sphere.updateObject(makeCtx(2))
+      updateTerrainFrame(sphere, makeCtx(2))
     } finally {
       lightOverride.near = undefined
     }
@@ -360,17 +361,17 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     const sphere = makeSphere()
     const parent = new Group()
     parent.add(sphere)
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     const texture = sphere.material.uniforms.uNearTile.value as DataTexture
     let disposed = 0
     texture.addEventListener('dispose', () => disposed++)
     if (who === 'сама сфера') sphere.visible = false
     else parent.visible = false
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(disposed).toBe(1)
     expect(sphere.material.uniforms.uNearTile.value).toBeNull()
     // повторный скрытый кадр — без повторного dispose
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(disposed).toBe(1)
     sphere.dispose()
   })
@@ -378,10 +379,10 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
   it('ответ плитки в полёте после скрытия не создаёт текстуру', () => {
     const builder = new DeferredNearBuilder()
     const sphere = makeSphere(builder)
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     expect(builder.pending).toHaveLength(1)
     sphere.visible = false
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     const textureDispose = vi.spyOn(DataTexture.prototype, 'dispose')
     builder.pending[0](new Float32Array(512 * 512))
     expect((sphere as unknown as { nearTile: { state: unknown } }).nearTile.state).toBeNull()
@@ -392,7 +393,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
 
   it('dispose сферы диспозит текстуру плитки и снимает её с материала', () => {
     const sphere = makeSphere()
-    sphere.updateObject(makeCtx(2))
+    updateTerrainFrame(sphere, makeCtx(2))
     const texture = sphere.material.uniforms.uNearTile.value as DataTexture
     let disposed = 0
     texture.addEventListener('dispose', () => disposed++)

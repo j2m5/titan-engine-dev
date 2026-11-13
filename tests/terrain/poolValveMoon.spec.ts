@@ -1,3 +1,4 @@
+import { updateTerrainFrame } from '../helpers/updateTerrainFrame'
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
@@ -96,7 +97,7 @@ describe.skipIf(!existsSync(MOON_HEIGHT_PATH))('Клапан пула на ка�
     const ctx = { delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext
 
     for (let f = 0; f < 600; f++) {
-      group.updateObject(ctx)
+      updateTerrainFrame(group, ctx)
       builder.flush(3)
     }
 
@@ -104,7 +105,7 @@ describe.skipIf(!existsSync(MOON_HEIGHT_PATH))('Клапан пула на ка�
     const wanted: number[] = []
     const visible: number[] = []
     for (let f = 0; f < 200; f++) {
-      group.updateObject(ctx)
+      updateTerrainFrame(group, ctx)
       builder.flush(3)
       wanted.push(group.wantedCount)
       visible.push(group.children.filter((c) => c instanceof Mesh && c.visible).length)

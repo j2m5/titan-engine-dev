@@ -1,3 +1,4 @@
+import { updateTerrainFrame } from '../helpers/updateTerrainFrame'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { PerspectiveCamera, Texture, type Mesh, type WebGLRenderer } from 'three'
 import { terrain as terrainConfig } from '@/config/terrain'
@@ -123,7 +124,7 @@ function childKeys(a: TerrainNodeAddress): number[] {
 /** Кадр: приход всего запрошенного, затем отбор/своп. */
 function frame(group: TestPatchGroup, builder: FakeAsyncBuilder, altKm: number, delta = 0.1): void {
   builder.flush()
-  group.updateObject(makeCtx(altKm, delta))
+  updateTerrainFrame(group, makeCtx(altKm, delta))
 }
 
 function settle(group: TestPatchGroup, builder: FakeAsyncBuilder, altKm: number): void {
@@ -353,7 +354,7 @@ describe('TerrainPatchGroup: геоморф поверх атомарного с
     settle(group, builder, NEAR)
     settle(group, builder, FAR) // мерж: слоты детей ушли в пул с m = 1
 
-    group.updateObject(makeCtx(NEAR))
+    updateTerrainFrame(group, makeCtx(NEAR))
     builder.flush() // приход — скрытые дети в слотах из пула
     const hidden = [...snapshot(group).values()].filter((s) => !s.visible)
     expect(hidden.length).toBeGreaterThan(0)

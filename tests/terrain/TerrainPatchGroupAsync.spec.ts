@@ -1,3 +1,4 @@
+import { updateTerrainFrame } from '../helpers/updateTerrainFrame'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { Mesh, PerspectiveCamera, Texture, type WebGLRenderer } from 'three'
 import { config } from '@/core/framework/config'
@@ -121,7 +122,7 @@ describe('TerrainPatchGroup с асинхронным строителем', () 
     const { group, builder, clock } = makeAsync()
     builder.flush()
     const ctx = makeCtx(2)
-    clock.startFrame(); group.updateObject(ctx)
+    clock.startFrame(); updateTerrainFrame(group, ctx)
     expect(builder.queued).toBe(config('terrain.lod.buildInFlight'))
     expect(group.pendingCount).toBe(config('terrain.lod.buildInFlight'))
     expect(meshCount(group)).toBe(24)                  // pending не в сцене
@@ -129,7 +130,7 @@ describe('TerrainPatchGroup с асинхронным строителем', () 
     expect(fullyCovered(group)).toBe(true)
     for (let f = 0; f < 60; f++) {
       builder.flush(6)
-      clock.startFrame(); group.updateObject(ctx)
+      clock.startFrame(); updateTerrainFrame(group, ctx)
       expect(unbackedHiddenAddresses(group)).toEqual([])
       expect(fullyCovered(group)).toBe(true)
       expect(group.pendingCount).toBeLessThanOrEqual(config('terrain.lod.buildInFlight'))
@@ -140,10 +141,10 @@ describe('TerrainPatchGroup с асинхронным строителем', () 
   it('устаревший результат: узел вышел из wanted до прихода — слот освобождён, меш не в сцене', () => {
     const { group, builder, clock } = makeAsync()
     builder.flush()
-    clock.startFrame(); group.updateObject(makeCtx(2))
+    clock.startFrame(); updateTerrainFrame(group, makeCtx(2))
     const inFlight = group.pendingCount
     expect(inFlight).toBeGreaterThan(0)
-    clock.startFrame(); group.updateObject(makeCtx(500000))   // хочет только базовый набор
+    clock.startFrame(); updateTerrainFrame(group, makeCtx(500000))   // хочет только базовый набор
     builder.flush()
     expect(group.pendingCount).toBe(0)
     expect(meshCount(group)).toBe(24)
@@ -153,7 +154,7 @@ describe('TerrainPatchGroup с асинхронным строителем', () 
   it('dispose до прихода: приход ничего не пишет, слоты свободны, поле отпущено строителю', () => {
     const { group, builder, clock } = makeAsync()
     builder.flush()
-    clock.startFrame(); group.updateObject(makeCtx(2))
+    clock.startFrame(); updateTerrainFrame(group, makeCtx(2))
     group.dispose()
     expect(group.livePool).toBe(0)
     expect(() => builder.flush()).not.toThrow()
@@ -165,14 +166,14 @@ describe('TerrainPatchGroup с асинхронным строителем', () 
   it('узел вышел из wanted и вернулся до прихода: pending не перезапрашивается, приход применяется', () => {
     const { group, builder, clock } = makeAsync()
     builder.flush()
-    clock.startFrame(); group.updateObject(makeCtx(2))        // 6 запросов
-    clock.startFrame(); group.updateObject(makeCtx(500000))   // не нужны
-    clock.startFrame(); group.updateObject(makeCtx(2))        // нужны снова — ключи уже в pending, новых запросов нет
+    clock.startFrame(); updateTerrainFrame(group, makeCtx(2))        // 6 запросов
+    clock.startFrame(); updateTerrainFrame(group, makeCtx(500000))   // не нужны
+    clock.startFrame(); updateTerrainFrame(group, makeCtx(2))        // нужны снова — ключи уже в pending, новых запросов нет
     expect(builder.queued).toBe(config('terrain.lod.buildInFlight'))
     builder.flush()
     expect(group.pendingCount).toBe(0)
     expect(meshCount(group)).toBe(24 + config('terrain.lod.buildInFlight'))
-    clock.startFrame(); group.updateObject(makeCtx(2))
+    clock.startFrame(); updateTerrainFrame(group, makeCtx(2))
     expect(unbackedHiddenAddresses(group)).toEqual([])
     expect(fullyCovered(group)).toBe(true)
   })

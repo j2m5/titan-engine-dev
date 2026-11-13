@@ -1,4 +1,4 @@
-import { Frustum, Group, Material, Matrix4, Mesh, Vector3, type WebGLRenderer } from 'three'
+import { Frustum, Group, Material, Matrix4, Mesh, Vector3, type PerspectiveCamera, type WebGLRenderer } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { config } from '@/core/framework/config'
@@ -209,7 +209,9 @@ abstract class TerrainPatchGroup extends Group {
     this.resetMorph(entry, this.revealMorph)
   }
 
-  // скретчи кадра: updateObject зовётся каждый кадр, аллокаций быть не должно
+  private frameContext: UpdateContext | null = null
+
+  // скретчи кадра: updateView зовётся каждый кадр, аллокаций быть не должно
   private readonly cameraWorldScratch = new Vector3()
   private readonly viewProjScratch = new Matrix4()
   private readonly frustumScratch = new Frustum()
@@ -325,6 +327,16 @@ abstract class TerrainPatchGroup extends Group {
   }
 
   public updateObject(ctx: UpdateContext): void {
+    // Свой снимок: updateView подставляет итоговую камеру, не меняя общий ctx.
+    if (this.frameContext) Object.assign(this.frameContext, ctx)
+    else this.frameContext = { ...ctx }
+  }
+
+  public updateView(camera: PerspectiveCamera): void {
+    const ctx = this.frameContext
+    if (!ctx) return
+    ctx.camera = camera
+
     // невидимый уровень LOD — квадродерево заморожено. Проверка родителя
     // нужна отдельно от своего visible: LOD.update() переключает .visible
     // ТОЛЬКО у объектов, добавленных через addLevel (сама группа уровня —
@@ -464,6 +476,7 @@ abstract class TerrainPatchGroup extends Group {
   }
 
   public dispose(): void {
+    this.frameContext = null
     this.disposed = true
     unregisterTerrainGroup(this)
     // слоты запрошенных патчей — назад в пул: их меши в сцену не входили,

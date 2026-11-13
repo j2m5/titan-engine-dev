@@ -1,3 +1,4 @@
+import { updateTerrainFrame } from '../helpers/updateTerrainFrame'
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Group, Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
@@ -79,7 +80,7 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
   // занижала вдвое и останавливала дерево на уровне 4).
   it('поле делится по кривизне сферы: на посадочной дистанции набор РАСТЁТ, но самотерминируется', () => {
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
-    for (let f = 0; f < 120; f++) sphere.updateObject(makeCtx(0.05)) // 50 м над уровнем воды
+    for (let f = 0; f < 120; f++) updateTerrainFrame(sphere, makeCtx(0.05)) // 50 м над уровнем воды
     const meshes = sphere.children.filter((c) => c instanceof Mesh)
     const maxLevel = Math.max(
       ...meshes.map((m) => (m.userData.terrainAddress as { level: number } | undefined)?.level ?? 0)
@@ -95,7 +96,7 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
 
   it('из космоса — ровно 24 патча (SSE уровня MIN_LEVEL уже ниже порога на орбитальной дистанции)', () => {
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
-    for (let f = 0; f < 30; f++) sphere.updateObject(makeCtx(500000))
+    for (let f = 0; f < 30; f++) updateTerrainFrame(sphere, makeCtx(500000))
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
   })
 
@@ -111,7 +112,7 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
     parent.add(sphere)
 
-    for (let f = 0; f < 60; f++) sphere.updateObject(makeCtx(0.05))
+    for (let f = 0; f < 60; f++) updateTerrainFrame(sphere, makeCtx(0.05))
 
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
   })
@@ -220,7 +221,7 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
       texture.image = { width: 4, height: 2 }
       resourceStorage.addTexture(texture)
 
-      sphere.updateObject(makeCtx(500000))
+      updateTerrainFrame(sphere, makeCtx(500000))
 
       expect(sphere.material.defines.USE_WATER_DEPTH).toBe('1')
       expect(sphere.material.uniforms.uSlopeMap.value).toBe(texture)
@@ -237,7 +238,7 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
       texture.image = { width: 4, height: 2 }
       resourceStorage.addTexture(texture)
 
-      sphere.updateObject(makeCtx(500000))
+      updateTerrainFrame(sphere, makeCtx(500000))
 
       expect(sphere.material.defines.USE_WATER_DEPTH).toBeUndefined()
     })
@@ -255,7 +256,7 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
       const spy = vi.spyOn(sphere.material, 'setPixelAngle')
       const ctx = makeCtx(500000)
       ctx.camera.fov = 42
-      sphere.updateObject(ctx)
+      updateTerrainFrame(sphere, ctx)
       expect(spy).toHaveBeenCalledWith(42, 2160)
       expect(sphere.material.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((21 * Math.PI) / 180)) / 2160, 15)
     })
