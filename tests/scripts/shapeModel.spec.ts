@@ -11,7 +11,7 @@ import {
   TIER_TRIANGLES
 } from '../../scripts/lib/shapeModel'
 import { encodeShapeModel, parseShapeModel } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelFormat'
-import { RELATIVE_TETRAHEDRON_OBJ } from '../helpers/objFixture'
+import { RELATIVE_TETRAHEDRON_OBJ, scaledTetrahedronObj } from '../helpers/objFixture'
 
 /** Икосфера как «реальная модель»: сдвинута и растянута, чтобы проверить центрирование и нормировку */
 const icosphere = (detail: number, scale = 1, offset = 0) => {
@@ -100,6 +100,25 @@ describe('parseObjMesh / parsePlateMesh: разбор моделей форм', 
 })
 
 describe('centerAndNormalize: объёмный центроид и максимальный радиус 1', () => {
+  it.each([1e40, 1e-50, 1e-310])('сохраняет геометрию тетраэдра с координатами ±%s', (scale) => {
+    const mesh = parseObjMesh(scaledTetrahedronObj(scale))
+    const originalPositions = [...mesh.positions]
+
+    const out = centerAndNormalize(mesh)
+
+    // У симметричного тетраэдра центр в нуле, радиус sqrt(3) * scale.
+    const signs = [1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1]
+    expect(out).toBeInstanceOf(Float32Array)
+    expect(out.length).toBe(signs.length)
+    for (let i = 0; i < signs.length; i++) expect(out[i]).toBeCloseTo(signs[i] / Math.sqrt(3), 6)
+    expect(mesh.positions).toEqual(originalPositions)
+  })
+
+  it('отклоняет переполнение арифметики центроида до выдачи испорченной геометрии', () => {
+    const mesh = parseObjMesh(scaledTetrahedronObj(1e200))
+    expect(() => centerAndNormalize(mesh)).toThrow(/normalize.*non-finite/i)
+  })
+
   it('сдвинутая и растянутая икосфера возвращается в начало координат с max r = 1', () => {
     const out = centerAndNormalize(icosphere(2, 3.7, 12))
     let maxR = 0

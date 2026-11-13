@@ -299,15 +299,26 @@ export function centerAndNormalize(mesh: RawMesh): Float32Array {
     cz /= volume
   }
 
-  const out = new Float32Array(p.length)
+  if (![volume, cx, cy, cz].every(Number.isFinite)) {
+    throw new Error('Cannot normalize shape: non-finite volume or centroid')
+  }
+
+  // Сначала нормируем в double: исходные координаты могут выходить за
+  // диапазон Float32, хотя итоговая геометрия всегда помещается в [-1, 1].
   let maxR = 0
   for (let i = 0; i < p.length; i += 3) {
-    out[i] = p[i] - cx
-    out[i + 1] = p[i + 1] - cy
-    out[i + 2] = p[i + 2] - cz
-    maxR = Math.max(maxR, Math.hypot(out[i], out[i + 1], out[i + 2]))
+    maxR = Math.max(maxR, Math.hypot(p[i] - cx, p[i + 1] - cy, p[i + 2] - cz))
   }
-  if (maxR > 0) for (let i = 0; i < out.length; i++) out[i] /= maxR
+  if (!Number.isFinite(maxR)) {
+    throw new Error('Cannot normalize shape: non-finite radius')
+  }
+  const out = new Float32Array(p.length)
+  const radius = maxR || 1
+  for (let i = 0; i < p.length; i += 3) {
+    out[i] = (p[i] - cx) / radius
+    out[i + 1] = (p[i + 1] - cy) / radius
+    out[i + 2] = (p[i + 2] - cz) / radius
+  }
   return out
 }
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest'
 import { parseShapeModel } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelFormat'
-import { RELATIVE_TETRAHEDRON_OBJ } from '../helpers/objFixture'
+import { RELATIVE_TETRAHEDRON_OBJ, scaledTetrahedronObj } from '../helpers/objFixture'
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url))
 const fixtureRoot = join(projectRoot, 'node_modules', '.tmp')
@@ -75,5 +75,32 @@ it('rejects invalid OBJ references without overwriting either existing asset', {
 
   expect(result.status).toBe(1)
   expect(result.stderr).toMatch(/OBJ.*(index|vertex)/i)
+  for (const tier of ['l0', 'near']) expect(await readFile(outputPath(tier))).toEqual(sentinel)
+})
+
+it('normalizes large finite coordinates before writing both shape tiers', { timeout: 40000 }, async () => {
+  await writeFile(join(directory, 'src', 'mesh.obj'), scaledTetrahedronObj(1e40))
+
+  const result = await run()
+
+  expect(result.status, result.stderr).toBe(0)
+  for (const tier of ['l0', 'near']) {
+    const bytes = await readFile(outputPath(tier))
+    const data = parseShapeModel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+    expect([data.positions.length / 3, data.indices.length / 3]).toEqual([4, 4])
+    for (const coordinate of data.positions) expect(Math.abs(coordinate)).toBeCloseTo(1 / Math.sqrt(3), 6)
+    for (let i = 0; i < data.normals.length; i += 3) {
+      expect(Math.hypot(data.normals[i], data.normals[i + 1], data.normals[i + 2])).toBeCloseTo(1, 6)
+    }
+  }
+})
+
+it('rejects arithmetic overflow without overwriting either existing asset', { timeout: 40000 }, async () => {
+  await writeFile(join(directory, 'src', 'mesh.obj'), scaledTetrahedronObj(1e200))
+
+  const result = await run()
+
+  expect(result.status).toBe(1)
+  expect(result.stderr).toMatch(/normalize.*non-finite/i)
   for (const tier of ['l0', 'near']) expect(await readFile(outputPath(tier))).toEqual(sentinel)
 })
