@@ -1,7 +1,66 @@
 import { describe, expect, it } from 'vitest'
 import '@/core/framework/TitanThree'
+import { Vector3 } from 'three'
 import { SceneObserver, type ObservableRecord } from '@/core/services/SceneObserver'
 import { makeAstroControlsStub, makeSceneWithBody } from './sceneObserverStubs'
+
+it('coalesces control changes at the frame boundary and observes the final camera position', () => {
+  const observer = new SceneObserver(), controls = makeAstroControlsStub()
+  observer.observable = controls
+  observer.scene = makeSceneWithBody('planet', 'Mars')
+  const seen: ObservableRecord[] = [], changes: Vector3[] = []
+  observer.subscribe('ClosestChange', record => { if (record) seen.push(record) })
+  observer.subscribe('change', position => { changes.push(position.clone()) })
+  const payload = new Vector3(100, 0, 0)
+  controls.object.position.copy(payload)
+  controls.dispatch(payload)
+  payload.set(200, 0, 0)
+  controls.dispatch(payload)
+  payload.set(300, 0, 0)
+  expect(seen).toEqual([])
+  expect(changes).toEqual([])
+
+  // Collision resolves the attempted endpoint before the observer flushes.
+  controls.object.position.set(3, 0, 0)
+  observer.tick(0)
+  expect(seen).toHaveLength(1)
+  expect(seen[0].distance).toBe(7)
+  expect(changes).toEqual([new Vector3(200, 0, 0)])
+  observer.tick(0)
+  expect(seen).toHaveLength(1)
+  observer.dispose()
+})
+
+it.each(['dispose', 'observable', 'scene'] as const)('discards queued control changes on %s replacement', reset => {
+  const observer = new SceneObserver(), controls = makeAstroControlsStub()
+  observer.observable = controls
+  observer.scene = makeSceneWithBody('planet', 'Mars')
+  controls.dispatch(new Vector3())
+  if (reset === 'dispose') {
+    observer.dispose()
+    observer.observable = makeAstroControlsStub()
+    observer.scene = makeSceneWithBody('planet', 'Mars')
+  } else if (reset === 'observable') observer.observable = makeAstroControlsStub()
+  else observer.scene = makeSceneWithBody('planet', 'Mars')
+  const seen: string[] = []
+  observer.subscribe('ClosestChange', record => { if (record) seen.push(record.name) })
+  observer.tick(0)
+  expect(seen).toEqual([])
+  for (let i = 0; i < 5; i++) observer.tick(0.1)
+  expect(seen).toEqual(['Mars'])
+  observer.dispose()
+})
+
+it('keeps explicit public change notifications immediate', () => {
+  const observer = new SceneObserver()
+  observer.observable = makeAstroControlsStub()
+  observer.scene = makeSceneWithBody('planet', 'Mars')
+  const seen: string[] = []
+  observer.subscribe('ClosestChange', record => { if (record) seen.push(record.name) })
+  observer.emit('change', new Vector3())
+  expect(seen).toEqual(['Mars'])
+  observer.dispose()
+})
 
 /**
  * Тик — второй повод пересчитать дистанции, кроме движения камеры. Событие

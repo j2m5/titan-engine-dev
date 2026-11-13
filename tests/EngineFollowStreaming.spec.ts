@@ -51,7 +51,7 @@ function makeFrame(speed: number, fps: number, following = true) {
     cameraCollision: collision, scene, labelRenderer: { render() {} }, postprocessing: { render() {} }
   }
   return {
-    scene, earth, node, surface, camera, controls, observer, radius,
+    scene, earth, node, surface, camera, controls, observer, radius, controller,
     render: () => Engine.prototype['renderFrame'].call(frame),
     dispose: () => { controls.dispose(); observer.dispose(); collision.clear(); heightFieldStorage.clear() }
   }
@@ -104,6 +104,35 @@ it('observes the final collision position during free flight', () => {
   } finally { frame.dispose() }
 })
 
+it.each([100_000, 150_000_000, 4_500_000_000])('retains terrain after a fast free-flight collision at %s km/s', speed => {
+  const frame = makeFrame(0, 60, false)
+  const { gate, path } = makeGate(frame)
+  const map = heightFieldStorage.get(path)!
+  const request = vi.spyOn(heightFieldStorage, 'request').mockImplementation(() => {})
+  try {
+    frame.render()
+    const center = frame.node.getWorldPosition(new Vector3())
+    frame.camera.lookAt(center)
+    frame.controller.setSpeed(speed)
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', bubbles: true }))
+    frame.render()
+
+    const distance = frame.camera.position.distanceTo(center)
+    expect(distance).toBeGreaterThan(frame.radius)
+    expect(distance).toBeLessThan(5 * frame.radius)
+    expect(heightFieldStorage.get(path)).toBe(map)
+    expect(frame.observer.getData(7)!.distance).toBeCloseTo(distance, 6)
+
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', bubbles: true }))
+    frame.render()
+    expect(heightFieldStorage.get(path)).toBe(map)
+    expect(request).not.toHaveBeenCalled()
+  } finally {
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', bubbles: true }))
+    request.mockRestore(); gate.dispose(); frame.dispose()
+  }
+})
+
 it('keeps the explicit follow target when a different body is closest on the periodic tick', () => {
   const frame = makeFrame(0, 10)
   try {
@@ -124,6 +153,7 @@ it('captures the collision surface before the height gate replaces that surface'
   const frame = makeFrame(0, 10)
   // Consume the initial controls change before connecting the gate.
   frame.controls.update(0)
+  frame.observer.tick(0)
   const { gate, factory } = makeGate(frame)
   factory.upgradePlanetToTerrain.mockImplementationOnce(() => {
     frame.node.remove(frame.surface)

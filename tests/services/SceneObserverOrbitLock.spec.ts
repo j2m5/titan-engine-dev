@@ -34,10 +34,12 @@ describe('SceneObserver: замок цели орбиты при зажатой 
     observer.scene = makeTwoBodyScene()
 
     controls.dispatch(new Vector3())
+    observer.tick(0)
     expect(lastTarget(controls)).toEqual(new Vector3(10, 0, 0))
 
     controls.object.position.set(95, 0, 0)
     controls.dispatch(new Vector3())
+    observer.tick(0)
     expect(lastTarget(controls)).toEqual(new Vector3(100, 0, 0))
   })
 
@@ -49,9 +51,11 @@ describe('SceneObserver: замок цели орбиты при зажатой 
     observer.scene = makeTwoBodyScene()
 
     controls.dispatch(new Vector3()) // цель — Сатурн
+    observer.tick(0)
     controls.isOrbiting = true
     controls.object.position.set(95, 0, 0) // теперь ближе Титан
     controls.dispatch(new Vector3())
+    observer.tick(0)
 
     expect(lastTarget(controls)).toEqual(new Vector3(10, 0, 0))
   })
@@ -67,9 +71,11 @@ describe('SceneObserver: замок цели орбиты при зажатой 
     observer.subscribe('ClosestChange', (record: ObservableRecord | null): void => { if (record) seen.push(record.name) })
 
     controls.dispatch(new Vector3())
+    observer.tick(0)
     controls.isOrbiting = true
     controls.object.position.set(95, 0, 0)
     controls.dispatch(new Vector3())
+    observer.tick(0)
 
     expect(seen).toEqual(['Saturn', 'Titan'])
   })
@@ -85,10 +91,12 @@ describe('SceneObserver: замок цели орбиты при зажатой 
     observer.scene = scene
 
     controls.dispatch(new Vector3())
+    observer.tick(0)
     controls.isOrbiting = true
     controls.object.position.set(95, 0, 0)
     scene.getObjectByName('Saturn')!.position.set(12, 0, 0)
     controls.dispatch(new Vector3())
+    observer.tick(0)
 
     expect(lastTarget(controls)).toEqual(new Vector3(12, 0, 0))
   })
@@ -101,11 +109,14 @@ describe('SceneObserver: замок цели орбиты при зажатой 
     observer.scene = makeTwoBodyScene()
 
     controls.dispatch(new Vector3())
+    observer.tick(0)
     controls.isOrbiting = true
     controls.object.position.set(95, 0, 0)
     controls.dispatch(new Vector3())
+    observer.tick(0)
     controls.isOrbiting = false
     controls.dispatch(new Vector3())
+    observer.tick(0)
 
     expect(lastTarget(controls)).toEqual(new Vector3(100, 0, 0))
   })

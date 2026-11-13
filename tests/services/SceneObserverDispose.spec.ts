@@ -13,6 +13,7 @@ describe('SceneObserver.dispose', () => {
     observer.scene = makeSceneWithBody('planet')
 
     firstControls.dispatch(new Vector3(1, 2, 3))
+    observer.tick(0)
 
     expect(observer.data.size).toBeGreaterThan(0)
 
@@ -25,6 +26,7 @@ describe('SceneObserver.dispose', () => {
     observer.scene = makeSceneWithBody('planet')
 
     secondControls.dispatch(new Vector3(4, 5, 6))
+    observer.tick(0)
 
     expect(observer.data.size).toBeGreaterThan(0)
   })

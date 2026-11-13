@@ -49,7 +49,7 @@ function world(names = ['Twin', 'Twin']) {
   const controls = makeAstroControlsStub()
   observer.observable = controls
   observer.scene = scene
-  const update = (): void => controls.dispatch(new Vector3())
+  const update = (): void => { controls.dispatch(new Vector3()); observer.tick(0) }
   update()
   cleanup.push(() => observer.dispose())
   return { scene, actors, nodes, materials, observer, controls, update }

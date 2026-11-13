@@ -24,7 +24,7 @@ function stand(...bodies: Object3D[]) {
   scene.add(...bodies)
   observer.observable = controls
   observer.scene = scene
-  const update = (): void => controls.dispatch(new Vector3())
+  const update = (): void => { controls.dispatch(new Vector3()); observer.tick(0) }
   return { observer, controls, scene, update }
 }
 

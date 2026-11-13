@@ -15,6 +15,7 @@ describe('SceneObserver: состав отслеживаемых типов', ()
     observer.scene = makeSceneWithBody('brownDwarf', 'Luhman 16B')
 
     controls.dispatch(new Vector3(1, 2, 3))
+    observer.tick(0)
 
     expect(observer.data.size).toBe(1)
     expect(observer.calculateClosestObject()?.name).toBe('Luhman 16B')
@@ -43,6 +44,7 @@ describe('SceneObserver: сценарий без отслеживаемых те
     observer.scene = new Scene()
 
     expect(() => controls.dispatch(new Vector3(1, 2, 3))).not.toThrow()
+    expect(() => observer.tick(0)).not.toThrow()
     expect(observer.calculateClosestObject()).toBeNull()
     expect(controls.setTarget).not.toHaveBeenCalled()
   })

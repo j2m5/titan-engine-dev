@@ -47,11 +47,16 @@ class SceneObserver extends EventEmitter<{
   private vector: Vector3 = new Vector3()
   /** Накопленное с прошлого периодического пересчёта время, мс. */
   private sinceRecompute: number = 0
+  private changePending: boolean = false
+  private readonly pendingPosition = new Vector3()
   /** ID тела, отданного контролам как цель орбиты в последний раз. */
   private targetActorId: number | null = null
 
   private readonly onObservableChange = (event: { data: Vector3 }): void => {
-    this.emit('change', event.data)
+    // Контролы ещё могут пройти сквозь тело: окончательная позиция будет после collision.
+    // Сам вектор события AstroControls переиспользует сразу после dispatch.
+    this.pendingPosition.copy(event.data)
+    this.changePending = true
   }
 
   /**
@@ -97,6 +102,7 @@ class SceneObserver extends EventEmitter<{
     }
 
     this._observable = value
+    this.changePending = false
 
     this._observable.addEventListener('change', this.onObservableChange)
   }
@@ -106,7 +112,10 @@ class SceneObserver extends EventEmitter<{
   }
 
   public set scene(value: Scene) {
-    if (value !== this._scene) this.targetActorId = null
+    if (value !== this._scene) {
+      this.targetActorId = null
+      this.changePending = false
+    }
     this._scene = value
     this.data.clear()
     this.refreshObservableObjects()
@@ -119,23 +128,23 @@ class SceneObserver extends EventEmitter<{
   }
 
   /**
-   * Периодический пересчёт дистанций, независимый от движения камеры.
+   * Пересчёт после движения камеры либо по периодическому интервалу.
+   * События контролов объединяются в один пересчёт на кадр.
    *
-   * Зовёт тот же `onChange`, что и событие `change` от контролов — одна
-   * реализация на оба повода, а не вторая копия. Событийный путь остаётся
-   * мгновенным (он же обновляет цель орбиты), тик его дополняет.
-   *
-   * Зовётся из кадрового цикла ПОСЛЕ обновления позиций тел, поэтому видит
-   * свежие дистанции. Интервал читается на каждом вызове, а не на импорте:
+   * Зовётся ПОСЛЕ обновления тел, Follow и collision, поэтому видит
+   * итоговые дистанции. Интервал читается на каждом вызове, а не на импорте:
    * module-const заморозил бы ручку в момент загрузки модуля.
    */
   public tick(deltaSeconds: number): void {
     this.sinceRecompute += Math.min(deltaSeconds, MAX_TICK_DELTA_SECONDS) * 1000
 
-    if (this.sinceRecompute < config('streaming.recomputeIntervalMs')) return
+    if (!this.changePending && this.sinceRecompute < config('streaming.recomputeIntervalMs')) return
 
     this.sinceRecompute = 0
-    this.onChange()
+    if (this.changePending) {
+      this.changePending = false
+      this.emit('change', this.pendingPosition)
+    } else this.onChange()
   }
 
   public getData(actorId: number): ObservableRecord | undefined {
@@ -198,6 +207,7 @@ class SceneObserver extends EventEmitter<{
     // хвоста, накопленного до разборки — иначе первый тик после запуска мог
     // бы выстрелить раньше настоящих 500 мс.
     this.sinceRecompute = 0
+    this.changePending = false
   }
 
   private defineObservableObjects(): void {
