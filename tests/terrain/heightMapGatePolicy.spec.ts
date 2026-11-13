@@ -174,6 +174,19 @@ describe('decideHeightMaps: множитель копий карты', () => {
   const SET = [candidate('a.raw', 30), candidate('b.raw', 20), candidate('c.raw', 15)]
   const BYTES = sizes({ 'a.raw': 60 * MiB, 'b.raw': 60 * MiB, 'c.raw': 60 * MiB })
 
+  it.each([false, true])('charges distinct per-path copies for known/unknown sizes (unknown=%s)', unknown => {
+    const unit = (unknown ? 64 : 60) * MiB
+    const decision = decideHeightMaps([candidate('a.raw', 30), candidate('b.raw', 20)], ['b.raw'], LOAD, RELEASE,
+      () => unknown ? undefined : unit, 4 * unit, path => path === 'a.raw' ? 4 : 2)
+    expect(decision.request).toEqual(['a.raw'])
+    expect(decision.release).toEqual(['b.raw'])
+  })
+
+  it('retains the highest-priority floor and hysteresis with per-path copies', () => {
+    const decision = decideHeightMaps([candidate('a.raw', 6)], ['a.raw'], LOAD, RELEASE, BYTES, MiB, () => 4)
+    expect(decision).toEqual({ request: [], release: [] })
+  })
+
   it('множитель 2 при бюджете 512 решает так же, как множитель 1 при 256', () => {
     const single = decideHeightMaps(SET, ['c.raw'], LOAD, RELEASE, BYTES, 256 * MiB, 1)
     const doubled = decideHeightMaps(SET, ['c.raw'], LOAD, RELEASE, BYTES, 512 * MiB, 2)

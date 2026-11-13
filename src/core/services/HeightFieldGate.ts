@@ -6,6 +6,8 @@ import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff
 import { decideHeightMaps, type HeightMapCandidate } from '@/core/terrain/heightMapGatePolicy'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
+import { terrainHeightFieldKey } from '@/core/terrain/TerrainHeightField'
+import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
@@ -119,7 +121,18 @@ export class HeightFieldGate {
       minBodyPixelsToPriorityThreshold(config('terrain.heightMapReleasePixels'), fovDegrees, viewportHeight),
       (path: string): number | undefined => heightFieldStorage.bytesOf(path),
       config('terrain.heightMapBudgetMiB') * 1024 * 1024,
-      this.builder.mapCopies
+      (path: string): number => {
+        const workerCopies = this.builder.mapCopies - 1
+        if (workerCopies === 0) return 1
+        const fields = new Set<string>()
+        for (const node of nodesByPath.get(path) ?? []) {
+          fields.add(terrainHeightFieldKey(
+            node.model.physicalObject?.getAttribute('radius', 0) ?? 0, midbandParamsOf(node.model)
+          ))
+        }
+        // Main thread shares one map; workers clone it once per distinct field.
+        return 1 + workerCopies * fields.size
+      }
     )
 
     for (const path of decision.release) {

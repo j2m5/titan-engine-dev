@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Scene, type WebGLRenderer } from 'three'
+import { Scene, Vector3, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
@@ -8,6 +8,8 @@ import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { config } from '@/core/framework/config'
 import * as policy from '@/core/terrain/heightMapGatePolicy'
+import { heightPathOf } from '@/core/terrain/heightPath'
+import { seedHeightMap } from '../helpers/planetSeeds'
 
 vi.mock('@/core/terrain/heightMapGatePolicy', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/core/terrain/heightMapGatePolicy')>()
@@ -32,7 +34,10 @@ function makeGate(builder: TerrainPatchBuilder): HeightFieldGate {
   const factory = { upgradePlanetToTerrain: vi.fn(() => false), downgradeTerrainToPlanet: vi.fn(() => false), resyncSurfaceMaterials: vi.fn() }
   const renderer = { domElement: { height: 1080 } } as unknown as WebGLRenderer
 
-  return new HeightFieldGate(new SceneObserver(), scene, factory as never, renderer, builder)
+  const observer = new SceneObserver()
+  observer.add({ actorId: MOON_ID, name: node.name, distance: 1, position: new Vector3() })
+  seedHeightMap(heightPathOf(node.model)!)
+  return new HeightFieldGate(observer, scene, factory as never, renderer, builder)
 }
 
 afterEach(() => {
@@ -49,7 +54,8 @@ describe('HeightFieldGate: множитель копий строителя', ()
 
     const call = vi.mocked(policy.decideHeightMaps).mock.calls.at(-1)!
 
-    expect(call[6]).toBe(2)
+    const copies = call[6]
+    expect(typeof copies === 'function' ? copies(heightPathOf(Actor.find(MOON_ID)!)!) : copies).toBe(2)
     expect(call[5]).toBe(config('terrain.heightMapBudgetMiB') * 1024 * 1024)
   })
 
@@ -59,6 +65,7 @@ describe('HeightFieldGate: множитель копий строителя', ()
     gate.recompute()
     gate.dispose()
 
-    expect(vi.mocked(policy.decideHeightMaps).mock.calls.at(-1)![6]).toBe(1)
+    const copies = vi.mocked(policy.decideHeightMaps).mock.calls.at(-1)![6]
+    expect(typeof copies === 'function' ? copies(heightPathOf(Actor.find(MOON_ID)!)!) : copies).toBe(1)
   })
 })

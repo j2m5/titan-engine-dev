@@ -39,7 +39,8 @@ export type HeightMapGateDecision = {
  *
  * `copies` — сколько резидентных копий карты держит строитель патчей вместе
  * с главным потоком (воркер хранит свою): стоимость пути, и известная, и
- * предполагаемая, умножается на него в одном месте.
+ * предполагаемая, умножается на него в одном месте. Функция задаёт число
+ * копий отдельно для каждого пути, когда карту делят несколько разных полей.
  *
  * Путь в полёте учитывается как удерживаемый. Гейт сначала применяет
  * release (реестр отменяет загрузку), затем request — бюджет старых
@@ -52,7 +53,7 @@ export function decideHeightMaps(
   releaseThreshold: number,
   sizeOf: (path: string) => number | undefined,
   budgetBytes: number,
-  copies: number = 1
+  copies: number | ((path: string) => number) = 1
 ): HeightMapGateDecision {
   const priorityByPath: Map<string, number> = new Map()
 
@@ -77,7 +78,7 @@ export function decideHeightMaps(
   let used: number = 0
 
   for (const [index, [path]] of contenders.entries()) {
-    const cost: number = (sizeOf(path) ?? ASSUMED_HEIGHT_MAP_BYTES) * copies
+    const cost: number = (sizeOf(path) ?? ASSUMED_HEIGHT_MAP_BYTES) * (typeof copies === 'number' ? copies : copies(path))
 
     // Пол: самый приоритетный претендент резидентен всегда, даже если один
     // дороже всего бюджета. Иначе тело, к которому подлетели, осталось бы без

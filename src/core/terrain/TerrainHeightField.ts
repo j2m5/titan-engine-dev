@@ -1715,6 +1715,11 @@ function slidingRangeWrap(
  */
 const cache = new WeakMap<HeightMapData, Map<string, TerrainHeightField>>()
 
+/** Shared identity for field caching and worker residency accounting. */
+function terrainHeightFieldKey(radiusKm: number, midbandParams: MidbandParams = MIDBAND_DEFAULTS): string {
+  return `${radiusKm}|${midbandCacheKey(midbandParams)}`
+}
+
 function terrainHeightFieldFor(
   map: HeightMapData,
   radiusKm: number,
@@ -1726,7 +1731,7 @@ function terrainHeightFieldFor(
     cache.set(map, byKey)
   }
 
-  const key = `${radiusKm}|${midbandCacheKey(midbandParams)}`
+  const key = terrainHeightFieldKey(radiusKm, midbandParams)
   let field = byKey.get(key)
   if (!field) {
     field = new TerrainHeightField(map, radiusKm, midbandParams)
@@ -1736,4 +1741,4 @@ function terrainHeightFieldFor(
   return field
 }
 
-export { TerrainHeightField, terrainHeightFieldFor }
+export { TerrainHeightField, terrainHeightFieldFor, terrainHeightFieldKey }
