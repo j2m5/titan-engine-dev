@@ -259,11 +259,11 @@ describe('Engine: подключение периодического перес
     expect(cameraCollision.translateReferenceFrame).toHaveBeenCalledWith(displacement)
     expect(order).toEqual([
       'scene',
-      'observer',
       'follow',
       'translate',
       'collision',
       'surface',
+      'observer',
       'view',
       'labels',
       'markers',

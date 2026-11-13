@@ -228,24 +228,23 @@ class Engine {
     }
 
     this.sceneManager.update(ctx)
-    // После обновления позиций тел: тик видит свежие дистанции. Событие от
-    // контролов ловит только движение камеры, а тела движутся сами.
-    this.sceneObserver.tick(delta)
-
     const followUpdate = this.camera.updateFollow(this.renderCamera.position)
 
     if (followUpdate) {
-      // SceneObserver по-прежнему выбирает ближайшее тело для свободного полёта,
-      // но в follow-режиме вращаться нужно именно вокруг явно выбранной цели.
-      this.astroControls.setTarget(followUpdate.targetPosition)
       // Орбитальная дельта — смена сопутствующей системы отсчёта, а не ручной
       // прямолинейный полёт камеры. Коллизии всё ещё проверят ручной остаток.
       this.cameraCollision.translateReferenceFrame(followUpdate.displacement)
     }
 
     this.cameraCollision.resolve()
-    // после коллизии: высота над рельефом — по уже вытолкнутой позиции
+    // Высота по итоговой позиции, до тика: гейт может заменить поверхность,
+    // на которую ещё ссылается снимок коллайдеров этого кадра.
     this.astroControls.setSurface(this.cameraCollision.nearestSurface())
+    // Стриминг сравнивает тела и камеру из одного кадра, после follow и коллизий.
+    this.sceneObserver.tick(delta)
+    // Тик выбирает ближайшее тело для свободного полёта. В Follow сохраняем
+    // явно выбранную цель даже при более близком соседнем теле.
+    if (followUpdate) this.astroControls.setTarget(followUpdate.targetPosition)
     // Импосторы и свечение должны видеть камеру после follow и коллизий.
     this.sceneManager.updateView(this.renderCamera)
     this.scene.updateMatrixWorld(true)
