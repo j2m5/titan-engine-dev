@@ -23,24 +23,42 @@ export interface RawMesh {
 export const TIER_TRIANGLES = { l0: 640, near: 2000 } as const
 
 /**
- * Разбор Wavefront OBJ: строки `v x y z` и `f a b c [d…]` (индексы 1-based, с
- * возможными `/vt/vn`, многоугольники триангулируются веером).
+ * Разбор Wavefront OBJ: строки `v x y z` и `f a b c [d…]` (положительные индексы
+ * 1-based, отрицательные — от уже объявленных вершин; возможны `/vt/vn`).
+ * Многоугольники триангулируются веером, неверные координаты и ссылки отклоняются.
  */
 export function parseObjMesh(text: string): RawMesh {
   const positions: number[] = []
   const indices: number[] = []
+  let lineNumber = 0
   for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim()
-    if (line.startsWith('v ')) {
-      const [, x, y, z] = line.split(/\s+/)
-      positions.push(Number(x), Number(y), Number(z))
-    } else if (line.startsWith('f ')) {
-      const verts = line
-        .split(/\s+/)
-        .slice(1)
-        .map((token) => Number(token.split('/')[0]) - 1)
+    lineNumber++
+    const line = rawLine.split('#', 1)[0].trim()
+    const [kind, ...values] = line.split(/\s+/)
+    if (kind === 'v') {
+      const coordinates = values.slice(0, 3).map(Number)
+      if (coordinates.length !== 3 || !coordinates.every(Number.isFinite)) {
+        throw new Error(`OBJ line ${lineNumber}: invalid vertex coordinates`)
+      }
+      positions.push(...coordinates)
+    } else if (kind === 'f') {
+      if (values.length < 3) throw new Error(`OBJ line ${lineNumber}: face needs at least 3 vertices`)
+      const verts = values.map((token) => {
+        const index = Number(token.split('/')[0])
+        if (!Number.isSafeInteger(index) || index === 0) {
+          throw new Error(`OBJ line ${lineNumber}: invalid vertex index "${token}"`)
+        }
+        const resolved = index < 0 ? positions.length / 3 + index : index - 1
+        if (resolved < 0) throw new Error(`OBJ line ${lineNumber}: vertex index ${index} is out of range`)
+        return resolved
+      })
       for (let i = 1; i + 1 < verts.length; i++) indices.push(verts[0], verts[i], verts[i + 1])
     }
+  }
+  if (indices.length === 0) throw new Error('OBJ: no faces')
+  const vertexCount = positions.length / 3
+  for (const index of indices) {
+    if (index >= vertexCount) throw new Error(`OBJ: vertex index ${index + 1} is out of range`)
   }
   return { positions, indices }
 }

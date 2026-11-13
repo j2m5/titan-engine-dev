@@ -11,6 +11,7 @@ import {
   TIER_TRIANGLES
 } from '../../scripts/lib/shapeModel'
 import { encodeShapeModel, parseShapeModel } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelFormat'
+import { RELATIVE_TETRAHEDRON_OBJ } from '../helpers/objFixture'
 
 /** Икосфера как «реальная модель»: сдвинута и растянута, чтобы проверить центрирование и нормировку */
 const icosphere = (detail: number, scale = 1, offset = 0) => {
@@ -23,6 +24,58 @@ const icosphere = (detail: number, scale = 1, offset = 0) => {
 }
 
 describe('parseObjMesh / parsePlateMesh: разбор моделей форм', () => {
+  it('OBJ: отрицательные индексы дают конечную геометрию в обоих бинарных ярусах', () => {
+    const mesh = parseShapeMesh(RELATIVE_TETRAHEDRON_OBJ)
+    expect(mesh.indices).toEqual([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3])
+
+    const tiers = buildShapeTiers(centerAndNormalize(mesh), Uint32Array.from(mesh.indices))
+    for (const data of [tiers.l0, tiers.near]) {
+      const decoded = parseShapeModel(encodeShapeModel(data))
+      expect(decoded.positions.length / 3).toBe(4)
+      expect(decoded.indices.length / 3).toBe(4)
+      expect(decoded.positions.every(Number.isFinite)).toBe(true)
+      expect(decoded.normals.every(Number.isFinite)).toBe(true)
+    }
+  })
+
+  it('OBJ: относительные ссылки считаются от вершин перед гранью, а не от конца файла', () => {
+    const mesh = parseObjMesh('v 0 0 0\nv 1 0 0\nv 0 1 0\nf -3 -2 -1\nv 0 0 1\nf -1 -2 -3')
+    expect(mesh.indices).toEqual([0, 1, 2, 3, 2, 1])
+  })
+
+  it('OBJ: смешанные абсолютные/относительные ссылки с суффиксами образуют четырёхугольник', () => {
+    const mesh = parseObjMesh('v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1/7/9 -3//1 3/8/2 -1')
+    expect(mesh.indices).toEqual([0, 1, 2, 0, 2, 3])
+  })
+
+  it('OBJ: положительные ссылки проверяются после чтения всех вершин', () => {
+    const mesh = parseObjMesh('f 1 2 3\nv 0 0 0\nv 1 0 0\nv 0 1 0')
+    expect(mesh.indices).toEqual([0, 1, 2])
+  })
+
+  it('OBJ: табуляция и комментарии не становятся ссылками на вершины', () => {
+    const mesh = parseShapeMesh('v\t0 0 0\nv\t1 0 0\nv\t0 1 0\nf\t-3 -2 -1 # triangle')
+    expect(mesh.positions).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0])
+    expect(mesh.indices).toEqual([0, 1, 2])
+  })
+
+  it.each(['0', '-0', '4', '-4', '1.5', 'NaN', 'Infinity', '9007199254740992', '/1/1'])(
+    'OBJ: отклоняет некорректную ссылку %s до нормировки', (index) => {
+      const obj = `v 0 0 0\nv 1 0 0\nv 0 1 0\nf ${index} 2 3`
+      expect(() => parseObjMesh(obj)).toThrow(/OBJ.*(index|vertex)/i)
+    }
+  )
+
+  it.each(['v 0 0 NaN', 'v 0 0 Infinity', 'v 0 0 1e309', 'v 0 0'])(
+    'OBJ: отклоняет некорректные координаты %s', (vertex) => {
+      expect(() => parseObjMesh(`${vertex}\nv 1 0 0\nv 0 1 0\nf 1 2 3`)).toThrow(/OBJ.*vertex/i)
+    }
+  )
+
+  it.each(['f 1 2', ''])('OBJ: не принимает модель без треугольной грани (%s)', (face) => {
+    expect(() => parseObjMesh(`v 0 0 0\nv 1 0 0\nv 0 1 0\n${face}`)).toThrow(/OBJ.*face/i)
+  })
+
   it('OBJ: вершины, грани с /vt/vn и четырёхугольник веером', () => {
     const obj = ['# comment', 'v 0 0 0', 'v 1 0 0', 'v 1 1 0', 'v 0 1 0', 'f 1/1/1 2/2/2 3/3/3 4/4/4', 'f 1 2 3'].join('\n')
     const mesh = parseObjMesh(obj)
