@@ -16,11 +16,11 @@ const first = { size: 300, preset: 'dark', gas: { absorption: 0.7, extension: 'k
   quality: { maxSteps: 96 }, palette: { stops: [{ t: 0, color: '#112233' }, { t: 1, color: '#abcdef' }] },
   cavities: [{ radius: 0.2 }], extension: { keep: true } }
 const database = new Map<string, unknown[]>([
-  ['categories', [{ id: 1, alias: 'nebula', name: 'Nebula' }, { id: 2, alias: 'barycenter', name: 'Root' }]],
+  ['categories', [{ id: 7, alias: 'nebula', name: 'Nebula' }, { id: 1, alias: 'barycenter', name: 'Root' }]],
   ['actors', [
-    { id: 1, categoryId: 1, parentId: null, name: 'Cloud A', color: '#ffffff', description: '' },
-    { id: 2, categoryId: 1, parentId: null, name: 'Cloud B', color: '#ffffff', description: '' },
-    { id: 3, categoryId: 2, parentId: null, name: 'Other', color: '#ffffff', description: '' }
+    { id: 1, categoryId: 7, parentId: null, name: 'Cloud A', color: '#ffffff', description: '' },
+    { id: 2, categoryId: 7, parentId: null, name: 'Cloud B', color: '#ffffff', description: '' },
+    { id: 3, categoryId: 1, parentId: null, name: 'Other', color: '#ffffff', description: '' }
   ]],
   ['renderingObjects', [{ id: 1, actorId: 1, data: first }, { id: 2, actorId: 2, data: { size: 200 } }]]
 ])
@@ -250,7 +250,7 @@ it.each(['actor', 'category'])('ignores obsolete nebula-only errors when the %s 
   const save = editor.save
   await act(async () => {
     if (change === 'actor') editor.upsert('renderingObjects', { ...editor.draft.renderingObjects[0], actorId: 3 })
-    else editor.upsert('actors', { ...editor.draft.actors[0], categoryId: 2 })
+    else editor.upsert('actors', { ...editor.draft.actors[0], categoryId: 1 })
     await save()
   })
   expect(editor.hasFieldErrors).toBe(false)

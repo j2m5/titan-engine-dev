@@ -61,6 +61,36 @@ afterEach(() => {
 })
 
 describe('Редактор данных: сохранение', () => {
+  it('сохраняет название категории, но не позволяет создать, удалить или сменить встроенный тип', async () => {
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
+    const categoryTab = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
+      .find((button) => button.textContent?.startsWith('Categories'))!
+    act(() => categoryTab.click())
+    const planetRow = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-editor-row'))
+      .find((button) => button.textContent === '#4 Planet')!
+    act(() => planetRow.click())
+    const buttons = Array.from(container.querySelectorAll('button')).map((button) => button.textContent)
+    expect(buttons).not.toContain('+ New')
+    expect(buttons).not.toContain('Delete')
+    const field = (name: string): HTMLInputElement => Array.from(container.querySelectorAll('label'))
+      .find((label) => label.querySelector('.titan-field-label')?.textContent === name)!.querySelector('input')!
+    expect(field('ID').disabled).toBe(true)
+    expect(field('Alias').disabled).toBe(true)
+    expect(field('Alias').value).toBe('planet')
+    const name = field('Name')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'Worlds')
+      name.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => click('Save to generated'))
+
+    expect(saveSpy).toHaveBeenCalledTimes(1)
+    const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+    expect(files.find((file) => file.path.endsWith('/categories.ts'))!.content)
+      .toContain('id: 4, alias: "planet", name: "Worlds"')
+  })
+
   it('блокирует сохранение в том же тике после удаления физической записи и разрешает его после восстановления', async () => {
     const snapshot = await shippedSnapshot()
     const database = new Map<string, unknown[]>(Object.entries(snapshot))
@@ -220,8 +250,8 @@ it.each([
 
 const JSON_DATABASE = new Map<string, unknown[]>([
   ['categories', [
-    { id: 1, name: 'First', data: { seed: 1 } },
-    { id: 2, name: 'Second', data: { seed: 2 } }
+    { id: 1, alias: 'barycenter', name: 'First', data: { seed: 1 } },
+    { id: 2, alias: 'blackHole', name: 'Second', data: { seed: 2 } }
   ]]
 ])
 const jsonSpec: TableSpec = {
@@ -361,8 +391,8 @@ it.each(['{ invalid', '1', 'true', '"x"', '0', 'false', '""', '[]', 'null'])(
 it('blocks saving an atmosphere without irradiance, then exports a config usable by the renderer', async () => {
   const initial = renderingDataTemplates.find((template) => template.value === 'atmosphere')!.data as Record<string, unknown>
   const database = new Map<string, unknown[]>([
-    ['categories', [{ id: 1, alias: 'atmosphere', name: 'Atmosphere' }]],
-    ['actors', [{ id: 1, categoryId: 1, parentId: null, name: 'Sky', color: '#ffffff', description: '' }]],
+    ['categories', [{ id: 5, alias: 'atmosphere', name: 'Atmosphere' }]],
+    ['actors', [{ id: 1, categoryId: 5, parentId: null, name: 'Sky', color: '#ffffff', description: '' }]],
     ['renderingObjects', [{ id: 1, actorId: 1, data: initial }]]
   ])
   function AtmosphereEditor() {

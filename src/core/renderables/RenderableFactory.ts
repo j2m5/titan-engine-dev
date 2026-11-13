@@ -6,6 +6,7 @@ import { LOD, Object3D, WebGLRenderer } from 'three'
 import { ViewLod } from '@/core/renderables/utils/ViewLod'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { Actor } from '@/core/models/Actor'
+import { AllowedCategories } from '@/core/models/types'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
 import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImpostor'
@@ -132,29 +133,29 @@ class RenderableFactory {
 
   public make(actor: Actor): Object3D {
     switch (actor.getAttribute('categoryId', -1)) {
-      case 1:
+      case AllowedCategories.barycenter:
         return this.createBarycenter(actor)
-      case 2:
+      case AllowedCategories.blackHole:
         return this.createBlackHole(actor)
-      case 3:
+      case AllowedCategories.star:
         return this.createStar(actor)
-      case 4:
+      case AllowedCategories.planet:
         return this.createPlanet(actor)
-      case 5:
+      case AllowedCategories.atmosphere:
         return this.createAtmosphere(actor)
-      case 6:
+      case AllowedCategories.ring:
         return this.createRing(actor)
-      case 7:
+      case AllowedCategories.nebula:
         return this.createNebula(actor)
-      case 8:
+      case AllowedCategories.brownDwarf:
         return this.createBrownDwarf(actor)
-      case 9:
+      case AllowedCategories.whiteDwarf:
         return this.createWhiteDwarf(actor)
-      case 10:
+      case AllowedCategories.giantStar:
         return this.createGiantStar(actor)
-      case 11:
+      case AllowedCategories.asteroidBelt:
         return this.createAsteroidBelt(actor)
-      case 12:
+      case AllowedCategories.pulsar:
         return this.createPulsar(actor)
       default:
         throw new Error("Couldn't resolve actor")

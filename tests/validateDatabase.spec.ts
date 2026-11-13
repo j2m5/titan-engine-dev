@@ -28,7 +28,7 @@ function baseSnapshot(): DatabaseSnapshot {
   return {
     categories: [
       { id: 1, alias: 'barycenter', name: 'Barycenter' },
-      { id: 2, alias: 'planet', name: 'Planet' },
+      { id: 4, alias: 'planet', name: 'Planet' },
       { id: 3, alias: 'star', name: 'Star' }
     ],
     actors: [{ id: 10, categoryId: 1, parentId: null, name: 'Root', description: '', color: '#fff' }],
@@ -44,7 +44,7 @@ function baseSnapshot(): DatabaseSnapshot {
 
 /** Полноценный актор-планета со всеми обязательными связями — без warnings */
 function planet(id: number, parentId: number) {
-  return { id, categoryId: 2, parentId, name: `P${id}`, description: '', color: '#fff' }
+  return { id, categoryId: 4, parentId, name: `P${id}`, description: '', color: '#fff' }
 }
 
 describe('validateDatabase — optional enums', () => {
@@ -66,8 +66,8 @@ describe('validateDatabase — optional enums', () => {
 
   it.each([null, 0, 6, '4', true])('rejects invalid lagrange %j', (lagrange) => {
     const db = baseSnapshot()
-    db.categories.push({ id: 4, alias: 'nebula', name: 'Nebula' })
-    db.actors.push({ ...planet(11, 10), categoryId: 4 })
+    db.categories.push({ id: 7, alias: 'nebula', name: 'Nebula' })
+    db.actors.push({ ...planet(11, 10), categoryId: 7 })
     db.placements.push({ id: 1, actorId: 11, x: 0, y: 0, z: 0, lagrange: lagrange as never })
     expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
       collection: 'placements', entity: 1, message: expect.stringContaining('lagrange')
@@ -135,7 +135,7 @@ describe('validateDatabase — форма данных атмосфер', () => 
     } as Record<string, unknown>
   })
 
-  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number = 2): DatabaseSnapshot {
+  function snapshotWith(row: ReturnType<typeof atmosphereRow>, categoryId: number = 4): DatabaseSnapshot {
     const db = baseSnapshot()
     db.categories.push({ id: 5, alias: 'atmosphere', name: 'Atmosphere' })
     db.actors.push({ ...planet(11, 10), categoryId })
@@ -402,7 +402,7 @@ describe('validateDatabase — внешние ключи', () => {
 
   it('ловит висячий parentId', () => {
     const db = baseSnapshot()
-    db.actors.push({ id: 11, categoryId: 2, parentId: 777, name: 'X', description: '', color: '#fff' })
+    db.actors.push({ id: 11, categoryId: 4, parentId: 777, name: 'X', description: '', color: '#fff' })
 
     const result = validateDatabase(db)
 
@@ -478,7 +478,7 @@ describe('validateDatabase — физика', () => {
 describe('validateDatabase — дерево акторов', () => {
   it('ловит самоссылку parentId === id', () => {
     const db = baseSnapshot()
-    db.actors.push({ id: 11, categoryId: 2, parentId: 11, name: 'Self', description: '', color: '#fff' })
+    db.actors.push({ id: 11, categoryId: 4, parentId: 11, name: 'Self', description: '', color: '#fff' })
 
     const result = validateDatabase(db)
 
@@ -488,8 +488,8 @@ describe('validateDatabase — дерево акторов', () => {
   it('ловит цикл из двух акторов', () => {
     const db = baseSnapshot()
     db.actors.push(
-      { id: 11, categoryId: 2, parentId: 12, name: 'A', description: '', color: '#fff' },
-      { id: 12, categoryId: 2, parentId: 11, name: 'B', description: '', color: '#fff' }
+      { id: 11, categoryId: 4, parentId: 12, name: 'A', description: '', color: '#fff' },
+      { id: 12, categoryId: 4, parentId: 11, name: 'B', description: '', color: '#fff' }
     )
 
     const result = validateDatabase(db)
@@ -621,12 +621,12 @@ describe('validateDatabase — режимы позиционирования', (
   /** Снимок с полным набором категорий, включая статическую туманность */
   function positioningSnapshot(): DatabaseSnapshot {
     const db = baseSnapshot()
-    db.categories.push({ id: 4, alias: 'atmosphere', name: 'Atmosphere' }, { id: 5, alias: 'nebula', name: 'Nebula' })
+    db.categories.push({ id: 5, alias: 'atmosphere', name: 'Atmosphere' }, { id: 7, alias: 'nebula', name: 'Nebula' })
     // планета (кеплерова), туманность (статическая), атмосфера (примонтированная)
     db.actors.push(
       planet(11, 10),
-      { id: 12, categoryId: 5, parentId: 10, name: 'Neb', description: '', color: '#fff' },
-      { id: 13, categoryId: 4, parentId: 11, name: 'Atm', description: '', color: '#fff' }
+      { id: 12, categoryId: 7, parentId: 10, name: 'Neb', description: '', color: '#fff' },
+      { id: 13, categoryId: 5, parentId: 11, name: 'Atm', description: '', color: '#fff' }
     )
     db.renderingObjects.push({ id: 1, actorId: 12, data: { size: 100 } })
     return db
@@ -703,14 +703,19 @@ describe('validateDatabase — режимы позиционирования', (
 describe('validateDatabase — ожидания по категориям', () => {
   function snapshotWithCategory(alias: string, categoryId: number): DatabaseSnapshot {
     const db = baseSnapshot()
-    db.categories.push({ id: categoryId, alias: alias as never, name: alias })
+    if (!db.categories.some((category) => category.id === categoryId)) {
+      db.categories.push({ id: categoryId, alias: alias as never, name: alias })
+    }
     db.actors.push({ id: 20, categoryId, parentId: 10, name: 'X', description: '', color: '#fff' })
     return db
   }
 
-  it.each(['planet', 'star', 'blackHole', 'brownDwarf', 'whiteDwarf', 'giantStar', 'pulsar'])(
-    '%s нельзя сохранить без обязательной физической записи, восстановление записи снимает ошибку', (alias) => {
-      const db = snapshotWithCategory(alias, 20)
+  it.each([
+    ['planet', 4], ['star', 3], ['blackHole', 2], ['brownDwarf', 8],
+    ['whiteDwarf', 9], ['giantStar', 10], ['pulsar', 12]
+  ] as const)(
+    '%s нельзя сохранить без обязательной физической записи, восстановление записи снимает ошибку', (alias, categoryId) => {
+      const db = snapshotWithCategory(alias, categoryId)
 
       const result = validateDatabase(db)
 
@@ -727,9 +732,11 @@ describe('validateDatabase — ожидания по категориям', () =
     }
   )
 
-  it.each(['barycenter', 'atmosphere', 'ring', 'nebula', 'asteroidBelt'])(
-    '%s можно сохранить без собственной физической записи', (alias) => {
-      const result = validateDatabase(snapshotWithCategory(alias, 20))
+  it.each([
+    ['barycenter', 1], ['atmosphere', 5], ['ring', 6], ['nebula', 7], ['asteroidBelt', 11]
+  ] as const)(
+    '%s можно сохранить без собственной физической записи', (alias, categoryId) => {
+      const result = validateDatabase(snapshotWithCategory(alias, categoryId))
 
       expect(result.ok).toBe(true)
       expect(result.errors).toEqual([])
@@ -752,7 +759,7 @@ describe('validateDatabase — ожидания по категориям', () =
   })
 
   it('атмосфере не нужны ни physicalObject, ни orbit — своей позиции и массы у неё нет', () => {
-    const db = snapshotWithCategory('atmosphere', 8)
+    const db = snapshotWithCategory('atmosphere', 5)
     db.renderingObjects.push({ id: 1, actorId: 20, data: {} })
 
     const warnings = validateDatabase(db).warnings.filter((w) => w.entity === 20)
@@ -769,13 +776,13 @@ describe('validateDatabase — ожидания по категориям', () =
   })
 
   it('барицентр по-прежнему не требует ничего', () => {
-    const warnings = validateDatabase(snapshotWithCategory('barycenter', 9)).warnings.filter((w) => w.entity === 20)
+    const warnings = validateDatabase(snapshotWithCategory('barycenter', 1)).warnings.filter((w) => w.entity === 20)
 
     expect(warnings).toEqual([])
   })
 
   it('звезде не нужна orbit, но нужны physical и rendering', () => {
-    const result = validateDatabase(snapshotWithCategory('star', 4))
+    const result = validateDatabase(snapshotWithCategory('star', 3))
     const warnings = result.warnings.filter((w) => w.entity === 20)
 
     expect(result.errors).toHaveLength(1)
@@ -805,8 +812,8 @@ describe('validateDatabase — форма конфига туманности', 
 
   function snapshotWith(row: ReturnType<typeof nebulaRow>): DatabaseSnapshot {
     const db = baseSnapshot()
-    db.categories.push({ id: 5, alias: 'nebula', name: 'Nebula' })
-    db.actors.push({ id: 12, categoryId: 5, parentId: 10, name: 'Neb', description: '', color: '#fff' })
+    db.categories.push({ id: 7, alias: 'nebula', name: 'Nebula' })
+    db.actors.push({ id: 12, categoryId: 7, parentId: 10, name: 'Neb', description: '', color: '#fff' })
     db.renderingObjects.push(row)
     return db
   }

@@ -1,24 +1,20 @@
 import { TableSpec } from '@/ui/editor/forms/fieldSpec'
-import { AllowedCategories } from '@/core/models/types'
 import { renderingDataTemplates } from '@/ui/editor/forms/dataTemplates'
 
 const idField = { key: 'id', label: 'ID', kind: 'number' as const, readonly: true }
 
-/** опции алиаса категории из enum AllowedCategories (string-ключи) */
-const categoryAliasOptions = (Object.keys(AllowedCategories) as string[])
-  .filter((k) => isNaN(Number(k))) // только строковые ключи enum
-  .map((alias) => ({ value: alias, label: alias }))
-
 export const categoriesSpec: TableSpec = {
   table: 'categories',
   title: 'Categories',
+  canCreate: false,
+  canDelete: false,
   fields: [
     idField,
     {
       key: 'alias',
       label: 'Alias',
-      kind: 'select-enum',
-      options: categoryAliasOptions
+      kind: 'text',
+      readonly: true
     },
     { key: 'name', label: 'Name', kind: 'text', full: true }
   ],

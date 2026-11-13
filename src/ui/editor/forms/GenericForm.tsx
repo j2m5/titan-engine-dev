@@ -25,7 +25,9 @@ export interface GenericFormProps {
 
 const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelete, getJsonInput, onJsonInputChange }) => {
   if (!row) {
-    return <div style={{ color: '#888', padding: '20px' }}>Select a record or create a new one.</div>
+    return <div style={{ color: '#888', padding: '20px' }}>
+      {spec.canCreate === false ? 'Select a record.' : 'Select a record or create a new one.'}
+    </div>
   }
 
   const update = (key: string, value: unknown): void => {
@@ -205,11 +207,12 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
     <div>
       <div className="titan-form-grid">{spec.fields.map(renderField)}</div>
 
-      <div style={{ height: '14px' }} />
-
-      <TitanFlex justify="end">
-        <TitanButton onClick={onDelete}>Delete</TitanButton>
-      </TitanFlex>
+      {spec.canDelete !== false && <>
+        <div style={{ height: '14px' }} />
+        <TitanFlex justify="end">
+          <TitanButton onClick={onDelete}>Delete</TitanButton>
+        </TitanFlex>
+      </>}
     </div>
   )
 }

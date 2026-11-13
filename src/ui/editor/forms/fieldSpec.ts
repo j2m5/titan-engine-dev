@@ -67,6 +67,9 @@ export interface TableSpec {
   table: keyof DatabaseSnapshot
   /** заголовок таба/списка */
   title: string
+  /** Встроенные справочники могут разрешать только редактирование существующих строк. */
+  canCreate?: boolean
+  canDelete?: boolean
   /** поля формы (id обычно readonly первым) */
   fields: FieldSpec[]
   /**

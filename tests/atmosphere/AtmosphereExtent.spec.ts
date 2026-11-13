@@ -55,11 +55,11 @@ function snapshotWith(row: ReturnType<typeof atmosphereRow>): DatabaseSnapshot {
   return {
     categories: [
       { id: 1, alias: 'barycenter', name: 'Barycenter' },
-      { id: 2, alias: 'planet', name: 'Planet' }
+      { id: 4, alias: 'planet', name: 'Planet' }
     ],
     actors: [
       { id: 10, categoryId: 1, parentId: null, name: 'Root', description: '', color: '#fff' },
-      { id: 11, categoryId: 2, parentId: 10, name: 'P11', description: '', color: '#fff' }
+      { id: 11, categoryId: 4, parentId: 10, name: 'P11', description: '', color: '#fff' }
     ],
     orbits: [],
     rotationObjects: [],

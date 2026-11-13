@@ -25,13 +25,13 @@ function fileByName(files: { path: string; content: string }[], name: string): s
 function syntheticSnapshot(): DatabaseSnapshot {
   return {
     categories: [
-      { id: 1, alias: 'star', name: 'Star' },
-      { id: 2, alias: 'planet', name: 'Planet' }
+      { id: 3, alias: 'star', name: 'Star' },
+      { id: 4, alias: 'planet', name: 'Planet' }
     ],
     actors: [
-      { id: 10, categoryId: 1, parentId: null, name: 'Root', description: '', color: '#fff' },
-      { id: 11, categoryId: 2, parentId: 10, name: "O'Neill", description: 'quote " and \\ slash', color: '#abc' },
-      { id: 12, categoryId: 2, parentId: 10, name: 'Second', description: '', color: '#def' }
+      { id: 10, categoryId: 3, parentId: null, name: 'Root', description: '', color: '#fff' },
+      { id: 11, categoryId: 4, parentId: 10, name: "O'Neill", description: 'quote " and \\ slash', color: '#abc' },
+      { id: 12, categoryId: 4, parentId: 10, name: 'Second', description: '', color: '#def' }
     ],
     orbits: [
       {

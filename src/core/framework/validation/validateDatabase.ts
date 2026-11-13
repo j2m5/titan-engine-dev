@@ -1,4 +1,5 @@
 import {
+  AllowedCategories,
   IActor,
   ICategory,
   IOrbit,
@@ -873,9 +874,23 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   const actorIds = buildIdSet(db.actors)
   const resourceIds = buildIdSet(db.resources)
 
-  // алиас категории по id — для семантических предупреждений
+  // ID/alias — контракт встроенных типов; новые или переназначенные ID движок не поддерживает.
   const categoryAliasById = new Map<number, string>()
-  for (const c of db.categories) categoryAliasById.set(c.id, c.alias)
+  for (const category of db.categories) {
+    const expectedId = typeof category.alias === 'string' ? AllowedCategories[category.alias] : undefined
+    if (typeof expectedId !== 'number' || category.id !== expectedId) {
+      issues.push({
+        level: 'error',
+        collection: 'categories',
+        entity: category.id,
+        message: typeof expectedId === 'number'
+          ? `categories#${category.id} alias "${category.alias}" requires built-in ID ${expectedId}`
+          : `categories#${category.id} has unsupported alias (${typeof category.alias === 'string' ? category.alias : typeof category.alias})`
+      })
+      continue
+    }
+    categoryAliasById.set(category.id, category.alias)
+  }
 
   // алиас категории по актору — для правил позиционирования и проверок формы
   const aliasByActor = new Map<number, string>()

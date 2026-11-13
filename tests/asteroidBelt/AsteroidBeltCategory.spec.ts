@@ -177,8 +177,8 @@ describe('validateDatabase — форма конфига пояса астеро
 
   it('строки других категорий этой проверкой не трогаются', () => {
     const db = baseSnapshot()
-    db.categories.push({ id: 2, alias: 'planet', name: 'Planet' })
-    db.actors.push({ id: 13, categoryId: 2, parentId: 10, name: 'P', description: '', color: '#fff' })
+    db.categories.push({ id: 4, alias: 'planet', name: 'Planet' })
+    db.actors.push({ id: 13, categoryId: 4, parentId: 10, name: 'P', description: '', color: '#fff' })
     // у планеты нет ни innerRadiusAu, ни thicknessAu — это не повод ругаться
     db.renderingObjects.push({ id: 2, actorId: 13, data: { emission: 1, bumpScale: 0 } })
 

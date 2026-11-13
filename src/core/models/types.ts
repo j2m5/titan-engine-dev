@@ -15,19 +15,20 @@ import type { BeltStructure } from '@/core/renderables/DetailedRingStreamingSyst
 
 export type ValueOf<T> = T[keyof T]
 
+/** Стабильные ID встроенных типов: совпадают с categories.id и контрактом рендера. */
 export enum AllowedCategories {
-  barycenter,
-  blackHole,
-  star,
-  planet,
-  atmosphere,
-  ring,
-  nebula,
-  brownDwarf,
-  whiteDwarf,
-  giantStar,
-  asteroidBelt,
-  pulsar
+  barycenter = 1,
+  blackHole = 2,
+  star = 3,
+  planet = 4,
+  atmosphere = 5,
+  ring = 6,
+  nebula = 7,
+  brownDwarf = 8,
+  whiteDwarf = 9,
+  giantStar = 10,
+  asteroidBelt = 11,
+  pulsar = 12
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories

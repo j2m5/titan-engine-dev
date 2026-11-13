@@ -30,6 +30,7 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
   const selected = selectedId === null ? null : (rows.find((r) => r.id === selectedId) ?? null)
 
   const handleCreate = (): void => {
+    if (spec.canCreate === false) return
     const id = nextId(spec.table)
     const fresh = { id, ...spec.defaults() }
     upsert(spec.table, fresh as never)
@@ -37,7 +38,7 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
   }
 
   const handleDelete = (): void => {
-    if (selectedId === null) return
+    if (selectedId === null || spec.canDelete === false) return
     remove(spec.table, selectedId)
     setSelectedId(null)
   }
@@ -47,7 +48,7 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
       <div className="titan-editor-list">
         <TitanFlex justify="between" align="center" style={{ marginBottom: '10px' }}>
           <span className="titan-field-label">{spec.title}</span>
-          <TitanButton onClick={handleCreate}>+ New</TitanButton>
+          {spec.canCreate !== false && <TitanButton onClick={handleCreate}>+ New</TitanButton>}
         </TitanFlex>
         <TitanSimpleList style={{ maxHeight: '420px' }}>
           {rows.map((r) => (

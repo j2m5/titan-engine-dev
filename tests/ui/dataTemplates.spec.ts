@@ -17,15 +17,15 @@ function snapshotWithTemplate(alias: string, categoryId: number, data: unknown):
   const bottomRadius = (data as { bottomRadius?: number }).bottomRadius ?? 6360
 
   return {
-    // categoryId у вызывающих — 5, 6, 7; с 1 и 2 не пересекается
+    // categoryId у вызывающих — 5, 6, 7, 11; с 1 и 4 не пересекается
     categories: [
       { id: 1, alias: 'barycenter', name: 'Barycenter' },
-      { id: 2, alias: 'planet', name: 'Planet' },
+      { id: 4, alias: 'planet', name: 'Planet' },
       { id: categoryId, alias: alias as never, name: alias }
     ],
     actors: [
       { id: 10, categoryId: 1, parentId: null, name: 'Root', description: '', color: '#fff' },
-      { id: 11, categoryId: 2, parentId: 10, name: 'Host', description: '', color: '#fff' },
+      { id: 11, categoryId: 4, parentId: 10, name: 'Host', description: '', color: '#fff' },
       { id: 12, categoryId, parentId: 11, name: 'Subject', description: '', color: '#fff' }
     ],
     orbits: [],
