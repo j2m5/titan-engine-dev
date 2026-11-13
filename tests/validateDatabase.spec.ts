@@ -185,7 +185,12 @@ describe('validateDatabase — форма данных атмосфер', () => 
   })
 
   it('does not require atmosphere fields for ordinary planet rendering', () => {
-    expect(validateDatabase(snapshotWith({ ...atmosphereRow(), data: { bumpScale: 1 } })).errors).toEqual([])
+    const db = snapshotWith({ ...atmosphereRow(), data: { bumpScale: 1 } })
+    db.physicalObjects.push({
+      id: 1, actorId: 11, parentId: null, mass: 1, radius: 6360,
+      axialTilt: 0, rotationPeriod: 1, temperature: 0
+    })
+    expect(validateDatabase(db).errors).toEqual([])
   })
 
   it('валидная строка атмосферы проходит без ошибок формы', () => {
@@ -551,15 +556,17 @@ describe('validateDatabase — кардинальность hasOne', () => {
   })
 })
 
-describe('validateDatabase — предупреждения о полноте', () => {
-  it('планета без physical/rendering/orbit даёт warnings, но не errors', () => {
+describe('validateDatabase — полнота данных', () => {
+  it('планета без physical блокирует сохранение, отсутствие rendering/orbit остаётся предупреждением', () => {
     const db = baseSnapshot()
     db.actors.push(planet(11, 10))
 
     const result = validateDatabase(db)
 
-    expect(result.ok).toBe(true)
-    expect(result.warnings.some((w) => /no physicalObject/.test(w.message))).toBe(true)
+    expect(result.ok).toBe(false)
+    expect(result.errors).toEqual([
+      expect.objectContaining({ collection: 'actors', entity: 11, message: expect.stringContaining('no physicalObject') })
+    ])
     expect(result.warnings.some((w) => /no renderingObject/.test(w.message))).toBe(true)
     expect(result.warnings.some((w) => /no orbit/.test(w.message))).toBe(true)
   })
@@ -701,6 +708,34 @@ describe('validateDatabase — ожидания по категориям', () =
     return db
   }
 
+  it.each(['planet', 'star', 'blackHole', 'brownDwarf', 'whiteDwarf', 'giantStar', 'pulsar'])(
+    '%s нельзя сохранить без обязательной физической записи, восстановление записи снимает ошибку', (alias) => {
+      const db = snapshotWithCategory(alias, 20)
+
+      const result = validateDatabase(db)
+
+      expect(result.ok).toBe(false)
+      expect(result.errors).toEqual([
+        expect.objectContaining({ collection: 'actors', entity: 20, message: expect.stringContaining('no physicalObject') })
+      ])
+
+      db.physicalObjects.push({
+        id: 1, actorId: 20, parentId: null, mass: 1, radius: 1,
+        axialTilt: 0, rotationPeriod: 1, temperature: 5000
+      })
+      expect(validateDatabase(db).ok).toBe(true)
+    }
+  )
+
+  it.each(['barycenter', 'atmosphere', 'ring', 'nebula', 'asteroidBelt'])(
+    '%s можно сохранить без собственной физической записи', (alias) => {
+      const result = validateDatabase(snapshotWithCategory(alias, 20))
+
+      expect(result.ok).toBe(true)
+      expect(result.errors).toEqual([])
+    }
+  )
+
   it('туманности не нужны ни physicalObject, ни orbit', () => {
     const db = snapshotWithCategory('nebula', 7)
     db.renderingObjects.push({ id: 1, actorId: 20, data: { size: 100 } })
@@ -726,9 +761,11 @@ describe('validateDatabase — ожидания по категориям', () =
   })
 
   it('планете по-прежнему нужны все три связи', () => {
-    const warnings = validateDatabase(snapshotWithCategory('planet', 2)).warnings.filter((w) => w.entity === 20)
+    const result = validateDatabase(snapshotWithCategory('planet', 4))
 
-    expect(warnings).toHaveLength(3)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].message).toContain('physicalObject')
+    expect(result.warnings.filter((w) => w.entity === 20)).toHaveLength(2)
   })
 
   it('барицентр по-прежнему не требует ничего', () => {
@@ -738,9 +775,12 @@ describe('validateDatabase — ожидания по категориям', () =
   })
 
   it('звезде не нужна orbit, но нужны physical и rendering', () => {
-    const warnings = validateDatabase(snapshotWithCategory('star', 3)).warnings.filter((w) => w.entity === 20)
+    const result = validateDatabase(snapshotWithCategory('star', 4))
+    const warnings = result.warnings.filter((w) => w.entity === 20)
 
-    expect(warnings).toHaveLength(2)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].message).toContain('physicalObject')
+    expect(warnings).toHaveLength(1)
     expect(warnings.some((w) => /orbit/.test(w.message))).toBe(false)
   })
 })

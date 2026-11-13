@@ -76,7 +76,7 @@ type Positioning = 'keplerian' | 'attached' | 'placed'
 
 interface CategoryRules {
   positioning: Positioning
-  /** какие связи ожидаются: отсутствие даёт warning о неполноте контента */
+  /** Отсутствие physical — ошибка; rendering/orbit — предупреждения о неполноте. */
   expects: { physical: boolean; rendering: boolean; orbit: boolean }
 }
 
@@ -1105,7 +1105,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)
 
-  // --- 7. Предупреждения о полноте контента ---
+  // --- 7. Обязательные физические данные и предупреждения о полноте контента ---
   const actorsWithPhysical = new Set(db.physicalObjects.map((p) => p.actorId))
   const actorsWithRendering = new Set(db.renderingObjects.map((r) => r.actorId))
   const actorsWithOrbit = new Set(db.orbits.map((o) => o.actorId))
@@ -1119,7 +1119,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
     if (expects.physical && !actorsWithPhysical.has(actor.id)) {
       issues.push({
-        level: 'warning',
+        level: 'error',
         collection: 'actors',
         entity: actor.id,
         message: `Actor ${actor.id} (${alias}) "${actor.name}" has no physicalObject`

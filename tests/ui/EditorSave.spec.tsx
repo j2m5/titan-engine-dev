@@ -10,6 +10,7 @@ import { renderingObjectsSpec } from '@/ui/editor/forms/namedSpecs'
 import { renderingDataTemplates } from '@/ui/editor/forms/dataTemplates'
 import { createAtmosphereUniforms, type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { actorsSpec } from '@/ui/editor/forms/namedSpecs'
+import { shippedSnapshot } from '../helpers/shippedSnapshot'
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean
@@ -29,7 +30,10 @@ const EMPTY_DATABASE = new Map<string, unknown[]>()
 /** Старый JSON ещё может содержать alias вместо числового внешнего ключа. */
 const LEGACY_ACTOR_DATABASE = new Map<string, unknown[]>([
   ['categories', [{ id: 4, alias: 'planet', name: 'Planet' }]],
-  ['actors', [{ id: 10, categoryId: 'planet', parentId: null, name: 'Legacy world', description: '', color: '#fff' }]]
+  ['actors', [{ id: 10, categoryId: 'planet', parentId: null, name: 'Legacy world', description: '', color: '#fff' }]],
+  ['physicalObjects', [{
+    id: 1, actorId: 10, parentId: null, mass: 1, radius: 1, axialTilt: 0, rotationPeriod: 1, temperature: 0
+  }]]
 ])
 
 function LegacyActorEditor() {
@@ -57,6 +61,61 @@ afterEach(() => {
 })
 
 describe('Редактор данных: сохранение', () => {
+  it('блокирует сохранение в том же тике после удаления физической записи и разрешает его после восстановления', async () => {
+    const snapshot = await shippedSnapshot()
+    const database = new Map<string, unknown[]>(Object.entries(snapshot))
+    function PhysicalEditor(): null {
+      editor = useEditorDraft(database, [])
+      return null
+    }
+    act(() => root.render(<PhysicalEditor />))
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    expect(editor.validation.ok).toBe(true)
+    const physical = editor.draft.physicalObjects.find((row) => row.actorId === 5)!
+    const save = editor.save
+
+    await act(async () => {
+      editor.remove('physicalObjects', physical.id)
+      await save()
+    })
+
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.saveStatus).toContain('Cannot save:')
+    expect(editor.validation.ok).toBe(false)
+    expect(editor.validation.errors).toContainEqual(expect.objectContaining({
+      entity: 5, message: expect.stringContaining('no physicalObject')
+    }))
+
+    await act(async () => {
+      editor.upsert('physicalObjects', physical)
+      await save()
+    })
+
+    expect(editor.validation.ok).toBe(true)
+    expect(editor.saveStatus).toContain('Saved')
+    expect(saveSpy).toHaveBeenCalledTimes(1)
+    const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+    expect(files.find((file) => file.path.endsWith('/physicalObjects.ts'))!.content).toContain('actorId: 5,')
+  })
+
+  it('кнопка сохранения недоступна после удаления физических данных Меркурия через форму', () => {
+    act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
+    const saveButton = (): HTMLButtonElement => Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save to generated')!
+    expect(saveButton().disabled).toBe(false)
+    const physicalTab = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
+      .find((button) => button.textContent?.startsWith('Physical'))!
+    act(() => physicalTab.click())
+    const mercury = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-editor-row'))
+      .find((button) => button.textContent?.includes('Mercury'))!
+    act(() => mercury.click())
+
+    click('Delete')
+
+    expect(saveButton().disabled).toBe(true)
+    expect(container.textContent).toContain('error(s) — cannot save')
+  })
+
   it('отклоняет старый alias и сохраняет числовой categoryId после выбора категории в форме', async () => {
     saveSpy.mockResolvedValue({ ok: true, written: [] })
     act(() => root.render(<LegacyActorEditor />))

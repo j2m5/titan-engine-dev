@@ -58,7 +58,9 @@ function syntheticSnapshot(): DatabaseSnapshot {
         axialTilt: 23.43,
         rotationPeriod: 23.9,
         temperature: 0
-      }
+      },
+      { id: 2, actorId: 10, parentId: null, mass: 2e30, radius: 696340, axialTilt: 0, rotationPeriod: 600, temperature: 5000 },
+      { id: 3, actorId: 12, parentId: null, mass: 1e24, radius: 3000, axialTilt: 0, rotationPeriod: 24, temperature: 0 }
     ],
     renderingObjects: [
       { id: 1, actorId: 11, data: { emission: 1, bumpScale: 0.8 } },
@@ -241,6 +243,16 @@ describe('generateDatabaseFiles — защита валидатором', () => 
 })
 
 describe('generateDatabaseFiles — round-trip на реальном database', () => {
+  it('не генерирует базу после удаления обязательной физической записи Меркурия', async () => {
+    const snapshot = await shippedSnapshot()
+    const edited = {
+      ...snapshot,
+      physicalObjects: snapshot.physicalObjects.filter((row) => row.actorId !== 5)
+    }
+
+    expect(() => generateDatabaseFiles(edited)).toThrow(/Actor 5 .*Mercury.*no physicalObject/)
+  })
+
   it('реальные данные переживают генерацию без потерь', async () => {
     const snapshot: GeneratorInput = await shippedSnapshot()
 
