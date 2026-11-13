@@ -8,6 +8,7 @@ import sharp from 'sharp'
 import { build } from 'vite'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
+import { DEM_16BIT_PNG } from '../helpers/demPngFixture'
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url))
 const fixtureRoot = join(projectRoot, 'node_modules', '.tmp')
@@ -148,7 +149,21 @@ describe('build:heightmap dimension validation', { timeout: 40000 }, () => {
     expect(result.status, result.stderr).toBe(0)
     const map = await readOutput()
     expect([map.width, map.height]).toEqual([2, 1])
+    expect([map.minMeters, map.maxMeters]).toEqual([0, 100])
     expect(Array.from(map.data)).toEqual([0, 65535])
+  })
+
+  it('preserves the elevation range and adjacent 16-bit PNG values in the written TEHM file', async () => {
+    const source = join(directory, 'source16.png')
+    await writeFile(source, DEM_16BIT_PNG)
+
+    const result = await run(['--in', source, '--out', output, '--width', '8', '--height', '1'])
+
+    expect(result.status, result.stderr).toBe(0)
+    const map = await readOutput()
+    expect([map.width, map.height]).toEqual([8, 1])
+    expect([map.minMeters, map.maxMeters]).toEqual([0, 65535])
+    expect(Array.from(map.data)).toEqual([0, 1, 255, 256, 10000, 10001, 32768, 65535])
   })
 
   it.each([

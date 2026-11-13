@@ -14,7 +14,13 @@ export type ResampledDem = {
  * исходные DEM больше дефолтного предела.
  */
 export async function resampleDem(inputPath: string, width: number, height: number): Promise<ResampledDem> {
-  const { data, info } = await sharp(inputPath, { limitInputPixels: false })
+  // Сэмплы DEM — высоты: цветокоррекция по ICC не должна менять их значения.
+  const source = sharp(inputPath, { limitInputPixels: false, ignoreIcc: true })
+  const { space } = await source.metadata()
+  const { data, info } = await source
+    // sRGB по умолчанию сжимает 16-битные значения до 8 бит ещё до raw(float).
+    // Сохраняем пространство исходника: первый канал содержит высоты, а не яркость.
+    .toColourspace(space)
     .extractChannel(0)
     .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
     .raw({ depth: 'float' })
