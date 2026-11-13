@@ -14,6 +14,7 @@ import { NEBULA_SHAPE_IDS } from '@/core/renderables/Nebula/NebulaParams'
 import { ringMoonletProblems } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 import { LinearSRGBColorSpace, NoColorSpace, SRGBColorSpace } from 'three'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
+import { CIRCLE, G, SolarMass } from '@/core/constants'
 
 /**
  * Валидатор целостности данных приложения.
@@ -742,6 +743,37 @@ function checkOrbitDomain(db: DatabaseSnapshot, issues: ValidationIssue[]): void
   }
 }
 
+/** Mirror KeplerianModel's gravity and period defaults before saving an unusable orbit. */
+function checkOrbitGravity(db: DatabaseSnapshot, issues: ValidationIssue[]): void {
+  const actors = new Map(db.actors.map(actor => [actor.id, actor]))
+  const physical = new Map(db.physicalObjects.map(row => [row.actorId, row]))
+  for (const orbit of db.orbits) {
+    const a = Math.abs(orbit.semiMajorAxis)
+    // NullOrbit returns a zero state without evaluating gravity or mean motion.
+    if (!Number.isFinite(a) || a === 0 || !Number.isFinite(orbit.period)) continue
+    const actor = actors.get(orbit.actorId)
+    const parentId = actor?.parentId
+    const parent = parentId === null || parentId === undefined ? undefined : physical.get(parentId)
+    const self = physical.get(orbit.actorId)
+    if ((parent && !Number.isFinite(parent.mass)) || (self && !Number.isFinite(self.mass))) continue
+    // Missing physical models intentionally mean zero gravity in KeplerianModel.
+    const mu = parent && self ? (G * (parent.mass + self.mass)) / SolarMass : 0
+    const bad = (reason: string): void => {
+      issues.push({
+        level: 'error', collection: 'orbits', entity: orbit.id,
+        message: `orbits#${orbit.id} (actor ${orbit.actorId}, parent ${parentId ?? 'none'}) ${reason}`
+      })
+    }
+    // Velocity still uses mu with an explicit period (including L4/L5 placements).
+    if (!Number.isFinite(mu) || mu < 0) {
+      bad('requires a finite non-negative gravitational parameter from actor and parent masses')
+      continue
+    }
+    const meanMotion = orbit.period > 0 ? CIRCLE / orbit.period : Math.sqrt(mu / (a * a * a))
+    if (!Number.isFinite(meanMotion)) bad('requires finite mean motion from period, masses and semiMajorAxis')
+  }
+}
+
 function buildIdSet<T extends { id: number }>(rows: T[]): Set<number> {
   const set = new Set<number>()
   for (const row of rows) set.add(row.id)
@@ -998,6 +1030,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // --- 6a. Обязательные числа: null/NaN/Infinity — ошибка (см. REQUIRED_NUMBERS) ---
   checkRequiredNumbers(db, issues)
   checkOrbitDomain(db, issues)
+  checkOrbitGravity(db, issues)
 
   for (const resource of db.resources) {
     const value = resource.colorSpace

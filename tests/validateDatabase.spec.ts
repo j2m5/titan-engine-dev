@@ -456,6 +456,82 @@ describe('validateDatabase — pivot actor_resource', () => {
 })
 
 describe('validateDatabase — физика', () => {
+  function orbitSnapshot(parentMass: number, selfMass: number, period = 0, semiMajorAxis = 1): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.actors.push({ ...db.actors[0], id: 11, parentId: 10 })
+    db.physicalObjects = [parentMass, selfMass].map((mass, index) => ({
+      id: index + 1, actorId: index + 10, parentId: null, mass, radius: 1,
+      axialTilt: 0, rotationPeriod: 1, temperature: 0
+    }))
+    db.orbits.push({ id: 1, actorId: 11, semiMajorAxis, eccentricity: 0, inclination: 0,
+      argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0, epoch: 2451545, period })
+    return db
+  }
+
+  it.each([
+    [-2, 1, 0, 1], [1, -2, 0, 1],
+    [Number.MAX_VALUE, Number.MAX_VALUE, 0, 1],
+    [1, 1, 0, 1e-120],
+    // An explicit period cannot make a negative-mu velocity safe for L4/L5 consumers.
+    [-2, 1, 10, 1],
+    [1, 1, Number.MIN_VALUE, 1]
+  ])('rejects invalid orbital gravity/rate with parent=%s self=%s period=%s a=%s', (parent, self, period, a) => {
+    expect(validateDatabase(orbitSnapshot(parent, self, period, a)).errors).toContainEqual(expect.objectContaining({
+      collection: 'orbits', entity: 1, message: expect.stringMatching(/gravitational parameter|mean motion/)
+    }))
+  })
+
+  it.each([
+    [1e30, 1e24, 0, 1], [0, 0, 0, 1], [0, 0, 10, 1], [-2, 1, 0, 0]
+  ])('preserves supported orbital defaults parent=%s self=%s period=%s a=%s', async (parent, self, period, a) => {
+    const db = orbitSnapshot(parent, self, period, a)
+    expect(validateDatabase(db).ok).toBe(true)
+    const { database } = await import('@/config/database')
+    const { Actor } = await import('@/core/models/Actor')
+    const { KeplerianModel } = await import('@/core/libs/KeplerianModel')
+    const tables = ['actors', 'physicalObjects', 'orbits'] as const
+    const saved = tables.map(table => database.get(table))
+    try {
+      for (const table of tables) database.set(table, db[table])
+      const state = new KeplerianModel(Actor.find(11)!).getStateByEpoch(2451546)
+      expect([...state.position.toArray(), ...state.velocity.toArray()].every(Number.isFinite)).toBe(true)
+    } finally { tables.forEach((table, index) => database.set(table, saved[index])) }
+  })
+
+  it('preserves the zero-gravity default when physical models are absent', () => {
+    const db = orbitSnapshot(0, 0)
+    db.physicalObjects = []
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+
+  it('blocks the negative TOI-519 parent mass that makes the real scene node non-finite', async () => {
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, physicalObjects: snapshot.physicalObjects.map(row => ({ ...row })) }
+    const parent = db.physicalObjects.find(row => row.actorId === 55)!
+    const originalMass = parent.mass
+    parent.mass = -7.408242518e29
+    expect(validateDatabase(db).ok).toBe(false)
+
+    const { database } = await import('@/config/database')
+    const { Actor } = await import('@/core/models/Actor')
+    const { DynamicNode } = await import('@/core/renderables/utils/DynamicNode')
+    const { PerspectiveCamera } = await import('three')
+    const original = database.get('physicalObjects')
+    const position = (): number[] => {
+      const node = new DynamicNode(Actor.find(57)!)
+      node.updateObject({ epoch: 2451545, delta: 0, elapsed: 0, camera: new PerspectiveCamera() })
+      return node.position.toArray()
+    }
+    try {
+      database.set('physicalObjects', db.physicalObjects)
+      expect(position().every(Number.isNaN)).toBe(true)
+      database.set('physicalObjects', original)
+      parent.mass = originalMass
+      expect(validateDatabase(db).ok).toBe(true)
+      expect(position().every(Number.isFinite)).toBe(true)
+    } finally { database.set('physicalObjects', original) }
+  })
+
   it('масса <= 0 даёт warning', () => {
     const db = baseSnapshot()
     db.actors.push(planet(11, 10))

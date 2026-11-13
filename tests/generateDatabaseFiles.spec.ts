@@ -198,6 +198,17 @@ describe('generateDatabaseFiles — round-trip (обратимость)', () => 
 })
 
 describe('generateDatabaseFiles — защита валидатором', () => {
+  it('blocks a negative automatic-orbit parent mass and generates after its restoration', async () => {
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, physicalObjects: snapshot.physicalObjects.map(row => ({ ...row })) }
+    const parent = db.physicalObjects.find(row => row.actorId === 55)!
+    const mass = parent.mass
+    parent.mass = -7.408242518e29
+    expect(() => generateDatabaseFiles(db)).toThrow(/gravitational parameter/)
+    parent.mass = mass
+    expect(generateDatabaseFiles(db)).toHaveLength(10)
+  })
+
   it('blocks generation with a reparented scenario root and permits the restored root', async () => {
     const { Scenarios } = await import('@/config/scenarios')
     const snapshot = await shippedSnapshot()

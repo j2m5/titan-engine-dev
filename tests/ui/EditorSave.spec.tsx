@@ -61,6 +61,35 @@ afterEach(() => {
 })
 
 describe('Редактор данных: сохранение', () => {
+  it('blocks same-tick saving of negative orbital gravity and saves corrected masses', async () => {
+    const database = new Map<string, unknown[]>(Object.entries(await shippedSnapshot()))
+    function GravityEditor(): null {
+      editor = useEditorDraft(database, [])
+      return null
+    }
+    act(() => root.render(<GravityEditor />))
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    const physical = editor.draft.physicalObjects.find(row => row.actorId === 55)!
+    const save = editor.save
+    await act(async () => {
+      editor.upsert('physicalObjects', { ...physical, mass: -7.408242518e29 })
+      await save()
+    })
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.validation.errors).toContainEqual(expect.objectContaining({
+      collection: 'orbits', message: expect.stringContaining('gravitational parameter')
+    }))
+    expect(editor.saveStatus).toContain('Cannot save:')
+
+    await act(async () => {
+      editor.upsert('physicalObjects', physical)
+      await save()
+    })
+    expect(editor.validation.ok).toBe(true)
+    expect(saveSpy).toHaveBeenCalledOnce()
+    expect(editor.saveStatus).toContain('Saved')
+  })
+
   it('blocks same-tick saving of a reparented scenario root and saves its restoration', async () => {
     const { Scenarios } = await import('@/config/scenarios')
     const database = new Map<string, unknown[]>(Object.entries(await shippedSnapshot()))
