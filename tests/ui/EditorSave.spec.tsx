@@ -61,6 +61,37 @@ afterEach(() => {
 })
 
 describe('Редактор данных: сохранение', () => {
+  it('blocks same-tick saving of a reparented scenario root and saves its restoration', async () => {
+    const { Scenarios } = await import('@/config/scenarios')
+    const database = new Map<string, unknown[]>(Object.entries(await shippedSnapshot()))
+    function ScenarioEditor(): null {
+      editor = useEditorDraft(database, Scenarios)
+      return null
+    }
+    act(() => root.render(<ScenarioEditor />))
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    const actor = editor.draft.actors.find(row => row.id === 1)!
+    const save = editor.save
+
+    await act(async () => {
+      editor.upsert('actors', { ...actor, parentId: 42 })
+      await save()
+    })
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.validation.errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: 1, message: expect.stringMatching(/scenario.*root.*parentId/)
+    }))
+    expect(editor.saveStatus).toContain('Cannot save:')
+
+    await act(async () => {
+      editor.upsert('actors', actor)
+      await save()
+    })
+    expect(editor.validation.ok).toBe(true)
+    expect(saveSpy).toHaveBeenCalledOnce()
+    expect(editor.saveStatus).toContain('Saved')
+  })
+
   it.each([39, 47, 109, 127])('блокирует сохранение после удаления обязательного renderingObject актора %s и разрешает после восстановления', async (actorId) => {
     const snapshot = await shippedSnapshot()
     const database = new Map<string, unknown[]>(Object.entries(snapshot))

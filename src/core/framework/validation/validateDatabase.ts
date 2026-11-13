@@ -1166,6 +1166,14 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
       { collection: 'scenarios', entity: sc.id, field: 'rootId', nullable: false },
       issues
     )
+    const root = db.actors.find(actor => actor.id === sc.rootId)
+    // The scene visitor only attaches a database root directly to the scene.
+    if (root && root.parentId !== null && root.parentId !== undefined) {
+      issues.push({
+        level: 'error', collection: 'actors', entity: root.id,
+        message: `Actor ${root.id} is scenario ${sc.id} root and must not have parentId=${root.parentId}`
+      })
+    }
     for (const lightId of sc.lightSources) {
       checkForeignKey(
         lightId,

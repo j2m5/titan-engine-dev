@@ -198,6 +198,18 @@ describe('generateDatabaseFiles — round-trip (обратимость)', () => 
 })
 
 describe('generateDatabaseFiles — защита валидатором', () => {
+  it('blocks generation with a reparented scenario root and permits the restored root', async () => {
+    const { Scenarios } = await import('@/config/scenarios')
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, actors: snapshot.actors.map(actor => ({ ...actor })) }
+    const root = db.actors.find(actor => actor.id === 1)!
+    root.parentId = 42
+    expect(() => generateDatabaseFiles(db, Scenarios)).toThrow(/scenario.*root.*parentId/)
+
+    root.parentId = null
+    expect(generateDatabaseFiles(db, Scenarios)).toHaveLength(10)
+  })
+
   it('не генерирует акторов с устаревшим строковым categoryId', () => {
     const snap = syntheticSnapshot()
     snap.actors[1] = { ...snap.actors[1], categoryId: 'planet' as unknown as number }

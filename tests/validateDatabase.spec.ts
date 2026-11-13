@@ -617,6 +617,27 @@ describe('validateDatabase — полнота данных', () => {
 })
 
 describe('validateDatabase — ссылки сценариев', () => {
+  it('rejects a parent on the shipped Solar scenario root and accepts its restoration', async () => {
+    const { Scenarios } = await import('@/config/scenarios')
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, actors: snapshot.actors.map(actor => ({ ...actor })) }
+    const root = db.actors.find(actor => actor.id === 1)!
+    root.parentId = 42
+
+    expect(validateDatabase(db, Scenarios).errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: 1, message: expect.stringMatching(/scenario.*root.*parentId/)
+    }))
+
+    root.parentId = null
+    expect(validateDatabase(db, Scenarios).ok).toBe(true)
+  })
+
+  it('permits ordinary nested actors under a scenario root', () => {
+    const db = baseSnapshot()
+    db.actors.push({ ...db.actors[0], id: 11, parentId: 10 }, { ...db.actors[0], id: 12, parentId: 11 })
+    expect(validateDatabase(db, [{ id: 1, rootId: 10, lightSources: [], skybox: [] }]).ok).toBe(true)
+  })
+
   it('ловит rootId, указывающий на несуществующего актора', () => {
     const scenarios: ScenarioRefs[] = [{ id: 1, rootId: 999, lightSources: [], skybox: [] }]
 
