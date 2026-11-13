@@ -61,6 +61,59 @@ afterEach(() => {
 })
 
 describe('Редактор данных: сохранение', () => {
+  it.each([39, 47, 109, 127])('блокирует сохранение после удаления обязательного renderingObject актора %s и разрешает после восстановления', async (actorId) => {
+    const snapshot = await shippedSnapshot()
+    const database = new Map<string, unknown[]>(Object.entries(snapshot))
+    function RenderingEditor(): null {
+      editor = useEditorDraft(database, [])
+      return null
+    }
+    act(() => root.render(<RenderingEditor />))
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    const rendering = editor.draft.renderingObjects.find((row) => row.actorId === actorId)!
+    const save = editor.save
+
+    await act(async () => {
+      editor.remove('renderingObjects', rendering.id)
+      await save()
+    })
+
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.saveStatus).toContain('Cannot save:')
+    expect(editor.validation.ok).toBe(false)
+    expect(editor.validation.errors).toContainEqual(expect.objectContaining({
+      entity: actorId, message: expect.stringContaining('no renderingObject')
+    }))
+
+    await act(async () => {
+      editor.upsert('renderingObjects', rendering)
+      await save()
+    })
+
+    expect(editor.validation.ok).toBe(true)
+    expect(saveSpy).toHaveBeenCalledTimes(1)
+    expect(editor.saveStatus).toContain('Saved')
+    const files = saveSpy.mock.calls[0][0] as GeneratedFile[]
+    expect(files.find((file) => file.path.endsWith('/renderingObjects.ts'))!.content).toContain(`actorId: ${actorId},`)
+  })
+
+  it('кнопка сохранения недоступна после удаления настроек кольца через форму', () => {
+    act(() => root.render(<DataEditorModal visible onClose={() => {}} />))
+    const saveButton = (): HTMLButtonElement => Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save to generated')!
+    expect(saveButton().disabled).toBe(false)
+    const tab = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-tab'))
+      .find((button) => button.textContent?.startsWith('Rendering'))!
+    act(() => tab.click())
+    const ring = Array.from(container.querySelectorAll<HTMLButtonElement>('.titan-editor-row'))
+      .find((button) => button.textContent?.startsWith('#9 '))!
+    act(() => ring.click())
+    click('Delete')
+
+    expect(saveButton().disabled).toBe(true)
+    expect(container.textContent).toContain('error(s) — cannot save')
+  })
+
   it('сохраняет название категории, но не позволяет создать, удалить или сменить встроенный тип', async () => {
     saveSpy.mockResolvedValue({ ok: true, written: [] })
     act(() => root.render(<DataEditorModal visible onClose={() => {}} />))

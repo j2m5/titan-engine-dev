@@ -176,7 +176,7 @@ describe('validateDatabase — форма конфига пояса астеро
   })
 
   it('строки других категорий этой проверкой не трогаются', () => {
-    const db = baseSnapshot()
+    const db = snapshotWith(beltRow())
     db.categories.push({ id: 4, alias: 'planet', name: 'Planet' })
     db.actors.push({ id: 13, categoryId: 4, parentId: 10, name: 'P', description: '', color: '#fff' })
     // у планеты нет ни innerRadiusAu, ни thicknessAu — это не повод ругаться

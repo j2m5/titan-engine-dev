@@ -249,8 +249,11 @@ it.each(['actor', 'category'])('ignores obsolete nebula-only errors when the %s 
   click('Toggle table')
   const save = editor.save
   await act(async () => {
-    if (change === 'actor') editor.upsert('renderingObjects', { ...editor.draft.renderingObjects[0], actorId: 3 })
-    else editor.upsert('actors', { ...editor.draft.actors[0], categoryId: 1 })
+    if (change === 'actor') {
+      editor.upsert('renderingObjects', { ...editor.draft.renderingObjects[0], actorId: 3 })
+      // Переносим редактируемую строку, сохраняя обязательный конфиг прежней туманности.
+      editor.upsert('renderingObjects', { id: 3, actorId: 1, data: { size: 300 } })
+    } else editor.upsert('actors', { ...editor.draft.actors[0], categoryId: 1 })
     await save()
   })
   expect(editor.hasFieldErrors).toBe(false)

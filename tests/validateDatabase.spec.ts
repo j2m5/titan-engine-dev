@@ -557,6 +557,23 @@ describe('validateDatabase — кардинальность hasOne', () => {
 })
 
 describe('validateDatabase — полнота данных', () => {
+  it.each([
+    ['ring', 39], ['atmosphere', 47], ['nebula', 109], ['asteroidBelt', 127]
+  ] as const)('%s нельзя сохранить без обязательного renderingObject', async (_alias, actorId) => {
+    const db = await shippedSnapshot()
+    const row = db.renderingObjects.find((entry) => entry.actorId === actorId)!
+    expect(row).toBeDefined()
+    const edited = { ...db, renderingObjects: db.renderingObjects.filter((entry) => entry.actorId !== actorId) }
+
+    const result = validateDatabase(edited)
+
+    expect(result.ok).toBe(false)
+    expect(result.errors).toEqual([
+      expect.objectContaining({ collection: 'actors', entity: actorId, message: expect.stringContaining('no renderingObject') })
+    ])
+    expect(validateDatabase({ ...edited, renderingObjects: [...edited.renderingObjects, row] }).ok).toBe(true)
+  })
+
   it('планета без physical блокирует сохранение, отсутствие rendering/orbit остаётся предупреждением', () => {
     const db = baseSnapshot()
     db.actors.push(planet(11, 10))
@@ -735,8 +752,11 @@ describe('validateDatabase — ожидания по категориям', () =
   it.each([
     ['barycenter', 1], ['atmosphere', 5], ['ring', 6], ['nebula', 7], ['asteroidBelt', 11]
   ] as const)(
-    '%s можно сохранить без собственной физической записи', (alias, categoryId) => {
-      const result = validateDatabase(snapshotWithCategory(alias, categoryId))
+    '%s можно сохранить без собственной физической записи', async (_alias, categoryId) => {
+      const db = await shippedSnapshot()
+      const actor = db.actors.find((row) => row.categoryId === categoryId)!
+      expect(actor).toBeDefined()
+      const result = validateDatabase({ ...db, physicalObjects: db.physicalObjects.filter((row) => row.actorId !== actor.id) })
 
       expect(result.ok).toBe(true)
       expect(result.errors).toEqual([])
@@ -753,9 +773,10 @@ describe('validateDatabase — ожидания по категориям', () =
   })
 
   it('туманности нужен renderingObject', () => {
-    const warnings = validateDatabase(snapshotWithCategory('nebula', 7)).warnings
+    const result = validateDatabase(snapshotWithCategory('nebula', 7))
 
-    expect(warnings.some((w) => w.entity === 20 && /renderingObject/.test(w.message))).toBe(true)
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({ entity: 20, message: expect.stringContaining('no renderingObject') }))
   })
 
   it('атмосфере не нужны ни physicalObject, ни orbit — своей позиции и массы у неё нет', () => {

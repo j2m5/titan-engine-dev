@@ -243,6 +243,13 @@ describe('generateDatabaseFiles — защита валидатором', () => 
 })
 
 describe('generateDatabaseFiles — round-trip на реальном database', () => {
+  it.each([39, 47, 109, 127])('не генерирует базу без обязательного renderingObject актора %s', async (actorId) => {
+    const snapshot = await shippedSnapshot()
+    const edited = { ...snapshot, renderingObjects: snapshot.renderingObjects.filter((row) => row.actorId !== actorId) }
+
+    expect(() => generateDatabaseFiles(edited)).toThrow(new RegExp(`Actor ${actorId} .*no renderingObject`))
+  })
+
   it('не генерирует базу после удаления обязательной физической записи Меркурия', async () => {
     const snapshot = await shippedSnapshot()
     const edited = {

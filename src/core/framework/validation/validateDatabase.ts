@@ -77,8 +77,8 @@ type Positioning = 'keplerian' | 'attached' | 'placed'
 
 interface CategoryRules {
   positioning: Positioning
-  /** Отсутствие physical — ошибка; rendering/orbit — предупреждения о неполноте. */
-  expects: { physical: boolean; rendering: boolean; orbit: boolean }
+  /** Обязательные данные блокируют сохранение; optional rendering и orbit дают предупреждения. */
+  expects: { physical: boolean; rendering: false | 'optional' | 'required'; orbit: boolean }
 }
 
 const ANCHOR: CategoryRules = {
@@ -86,10 +86,10 @@ const ANCHOR: CategoryRules = {
   expects: { physical: false, rendering: false, orbit: false }
 }
 
-/** Центральное тело системы: орбиты нет, остальное обязательно */
+/** Центральное тело системы: физика обязательна, настройки рендеринга имеют дефолты. */
 const CENTRAL: CategoryRules = {
   positioning: 'keplerian',
-  expects: { physical: true, rendering: true, orbit: false }
+  expects: { physical: true, rendering: 'optional', orbit: false }
 }
 
 /**
@@ -98,7 +98,7 @@ const CENTRAL: CategoryRules = {
  */
 const ATTACHED: CategoryRules = {
   positioning: 'attached',
-  expects: { physical: false, rendering: true, orbit: false }
+  expects: { physical: false, rendering: 'required', orbit: false }
 }
 
 const CATEGORY_RULES: Record<string, CategoryRules> = {
@@ -114,19 +114,19 @@ const CATEGORY_RULES: Record<string, CategoryRules> = {
   whiteDwarf: CENTRAL,
   giantStar: CENTRAL,
   pulsar: CENTRAL,
-  planet: { positioning: 'keplerian', expects: { physical: true, rendering: true, orbit: true } },
+  planet: { positioning: 'keplerian', expects: { physical: true, rendering: 'optional', orbit: true } },
 
   atmosphere: ATTACHED,
   ring: ATTACHED,
 
-  nebula: { positioning: 'placed', expects: { physical: false, rendering: true, orbit: false } },
-  asteroidBelt: { positioning: 'placed', expects: { physical: false, rendering: true, orbit: false } }
+  nebula: { positioning: 'placed', expects: { physical: false, rendering: 'required', orbit: false } },
+  asteroidBelt: { positioning: 'placed', expects: { physical: false, rendering: 'required', orbit: false } }
 }
 
 /** Неизвестная категория трактуется строго: кеплерова и обязана иметь всё */
 const DEFAULT_RULES: CategoryRules = {
   positioning: 'keplerian',
-  expects: { physical: true, rendering: true, orbit: true }
+  expects: { physical: true, rendering: 'required', orbit: true }
 }
 
 function rulesFor(alias: string): CategoryRules {
@@ -1120,7 +1120,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)
 
-  // --- 7. Обязательные физические данные и предупреждения о полноте контента ---
+  // --- 7. Обязательные данные и предупреждения о полноте контента ---
   const actorsWithPhysical = new Set(db.physicalObjects.map((p) => p.actorId))
   const actorsWithRendering = new Set(db.renderingObjects.map((r) => r.actorId))
   const actorsWithOrbit = new Set(db.orbits.map((o) => o.actorId))
@@ -1142,7 +1142,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
     }
     if (expects.rendering && !actorsWithRendering.has(actor.id)) {
       issues.push({
-        level: 'warning',
+        level: expects.rendering === 'required' ? 'error' : 'warning',
         collection: 'actors',
         entity: actor.id,
         message: `Actor ${actor.id} (${alias}) "${actor.name}" has no renderingObject`
