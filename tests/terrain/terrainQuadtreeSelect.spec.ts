@@ -101,6 +101,10 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
 
   it('дополнительная детализация держится в полосе гистерезиса и освобождается после удаления камеры', () => {
     const params = makeParams(0.2)
+    // Isolate the proximity gate: this fine relief must exceed the SSE threshold
+    // on both sides of the range, even with the tighter radial distance bound.
+    const error = params.field.nodeGeometricErrorMeters.bind(params.field)
+    params.field.nodeGeometricErrorMeters = (face, level, i, j) => level >= 8 ? 100 : error(face, level, i, j)
     const node = { face: 0, level: 9, i: 256, j: 256 }
     const key = terrainNodeKey(node)
     const direction = cubeFaceDirection(0, 1 / 512, 1 / 512, new Vector3())

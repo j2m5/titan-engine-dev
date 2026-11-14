@@ -16,6 +16,7 @@ import { NearShadowTile } from '@/core/terrain/NearShadowTile'
 import { config } from '@/core/framework/config'
 import { TerrainBoulders } from '@/core/terrain/TerrainBoulders'
 import { resolveBoulderDensity } from '@/core/terrain/boulderScatter'
+import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 
 /**
  * Fail-fast на разрыв DI-цепочки (стиль сообщения — как `requireRenderingData`):
@@ -76,7 +77,7 @@ class TerrainSphere extends TerrainPatchGroup {
     builder?: TerrainPatchBuilder
   ) {
     assertProceduralWiring(model, proceduralSurfaceGenerator)
-    const density = resolveBoulderDensity(readRenderingData<IPlanetRenderingObject>(model)?.boulderDensity)
+    const density = resolveBoulderDensity(terrainDataOf(model).boulderDensity)
 
     // Диффуз процедурного тела обязан лежать в resourceStorage ДО постройки
     // материала: диффуз в юниформ сажает updateMaterial (см. diffuseKey в
@@ -96,8 +97,13 @@ class TerrainSphere extends TerrainPatchGroup {
     // карта тени строится у строителя (воркер держит копию карты); до прихода
     // материал держит заглушку — ровную сферу на датуме
     requestTerrainShadowMap(field, this.builder)
-    this.nearTile = new NearShadowTile(field, this.builder, config('terrain.nearShadow'), renderer.extensions.has('OES_texture_float_linear'))
-    this.boulders = density > 0 ? new TerrainBoulders(this, model, field, sharedMaterial, density) : null
+    this.nearTile = new NearShadowTile(
+      field,
+      this.builder,
+      config('terrain.nearShadow'),
+      renderer.extensions.has('OES_texture_float_linear')
+    )
+    this.boulders = density > 0 ? new TerrainBoulders(this, model, field, sharedMaterial, density, renderer) : null
 
     this.name = this.model.getAttribute('name', '') + 'Planet'
     this.userData.type = 'planet'

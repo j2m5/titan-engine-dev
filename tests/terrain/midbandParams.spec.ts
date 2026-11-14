@@ -74,8 +74,13 @@ describe('midbandParams: ручки геометрии средней полос
     expect(midbandCacheKey(MIDBAND_DEFAULTS)).not.toBe(midbandCacheKey({ ...MIDBAND_DEFAULTS, midbandWavelengthKm: 2 }))
   })
 
-  it('midbandParamsOf читает data тела: у Луны (19) ручек нет — дефолты', () => {
-    expect(midbandParamsOf(Actor.find(19)!)).toEqual(MIDBAND_DEFAULTS)
+  it('midbandParamsOf combines lunar class geometry with the unchanged noise defaults', () => {
+    expect(midbandParamsOf(Actor.find(19)!)).toEqual({
+      ...MIDBAND_DEFAULTS,
+      bedrockStrength: 0.3,
+      bedrockWeathering: 0.85,
+      bedrockStepMeters: 416.6328
+    })
   })
 
   it('waterLevelMeters и midbandWaterFadeMeters: из data, дефолт null; входят в ключ кеша', () => {

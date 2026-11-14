@@ -43,6 +43,7 @@ export function checkBoulders() {
       mesh.frustumCulled = false
       scene.add(mesh)
       for (const detail of [false, true]) {
+        parent.defines.USE_BOULDER_SHADOW = true
         if (detail) parent.defines.USE_TERRAIN_DETAIL = true
         else delete parent.defines.USE_TERRAIN_DETAIL
         material.sync(parent)

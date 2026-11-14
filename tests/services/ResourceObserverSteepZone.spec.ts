@@ -62,6 +62,25 @@ function makeObserver(
 }
 
 describe('ResourceObserver: steep-набор зон материала в кандидатах', () => {
+  it.each(['Moon', 'Venus', 'Earth'])(
+    '%s streams the matching talus pair instead of the old secondary grain',
+    async (name) => {
+      const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+        const texture = new Texture()
+        texture.image = { width: 2048, height: 2048 }
+        texture.name = request.name
+        return Promise.resolve({ ok: true as const, texture })
+      })
+      const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
+      observer.scenario = SOLAR_SYSTEM
+      data.set(observedActor(name).getAttribute('id')!, record(name, 10))
+      await handlers['ClosestChange'](record(name, 10))
+      const paths = load.mock.calls.map(([request]) => request.name)
+      expect(paths.filter((path) => path === 'terrain/rocky_trail_diff.webp')).toHaveLength(1)
+      expect(paths.filter((path) => path === 'terrain/rocky_trail_nor.webp')).toHaveLength(1)
+      expect(paths).not.toContain('terrain/moon_01_nor.webp')
+    }
+  )
   it('Mars streams the shared talus color and grain normal once, alongside sand and cliffs', async () => {
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
       const texture = new Texture()
@@ -141,8 +160,8 @@ describe('ResourceObserver: steep-набор зон материала в кан
     data.set(observedActor('Moon').getAttribute('id')!, record('Moon', 10))
     await handlers['ClosestChange'](record('Moon', 10))
 
-    // Диффуз+slope+4 detail грунта и 3 общие карты скал.
-    expect(load).toHaveBeenCalledTimes(9)
+    // Диффуз+slope+3 detail грунта (вторичная нормаль общая с основной) и 3 карты скал.
+    expect(load).toHaveBeenCalledTimes(8)
     expect(load).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'planets/moon/moon.jpg' }),
       expect.any(AbortSignal)

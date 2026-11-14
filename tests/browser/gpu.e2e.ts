@@ -1,6 +1,13 @@
 import { test, runProbe } from './probe'
 
 const probes: { title: string; path: string; name: string; args?: unknown[] }[] = [
+  {
+    title: 'rocky catalog terrain and boulder shaders',
+    path: 'terrain/rockyTerrainRollout',
+    name: 'checkRockyTerrainRollout'
+  },
+  { title: 'boulder shadow filtering', path: 'terrain/boulderShadows', name: 'checkBoulderShadowFiltering' },
+  { title: 'boulder linear shadow depth', path: 'terrain/boulderShadows', name: 'checkBoulderShadowDepth' },
   { title: 'atmosphere output', path: 'graphic/atmosphereOutput', name: 'checkAtmosphereOutput' },
   { title: 'terminal HDR output', path: 'graphic/terminalEffects', name: 'checkTerminalEffects' },
   { title: 'volume MSAA batch', path: 'graphic/volumeBatch', name: 'checkVolumeBatch' },
@@ -18,8 +25,18 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'eclipse distance order', path: 'eclipse/distance', name: 'checkEclipseDistance' },
   { title: 'ring shadow gradients', path: 'eclipse/ringShadowGradients', name: 'checkRingShadowGradients' },
   { title: 'water ocean surface', path: 'water/oceanView', name: 'checkOceanView' },
-  { title: 'near shadow float filtering', path: 'terrain/nearShadowFiltering', name: 'checkNearShadowFiltering', args: [false] },
-  { title: 'near shadow without float-linear extension', path: 'terrain/nearShadowFiltering', name: 'checkNearShadowFiltering', args: [true] },
+  {
+    title: 'near shadow float filtering',
+    path: 'terrain/nearShadowFiltering',
+    name: 'checkNearShadowFiltering',
+    args: [false]
+  },
+  {
+    title: 'near shadow without float-linear extension',
+    path: 'terrain/nearShadowFiltering',
+    name: 'checkNearShadowFiltering',
+    args: [true]
+  },
   { title: 'terrain material normal blending', path: 'terrain/detailMaterialBlend', name: 'checkDetailMaterialBlend' },
   { title: 'terrain terrace shadow', path: 'terrain/terraceShadow', name: 'checkTerraceShadow' },
   { title: 'terrain bedrock normal', path: 'terrain/bedrockNormal', name: 'checkBedrockNormal' },
@@ -38,13 +55,22 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula bounded light', path: 'nebula/lightBound', name: 'checkNebulaLightBound' },
   { title: 'nebula lighting images', path: 'nebula/lightTransport', name: 'checkNebulaLightingImages' },
   { title: 'nebula resolution', path: 'nebula/resolution', name: 'checkNebulaResolution' },
-  { title: 'nebula stencil reconstruction', path: 'nebula/stencilReconstruction', name: 'checkNebulaStencilReconstruction' },
+  {
+    title: 'nebula stencil reconstruction',
+    path: 'nebula/stencilReconstruction',
+    name: 'checkNebulaStencilReconstruction'
+  },
   { title: 'nebula reconstruction', path: 'nebula/reconstruction', name: 'checkNebulaReconstruction' },
   { title: 'nebula resolution fields', path: 'nebula/resolution', name: 'checkNebulaResolutionFields' },
   { title: 'nebula temporal baked', path: 'nebula/temporal', name: 'checkNebulaTemporal', args: [true] },
   { title: 'nebula temporal procedural', path: 'nebula/temporal', name: 'checkNebulaTemporal', args: [false] },
   { title: 'nebula LOD composition', path: 'nebula/rendering', name: 'checkNebulaLodComposition' },
-  { title: 'nebula emission LOD', path: 'nebula/rendering', name: 'checkNebulaLodComposition', args: [{ gas: { absorption: 0 }, dust: { strength: 0 } }] },
+  {
+    title: 'nebula emission LOD',
+    path: 'nebula/rendering',
+    name: 'checkNebulaLodComposition',
+    args: [{ gas: { absorption: 0 }, dust: { strength: 0 } }]
+  },
   { title: 'nebula dust LOD', path: 'nebula/rendering', name: 'checkNebulaLodComposition', args: [{ density: 0 }] },
   { title: 'nebula lighting LOD', path: 'nebula/lightTransport', name: 'checkNebulaLightingLod' },
   { title: 'nebula diagonal bake', path: 'nebula/rendering', name: 'checkNebulaDiagonalBake' },
@@ -52,9 +78,23 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula incremental baking', path: 'nebula/rendering', name: 'checkNebulaIncrementalBaking' },
   { title: 'atmosphere terminator', path: 'atmosphere/terminator', name: 'checkAtmosphereTerminator' },
   { title: 'atmosphere sky visibility', path: 'atmosphere/skyVisibility', name: 'checkAtmosphereSkyVisibility' },
-  { title: 'black hole depth (0 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [0] },
-  { title: 'black hole background sampling', path: 'blackHole/backgroundSampling', name: 'checkBlackHoleBackgroundSampling' },
-  { title: 'black hole depth (4 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [4] },
+  {
+    title: 'black hole depth (0 samples)',
+    path: 'blackHole/insideDepth',
+    name: 'checkBlackHoleInsideDepth',
+    args: [0]
+  },
+  {
+    title: 'black hole background sampling',
+    path: 'blackHole/backgroundSampling',
+    name: 'checkBlackHoleBackgroundSampling'
+  },
+  {
+    title: 'black hole depth (4 samples)',
+    path: 'blackHole/insideDepth',
+    name: 'checkBlackHoleInsideDepth',
+    args: [4]
+  },
   { title: 'star LOD photometry', path: 'star/lodPhotometry', name: 'checkStarLodPhotometry' },
   { title: 'star granulation filtering', path: 'star/granulationFiltering', name: 'checkStarGranulationFiltering' },
   { title: 'star granulation photometry', path: 'star/granulationPhotometry', name: 'checkStarGranulationPhotometry' },

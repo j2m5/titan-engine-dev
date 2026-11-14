@@ -32,7 +32,7 @@ export class TerrainBoulderMaterial extends ShaderMaterial {
     uDetailNormalScale: new Uniform(0.65)
   }
 
-  public constructor(parent: ShaderMaterial) {
+  public constructor(parent: ShaderMaterial, sizeScale = 1) {
     super({
       vertexShader: `
         ${planetSurfaceVertexPars}
@@ -65,6 +65,7 @@ export class TerrainBoulderMaterial extends ShaderMaterial {
       fragmentShader: parent.fragmentShader
     })
     this.name = 'Terrain boulders'
+    this.localUniforms.uDetailScale.value = 1 / toThreeJSUnits((BOULDER_TEXTURE_METERS * sizeScale) / 1000)
     this.sync(parent)
   }
 

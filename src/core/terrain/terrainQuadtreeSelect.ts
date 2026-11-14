@@ -48,8 +48,8 @@ export const TERRAIN_QUADTREE_MAX_LEVEL = 10
  */
 export const TERRAIN_RELIEF_MODEL_LEVEL = 8
 
-// Дополнительные уровни нужны у камеры. Глобальный пад высоты в SSE-сфере
-// остаётся консервативным, но не должен уточнять до L10 весь горный массив.
+// Дополнительные уровни нужны у камеры; радиальный диапазон высот
+// не должен уточнять до L10 весь горный массив.
 const NEAR_DETAIL_RANGE_KM = 4
 const NEAR_DETAIL_MERGE_FACTOR = 1.25
 
@@ -198,6 +198,27 @@ export function nodeBoundingSphereRadiusUnits(
   return patchHalfDiagonal + toThreeJSUnits(heightPadMeters / 1000)
 }
 
+/**
+ * Conservative distance to the node's surface, in scene units. DEM relief
+ * extends along a radial segment; treating that whole height range as lateral
+ * padding put thousands of small-body nodes at zero SSE distance. The capsule
+ * contains every vertex and, by convexity, the triangles between them.
+ */
+export function nodeSurfaceDistanceUnits(
+  field: TerrainHeightField,
+  level: number,
+  cameraLocal: Vector3,
+  nodeDirection: Vector3
+): number {
+  const minRadius = toThreeJSUnits(field.radiusKm + field.minMeters / 1000)
+  const maxRadius = toThreeJSUnits(field.radiusKm + field.maxMeters / 1000)
+  const closestRadius = Math.max(minRadius, Math.min(maxRadius, cameraLocal.dot(nodeDirection)))
+  nearDetailCenterScratch.copy(nodeDirection).multiplyScalar(closestRadius)
+  const padding =
+    nodePatchHalfDiagonalUnits(field, level) + toThreeJSUnits((2 * field.midbandMaxAmplitudeMeters) / 1000)
+  return Math.max(0, cameraLocal.distanceTo(nearDetailCenterScratch) - padding)
+}
+
 function visitNode(
   face: number,
   level: number,
@@ -233,8 +254,10 @@ function visitNode(
   const sphereRadius = nodeBoundingSphereRadiusUnits(field, level, centerHeightMeters)
 
   const minDistanceUnits = toThreeJSUnits(MIN_DISTANCE_METERS / 1000)
-  const centerDistance = params.cameraLocal.distanceTo(sphereCenterScratch)
-  const distance = Math.max(centerDistance - sphereRadius, minDistanceUnits)
+  const distance = Math.max(
+    nodeSurfaceDistanceUnits(field, level, params.cameraLocal, centerDirScratch),
+    minDistanceUnits
+  )
   const distanceMeters = (distance / SpaceScale) * 1000
 
   const sse =

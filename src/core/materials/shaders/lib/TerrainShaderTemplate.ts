@@ -1,6 +1,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
+import { boulderShadowFunctions, boulderShadowUniforms } from './chunks/BoulderShadow'
 import {
   planetSurfaceComposite,
   planetSurfaceDefaultUniforms,
@@ -168,6 +169,10 @@ export const TerrainShaderTemplate: ShaderProps = {
     #endif
 
     ${planetSurfaceFragmentFunctions}
+    #ifdef USE_BOULDER_SHADOW
+      ${boulderShadowUniforms}
+      ${boulderShadowFunctions}
+    #endif
 
     #ifdef USE_TERRAIN_DETAIL
       varying vec3 vDetailPos;
@@ -345,6 +350,11 @@ export const TerrainShaderTemplate: ShaderProps = {
         directGain *= terrainShadow;
       #endif
 
+      #ifdef USE_BOULDER_SHADOW
+        float boulderVisibility = boulderShadowVisibility(-vViewPosition);
+        directGain *= boulderVisibility;
+        terrainShadow *= boulderVisibility;
+      #endif
       ${planetSurfaceDirectLight}
 
       #ifdef USE_TERRAIN_FROST

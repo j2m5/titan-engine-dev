@@ -14,8 +14,8 @@ function moon(): Actor {
   return Actor.find(19)!
 }
 
-function moonPathOf(kind: ResourceType): string {
-  return moon().resources.where('resourceType', kind).first()!.getAttribute('path') as string
+function moonPathOf(kind: ResourceType, body = moon()): string {
+  return body.resources.where('resourceType', kind).first()!.getAttribute('path') as string
 }
 
 function seedTexture(name: string, width: number = 4, height: number = 2): void {
@@ -25,8 +25,8 @@ function seedTexture(name: string, width: number = 4, height: number = 2): void 
   resourceStorage.addTexture(texture)
 }
 
-function seedMoonHeightMap(): void {
-  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(moonPathOf('height'), {
+function seedMoonHeightMap(body = moon()): void {
+  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(moonPathOf('height', body), {
     width: 4,
     height: 2,
     minMeters: 0,
@@ -71,8 +71,12 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(terrainDetailFunctions).not.toContain('triplanarWeights(dirLocal)')
     // родной набор читается через общий helper sampleDetailSet (зоны материала,
     // задача 2) — сам helper вызывает triplanarNormal/Arm/AlbedoDetiled параметризованно
-    expect(terrainDetailFunctions).toContain('sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm')
-    expect(terrainDetailFunctions).toContain('sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm')
+    expect(terrainDetailFunctions).toContain(
+      'sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm'
+    )
+    expect(terrainDetailFunctions).toContain(
+      'sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm'
+    )
     expect(terrainDetailFunctions).toContain('triplanarNormalDetiled(nor')
     expect(terrainDetailFunctions).toContain('triplanarArmDetiled(arm')
     expect(terrainDetailFunctions).toContain('triplanarAlbedoDetiled(diff')
@@ -91,9 +95,13 @@ describe('TerrainDetail: чанк — регистрация и структур
     // сигнатуры берут готовый TriplanarUv (uv+dFdx/dFdy, посчитан ДО
     // ветвлений — фикс-раунд 2, мип-волоски вдоль изоконтуров маски зон),
     // сами больше не считают dFdx/dFdy — см. тест на позицию dFdx( ниже
-    expect(terrainDetailFunctions).toContain('vec3 triplanarNormalDetiled(sampler2D map, TriplanarUv t, vec3 n, vec3 w, vec3 l)')
+    expect(terrainDetailFunctions).toContain(
+      'vec3 triplanarNormalDetiled(sampler2D map, TriplanarUv t, vec3 n, vec3 w, vec3 l)'
+    )
     expect(terrainDetailFunctions).toContain('vec3 triplanarArmDetiled(sampler2D map, TriplanarUv t, vec3 w, vec3 l)')
-    expect(terrainDetailFunctions).toContain('vec3 triplanarAlbedoDetiled(sampler2D map, TriplanarUv t, vec3 w, vec3 l)')
+    expect(terrainDetailFunctions).toContain(
+      'vec3 triplanarAlbedoDetiled(sampler2D map, TriplanarUv t, vec3 w, vec3 l)'
+    )
     expect(terrainDetailFunctions).toContain('triplanarBlendNormal(')
     expect(terrainDetailFunctions).toContain('triplanarBlendRgb(')
   })
@@ -121,9 +129,7 @@ describe('TerrainDetail: чанк — регистрация и структур
   })
 
   it('sampleDetiled: непрерывный 2-тап по floor(l)/fract(l), без знакового флипа оси', () => {
-    expect(terrainDetailFunctions).toContain(
-      'vec4 sampleDetiled(sampler2D map, vec2 uv, vec2 ddx, vec2 ddy, float l)'
-    )
+    expect(terrainDetailFunctions).toContain('vec4 sampleDetiled(sampler2D map, vec2 uv, vec2 ddx, vec2 ddy, float l)')
     const bodyStart = terrainDetailFunctions.indexOf('vec4 sampleDetiled(')
     const bodyEnd = terrainDetailFunctions.indexOf('\n  }', bodyStart)
     const body = terrainDetailFunctions.slice(bodyStart, bodyEnd)
@@ -274,12 +280,16 @@ describe('TerrainMaterial: терраформный детальный слой'
   })
 
   it('гейты слоёв следуют фактическому наличию текстур поэлементно', () => {
-    seedMoonHeightMap()
-    seedTexture(moonPathOf('detailNormal'), 8, 4)
-    seedTexture(moonPathOf('detailArm'), 8, 4)
+    // Ice retains independent main/grain normals; rocky talus deliberately shares its gravel normal.
+    const body = Actor.find(21)!,
+      path = (kind: ResourceType) => moonPathOf(kind, body)
+    seedMoonHeightMap(body)
+    seedTexture(path('diffuse'))
+    seedTexture(path('detailNormal'), 8, 4)
+    seedTexture(path('detailArm'), 8, 4)
     // detailDiffuse и detailNormal2 намеренно не загружены
 
-    const material = new TerrainMaterial(moon())
+    const material = new TerrainMaterial(body)
     material.updateMaterial()
 
     expect(material.uniforms.uDetailLayerGates.value.x).toBe(1) // ao
@@ -288,19 +298,22 @@ describe('TerrainMaterial: терраформный детальный слой'
   })
 
   it('четыре текстуры биндятся в соответствующие юниформы', () => {
-    seedMoonHeightMap()
-    seedTexture(moonPathOf('detailNormal'), 8, 4)
-    seedTexture(moonPathOf('detailDiffuse'), 8, 4)
-    seedTexture(moonPathOf('detailArm'), 8, 4)
-    seedTexture(moonPathOf('detailNormal2'), 8, 4)
+    const body = Actor.find(21)!,
+      path = (kind: ResourceType) => moonPathOf(kind, body)
+    seedMoonHeightMap(body)
+    seedTexture(path('diffuse'))
+    seedTexture(path('detailNormal'), 8, 4)
+    seedTexture(path('detailDiffuse'), 8, 4)
+    seedTexture(path('detailArm'), 8, 4)
+    seedTexture(path('detailNormal2'), 8, 4)
 
-    const material = new TerrainMaterial(moon())
+    const material = new TerrainMaterial(body)
     material.updateMaterial()
 
-    expect((material.uniforms.uDetailNorMap.value as Texture).name).toBe(moonPathOf('detailNormal'))
-    expect((material.uniforms.uDetailDiffMap.value as Texture).name).toBe(moonPathOf('detailDiffuse'))
-    expect((material.uniforms.uDetailArmMap.value as Texture).name).toBe(moonPathOf('detailArm'))
-    expect((material.uniforms.uDetailNor2Map.value as Texture).name).toBe(moonPathOf('detailNormal2'))
+    expect((material.uniforms.uDetailNorMap.value as Texture).name).toBe(path('detailNormal'))
+    expect((material.uniforms.uDetailDiffMap.value as Texture).name).toBe(path('detailDiffuse'))
+    expect((material.uniforms.uDetailArmMap.value as Texture).name).toBe(path('detailArm'))
+    expect((material.uniforms.uDetailNor2Map.value as Texture).name).toBe(path('detailNormal2'))
   })
 
   it('ручки из data доезжают в юниформы (паритет с бумскейлом) — периоды пересчитаны из метров', () => {
@@ -361,7 +374,9 @@ describe('TerrainMaterial: терраформный детальный слой'
 
   it('detailScaleMeters: 0 (мусорная ручка) — тот же uDetailScale, что и дефолт (validPeriodMeters в TerrainShader)', () => {
     const stub = {
-      renderingObject: { getAttribute: () => ({ emission: 1, bumpScale: 0, detailScaleMeters: 0, detailScale2Meters: 0 }) },
+      renderingObject: {
+        getAttribute: () => ({ emission: 1, bumpScale: 0, detailScaleMeters: 0, detailScale2Meters: 0 })
+      },
       physicalObject: { getAttribute: () => 1737 },
       children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
       resources: { where: () => ({ first: () => undefined }) }

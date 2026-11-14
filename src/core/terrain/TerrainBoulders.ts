@@ -9,7 +9,8 @@ import {
   Quaternion,
   ShaderMaterial,
   Sphere,
-  Vector3
+  Vector3,
+  WebGLRenderer
 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import {
@@ -25,11 +26,11 @@ import { boulderRandom as random, sampleBoulderTriangle } from './boulderScatter
 import { createBoulderGeometry } from './boulderGeometry'
 import { TerrainBoulderObstacles, registerBoulderObstacles } from './TerrainBoulderObstacles'
 import { wrapUnitsFor, WRAP_TILES } from './detailWrap'
+import { TerrainBoulderShadows } from './TerrainBoulderShadows'
 
 export const BOULDER_CAPACITY = 2048
 export const BOULDER_RANGE_METERS = 1600
-const UNIT = toThreeJSUnits(0.001),
-  RANGE = BOULDER_RANGE_METERS * UNIT
+const UNIT = toThreeJSUnits(0.001)
 const VARIANTS = 4,
   CACHE_LIMIT = 24,
   CELL_BUDGET = 512
@@ -54,6 +55,9 @@ interface PatchDeposit {
 export class TerrainBoulders {
   private readonly group = new Group()
   private readonly material: TerrainBoulderMaterial
+  private readonly sizeScale: number
+  private readonly range: number
+  private readonly shadows: TerrainBoulderShadows | null
   private readonly meshes: InstancedMesh[] = []
   private readonly contacts: InstancedMesh
   private readonly obstacles: TerrainBoulderObstacles
@@ -77,9 +81,12 @@ export class TerrainBoulders {
     actor: object,
     private readonly field: TerrainHeightField,
     private readonly parentMaterial: ShaderMaterial,
-    private readonly density: number
+    private readonly density: number,
+    renderer?: WebGLRenderer
   ) {
-    this.material = new TerrainBoulderMaterial(parentMaterial)
+    this.sizeScale = Math.max(0.1, Math.min(1, field.radiusKm / 2000))
+    this.range = BOULDER_RANGE_METERS * UNIT * this.sizeScale
+    this.material = new TerrainBoulderMaterial(parentMaterial, this.sizeScale)
     for (let i = 0; i < VARIANTS; i++) {
       const mesh = new InstancedMesh(createBoulderGeometry(i), this.material, BOULDER_CAPACITY)
       this.prepare(mesh)
@@ -95,6 +102,9 @@ export class TerrainBoulders {
     this.host.add(this.group)
     this.obstacles = new TerrainBoulderObstacles(host)
     this.unregister = registerBoulderObstacles(actor, this.obstacles)
+    this.shadows = renderer ? new TerrainBoulderShadows(host, renderer, this.meshes, this.sizeScale) : null
+    this.shadows?.bind(parentMaterial)
+    this.shadows?.bind(this.material)
   }
 
   private prepare(mesh: InstancedMesh): void {
@@ -112,7 +122,10 @@ export class TerrainBoulders {
     if (this.disposed) return
     this.frame++
     // Avoid allocating deposits while the camera is far above the surface.
-    if (camera.length() > toThreeJSUnits(this.field.radiusKm + this.field.maxHeightWithMidbandMeters / 1000) + RANGE) {
+    if (
+      camera.length() >
+      toThreeJSUnits(this.field.radiusKm + this.field.maxHeightWithMidbandMeters / 1000) + this.range
+    ) {
       this.hide()
       return
     }
@@ -126,7 +139,7 @@ export class TerrainBoulders {
       if (!bounds) continue
       this.center.copy(mesh.position).add(bounds.center)
       const distance = this.center.distanceTo(camera)
-      if (distance > bounds.radius + RANGE) continue
+      if (distance > bounds.radius + this.range) continue
       candidates.push({ patch, distance })
     }
     candidates.sort((a, b) => a.distance - b.distance)
@@ -148,7 +161,7 @@ export class TerrainBoulders {
       }
       for (const rock of deposit.rocks) {
         rock.distance = rock.sphere.center.distanceTo(camera)
-        if (rock.distance < RANGE) visible.push(rock)
+        if (rock.distance < this.range) visible.push(rock)
       }
     }
     // Evict the least recently used patch, regardless of traversal order.
@@ -172,7 +185,7 @@ export class TerrainBoulders {
     this.group.position.copy(this.anchor)
     this.group.visible = this.count > 0
     this.material.origin.copy(this.anchor)
-    const wrap1 = wrapUnitsFor(BOULDER_TEXTURE_METERS)
+    const wrap1 = wrapUnitsFor(BOULDER_TEXTURE_METERS * this.sizeScale)
     const scale2 = this.parentMaterial.uniforms.uDetailScale2?.value as number | undefined
     const wrap2 = scale2 && scale2 > 0 ? WRAP_TILES / scale2 : wrapUnitsFor(7)
     this.wrapOrigin(this.material.detailOrigin, wrap1)
@@ -181,7 +194,7 @@ export class TerrainBoulders {
     this.contacts.count = 0
     const spheres: Sphere[] = []
     for (const rock of visible) {
-      const t = Math.max(0, Math.min(1, (rock.distance / UNIT - 1100) / 500))
+      const t = Math.max(0, Math.min(1, (rock.distance / (UNIT * this.sizeScale) - 1100) / 500))
       const fade = (1 - t * t * (3 - 2 * t)) * Math.max(0, Math.min(1, (elapsed - rock.born - 0.05) / 0.45))
       this.write(this.meshes[rock.variant], rock.matrix, fade, rock.tint)
       this.write(this.contacts, rock.contact, fade, 1)
@@ -193,6 +206,11 @@ export class TerrainBoulders {
       mesh.instanceMatrix.needsUpdate = true
       mesh.geometry.getAttribute('boulderState').needsUpdate = true
     }
+    const lightPosition = this.parentMaterial.uniforms.lightPosition?.value as Vector3 | undefined
+    if (this.shadows && lightPosition) {
+      this.host.worldToLocal(this.dir.copy(lightPosition)).sub(camera).normalize()
+      this.shadows.update(camera, this.dir, this.anchor)
+    } else this.shadows?.hide()
   }
 
   private wrapOrigin(out: Vector3, wrap: number): void {
@@ -228,9 +246,11 @@ export class TerrainBoulders {
     )
     this.dir.copy(this.point).normalize()
     if (this.normal.dot(this.dir) < 0.75) return
+    const water = this.field.midbandParams.waterLevelMeters
+    if (water !== null && this.point.length() <= this.field.waterSurfaceRadiusUnits(water)) return
     const coverage = this.field.bedrockTalusCoverage(this.dir)
     if (chance >= this.density * 0.6 * coverage) return
-    const radius = (1.4 + 8.6 * random(seed + 3) ** 4) * UNIT
+    const radius = (1.4 + 8.6 * random(seed + 3) ** 4) * UNIT * this.sizeScale
     const sx = radius * (0.85 + 0.45 * random(seed + 4)),
       sz = radius * (0.75 + 0.4 * random(seed + 5))
     const contactRadius = 1.5 * Math.max(sx, sz)
@@ -241,7 +261,10 @@ export class TerrainBoulders {
     this.scale.set(sx, radius * (0.7 + 0.35 * random(seed + 7)), sz)
     const position = this.point.clone().addScaledVector(this.normal, 0.12 * radius)
     const matrix = new Matrix4().compose(position, this.rotation, this.scale)
-    const sphere = new Sphere(position, 1.5 * Math.max(this.scale.x, this.scale.y, this.scale.z) + UNIT)
+    const sphere = new Sphere(
+      position,
+      1.5 * Math.max(this.scale.x, this.scale.y, this.scale.z) + UNIT * this.sizeScale
+    )
     const contact = new Matrix4().compose(
       this.point.clone().addScaledVector(this.normal, 0.02 * UNIT),
       this.rotation,
@@ -269,6 +292,7 @@ export class TerrainBoulders {
   }
 
   public hide(): void {
+    this.shadows?.hide()
     this.group.visible = false
     this.count = 0
     this.obstacles.spheres = []
@@ -279,6 +303,7 @@ export class TerrainBoulders {
     if (this.disposed) return
     this.disposed = true
     this.hide()
+    this.shadows?.dispose()
     this.unregister()
     this.group.removeFromParent()
     for (const mesh of [...this.meshes, this.contacts]) {

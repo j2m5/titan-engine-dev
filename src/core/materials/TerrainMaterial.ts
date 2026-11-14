@@ -19,6 +19,8 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { DETAIL_FADE_START_RATIO, macroFadeMetersFor } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { TERRAIN_SHADOW_PENUMBRA_FLOOR } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
+import { createBoulderShadowUniforms } from '@/core/materials/shaders/lib/chunks/BoulderShadow'
+import { talusDetailFor } from '@/core/terrain/talusDetail'
 
 /**
  * Материал патчей рельефа (TerrainSphere): slope/cavity, детальный слой и
@@ -68,6 +70,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     // уклона — юниформы материала: steep-набор общий на все терраформные тела
     // (см. STEEP_DETAIL_PATHS), не данные шейдера тела.
     this.uniforms.uSteepNorMap = new Uniform(null)
+    Object.assign(this.uniforms, createBoulderShadowUniforms())
     this.uniforms.uSteepArmMap = new Uniform(null)
     this.uniforms.uSteepDiffMap = new Uniform(null)
     this.uniforms.uSteepGate = new Uniform(0)
@@ -199,7 +202,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     const detailNorMap = textureOf('detailNormal')
     const detailDiffMap = textureOf('detailDiffuse')
     const detailArmMap = textureOf('detailArm')
-    const detailNor2Map = textureOf('detailNormal2')
+    const talus = talusDetailFor(this.model)
+    const detailNor2Map = talus ? resourceStorage.getTexture(talus.normal) : textureOf('detailNormal2')
     const USE_TERRAIN_DETAIL = hasHeightField && Boolean(detailNorMap)
 
     this.uniforms.bumpMap.value = bumpMap
@@ -210,9 +214,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     this.uniforms.uDetailNor2Map.value = detailNor2Map ?? null
     this.uniforms.uDetailLayerGates.value.set(detailArmMap ? 1 : 0, detailDiffMap ? 1 : 0, detailNor2Map ? 1 : 0)
     const talusDiffuse = resourceStorage.getTexture(TALUS_DETAIL_PATHS.diffuse)
-    const grainPath = this.model.resources.where('resourceType', 'detailNormal2').first()?.getAttribute('path')
-    const bedrockShape = this.uniforms.uBedrockShape.value as Vector4
-    const talusConfigured = bedrockShape.x > 0 && bedrockShape.z > 0 && grainPath === TALUS_DETAIL_PATHS.normal
+    const talusConfigured = talus !== null
     this.uniforms.uTalusDiffMap.value = talusDiffuse ?? null
     this.uniforms.uTalusGate.value = talusConfigured && detailNor2Map && talusDiffuse ? 1 : 0
 
@@ -292,9 +294,25 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
 
     // USE_SPECULAR (блик воды по specular-карте) — только у сферы: у рельефа блик даёт водная оболочка
     return {
+      ...(hasHeightField && (planetData.boulderDensity ?? 0) > 0 && { USE_BOULDER_SHADOW: '1' }),
+      // The rock shadow takes the slot otherwise used only to jitter cloud cascade transitions.
+      ...(USE_TERRAIN_DETAIL &&
+        talusConfigured &&
+        (planetData.boulderDensity ?? 0) > 0 && {
+          USE_TERRAIN_CLOUD_JITTER: '1'
+        }),
       ...(useSlope && { USE_SLOPE: '1' }),
       ...(USE_TERRAIN_DETAIL && { USE_TERRAIN_DETAIL: '1' }),
       ...(USE_TERRAIN_DETAIL && talusConfigured && { USE_TERRAIN_TALUS: '1' }),
+      // Shared assets need one sampler even when sampled at different physical scales.
+      // This leaves room for atmosphere LUTs and both cloud-shadow samplers on Earth.
+      ...(USE_TERRAIN_DETAIL && detailNor2Map === detailNorMap && { USE_SHARED_DETAIL_NORMAL: '1' }),
+      // Keep the alias while this shared resource is loading or evicted.
+      ...(USE_TERRAIN_DETAIL &&
+        talusConfigured &&
+        this.model.resources.where('resourceType', 'detailDiffuse').first()?.getAttribute('path') === talus.diffuse && {
+          USE_SHARED_TALUS_DIFFUSE: '1'
+        }),
       // Гейт: тот же slope, что USE_SLOPE (без него канал B недоступен), И
       // ненулевая ручка — при cavityStrength 0 путь бит-в-бит прежним.
       ...(useSlope && cavityStrength > 0 && { USE_CAVITY: '1' }),
@@ -327,6 +345,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
   }
 
   protected resetPath(): void {
+    this.uniforms.uBoulderShadowStrength.value = 0
+    this.uniforms.uBoulderShadowMap.value = null
     this.uniforms.bumpMap.value = null
     this.uniforms.uCavityStrength.value = 0
     this.uniforms.uDiffuseTexelSize.value.set(0, 0)

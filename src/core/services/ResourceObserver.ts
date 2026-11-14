@@ -19,8 +19,8 @@ import { decideStreaming } from '@/core/streaming/decideStreaming'
 import type { MapCandidate, StreamDecision } from '@/core/streaming/types'
 import { MAP_TYPE_RANK, mapTypeRank, STEEP_TYPE_RANKS } from '@/core/streaming/types'
 import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff'
-import { STEEP_DETAIL_PATHS, TALUS_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
-import { midbandParamsOf } from '@/core/terrain/midbandParams'
+import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
+import { talusDetailFor } from '@/core/terrain/talusDetail'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { config } from '@/core/framework/config'
 import type { BackgroundSource } from '@/config/background'
@@ -579,7 +579,10 @@ class ResourceObserver {
         if (this.loaded.has(path) && !previousOwners.get(path)?.has(actorId)) catchUp.add(actorId)
       }
 
+      const hasHeight: boolean = heightPathOf(actor) !== undefined
+      const talus = hasHeight ? talusDetailFor(actor) : null
       for (const resource of streamableResources) {
+        if (talus && resource.getAttribute('resourceType') === 'detailNormal2') continue
         pushCandidate(resource.getAttribute('path', ''), mapTypeRank(resource.getAttribute('resourceType') ?? ''))
       }
 
@@ -590,7 +593,6 @@ class ResourceObserver {
       // Steep-набор шарится всей базой; провал загрузки —
       // второстепенная карта: тело живёт одной зоной, гейт материала
       // остаётся 0.
-      const hasHeight: boolean = heightPathOf(actor) !== undefined
       const nativeDetailDiffusePath: string | undefined = streamableResources
         .find((resource: Resource): boolean => resource.getAttribute('resourceType') === 'detailDiffuse')
         ?.getAttribute('path', '')
@@ -600,13 +602,9 @@ class ResourceObserver {
         pushCandidate(STEEP_DETAIL_PATHS.arm, STEEP_TYPE_RANKS.arm)
         pushCandidate(STEEP_DETAIL_PATHS.diffuse, STEEP_TYPE_RANKS.diffuse)
       }
-      if (hasHeight) {
-        const bedrock = midbandParamsOf(actor)
-        const grainPath = streamableResources
-          .find((resource) => resource.getAttribute('resourceType') === 'detailNormal2')
-          ?.getAttribute('path')
-        if (bedrock.bedrockStrength > 0 && bedrock.bedrockWeathering > 0 && grainPath === TALUS_DETAIL_PATHS.normal)
-          pushCandidate(TALUS_DETAIL_PATHS.diffuse, STEEP_TYPE_RANKS.diffuse)
+      if (talus) {
+        pushCandidate(talus.normal, mapTypeRank('detailNormal2'))
+        if (nativeDetailDiffusePath !== talus.diffuse) pushCandidate(talus.diffuse, STEEP_TYPE_RANKS.diffuse)
       }
     }
 

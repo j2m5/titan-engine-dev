@@ -22,15 +22,30 @@ describe('пресеты классов', () => {
   })
 
   it('стартовые значения спеки §3', () => {
-    expect(TERRAIN_CLASS_PRESETS['rocky-airless']).toEqual({ terrainAmbient: 0.1 })
-    expect(TERRAIN_CLASS_PRESETS['rocky-atmosphere']).toEqual({ terrainAmbient: 0.18, midbandShade: 0.4, macroTerraceStrength: 0.4 })
-    const ice = { terrainAmbient: 0.22, terrainOcclusionDirect: 0.25, steepTint: 0xd9d9d9, midbandShade: 0.35, macroTerraceStrength: 0.2, iceGlintStrength: 0.35 }
+    expect(TERRAIN_CLASS_PRESETS['rocky-airless']).toMatchObject({ terrainAmbient: 0.1 })
+    expect(TERRAIN_CLASS_PRESETS['rocky-atmosphere']).toMatchObject({
+      terrainAmbient: 0.18,
+      midbandShade: 0.4,
+      macroTerraceStrength: 0.4
+    })
+    const ice = {
+      terrainAmbient: 0.22,
+      terrainOcclusionDirect: 0.25,
+      steepTint: 0xd9d9d9,
+      midbandShade: 0.35,
+      macroTerraceStrength: 0.2,
+      iceGlintStrength: 0.35
+    }
     expect(TERRAIN_CLASS_PRESETS['ice-airless']).toEqual(ice)
     expect(TERRAIN_CLASS_PRESETS['ice-atmosphere']).toEqual(ice)
-    expect(TERRAIN_CLASS_PRESETS['sand-atmosphere']).toEqual({ terrainAmbient: 0.18, macroStreakStrength: 0.7, macroTerraceStrength: 0.3 })
-    expect(TERRAIN_CLASS_PRESETS['sand-airless']).toEqual({ terrainAmbient: 0.12 })
-    expect(TERRAIN_CLASS_PRESETS['volcanic-atmosphere']).toEqual({ terrainAmbient: 0.16, steepTint: 0xf2f2f2 })
-    expect(TERRAIN_CLASS_PRESETS['volcanic-airless']).toEqual({ terrainAmbient: 0.1, steepTint: 0xf2f2f2 })
+    expect(TERRAIN_CLASS_PRESETS['sand-atmosphere']).toMatchObject({
+      terrainAmbient: 0.18,
+      macroStreakStrength: 0.7,
+      macroTerraceStrength: 0.3
+    })
+    expect(TERRAIN_CLASS_PRESETS['sand-airless']).toMatchObject({ terrainAmbient: 0.12 })
+    expect(TERRAIN_CLASS_PRESETS['volcanic-atmosphere']).toMatchObject({ terrainAmbient: 0.16, steepTint: 0xf2f2f2 })
+    expect(TERRAIN_CLASS_PRESETS['volcanic-airless']).toMatchObject({ terrainAmbient: 0.1, steepTint: 0xf2f2f2 })
   })
 })
 
@@ -57,7 +72,12 @@ describe('terrainDataOf', () => {
   })
 
   it('тело без класса и без данных — фолбэк как у шейдеров поверхности', () => {
-    const bare = { renderingObject: undefined, getAttribute: () => 'стаб', children: { where: () => ({ first: () => undefined }) }, resources: { where: () => ({ first: () => undefined }) } } as unknown as Actor
+    const bare = {
+      renderingObject: undefined,
+      getAttribute: () => 'стаб',
+      children: { where: () => ({ first: () => undefined }) },
+      resources: { where: () => ({ first: () => undefined }) }
+    } as unknown as Actor
     expect(terrainDataOf(bare)).toEqual({ bumpScale: 0, emission: 1 })
   })
 })

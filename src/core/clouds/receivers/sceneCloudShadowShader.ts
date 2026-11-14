@@ -113,7 +113,14 @@ export function buildSceneCloudShadowGLSL(reference: string): string {
   float sceneCloudSampleSunTransmittanceMeters(vec3 positionMeters) {
     if(!sceneCloudShadowEnabled)return 1.0;
     float radius=sceneCloudShadowGetShadowRadius(positionMeters);
-    float tau=sceneCloudShadowSampleShadowOpticalDepth(positionMeters,positionMeters * 0.001,radius,sceneCloudShadowGetSTBN());
+    #ifdef USE_TERRAIN_CLOUD_JITTER
+      // Terrain already fills the texture budget. Analytic noise replaces only the
+      // cascade-selection jitter; the shadow buffer and eight-tap PCF stay intact.
+      float jitter=sceneCloudShadowInterleavedGradientNoise(gl_FragCoord.xy + vec2(float(sceneCloudShadowFrame % 64) * 5.588238));
+    #else
+      float jitter=sceneCloudShadowGetSTBN();
+    #endif
+    float tau=sceneCloudShadowSampleShadowOpticalDepth(positionMeters,positionMeters * 0.001,radius,jitter);
     return exp(-tau);
   }
   #else

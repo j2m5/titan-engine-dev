@@ -172,9 +172,17 @@ export const terrainDetailUniforms = `
   uniform sampler2D uDetailDiffMap;
   uniform sampler2D uDetailNorMap;
   uniform sampler2D uDetailArmMap;
-  uniform sampler2D uDetailNor2Map;
+  #ifdef USE_SHARED_DETAIL_NORMAL
+    #define uDetailNor2Map uDetailNorMap
+  #else
+    uniform sampler2D uDetailNor2Map;
+  #endif
   #ifdef USE_TERRAIN_TALUS
-    uniform sampler2D uTalusDiffMap;
+    #ifdef USE_SHARED_TALUS_DIFFUSE
+      #define uTalusDiffMap uDetailDiffMap
+    #else
+      uniform sampler2D uTalusDiffMap;
+    #endif
     uniform float uTalusGate;
     uniform float uTalusTintNorm;
   #endif
