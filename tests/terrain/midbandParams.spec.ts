@@ -9,8 +9,26 @@ import {
 } from '@/core/terrain/midbandParams'
 
 describe('midbandParams: ручки геометрии средней полосы', () => {
+  it('bedrock: валидирует параметры уступов и разделяет физические поля в кеше', () => {
+    for (const bedrockStrength of [-0.01, 1.01, NaN, Infinity, 'strong']) {
+      expect(() => resolveMidbandParams({ bedrockStrength }, 'Mars')).toThrow(/bedrockStrength/)
+    }
+    for (const bedrockStepMeters of [0, -100, NaN, Infinity, 'wide']) {
+      expect(() => resolveMidbandParams({ bedrockStepMeters }, 'Mars')).toThrow(/bedrockStepMeters/)
+    }
+    const off = resolveMidbandParams({}, 'Moon')
+    const on = resolveMidbandParams({ bedrockStrength: 0.6, bedrockStepMeters: 800 }, 'Mars')
+    expect(on.bedrockStrength).toBe(0.6)
+    expect(off.bedrockStrength).toBe(0)
+    expect(midbandCacheKey(on)).not.toBe(midbandCacheKey(off))
+    expect(midbandCacheKey(on)).not.toBe(midbandCacheKey({ ...on, bedrockStepMeters: 1000 }))
+  })
+
   it('дефолты и авто-длина волны', () => {
     expect(MIDBAND_DEFAULTS).toEqual({
+      bedrockStrength: 0,
+      bedrockStepMeters: 800,
+      bedrockWeathering: 0,
       midbandStrength: 1,
       midbandWavelengthKm: null,
       midbandFlat: 0.15,

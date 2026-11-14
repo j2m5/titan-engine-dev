@@ -82,6 +82,11 @@
  * гейта не имеет — её наличие и есть условие самого USE_TERRAIN_DETAIL
  * (hasHeightField && detailNormalTexture, см. TerrainMaterial).
  *
+ * Осыпь (USE_TERRAIN_TALUS) добавляет цвет каменистого грунта на мелкой
+ * шкале. Нормаль переиспользует uDetailNor2Map, цвет — те же UV/градиенты/l.
+ * Только внутри осыпи добавляются 6 выборок диффуза; вне её — ни одной.
+ * Sampler компилируется лишь для тел с настроенным материалом осыпи.
+ *
  * Fade по дистанции — не только косметика: без него трипланар (см. БЮДЖЕТ
  * выше) считался бы на каждом пикселе планеты независимо от удаления камеры.
  * Пороги — ручки пер-тела в метрах дистанции камеры (detailFadeMeters/
@@ -140,12 +145,12 @@
  * старому коду ветки fade1, просто параметризовано тремя сэмплерами; звать
  * его 1 раз (края маски) или 2 (полоса перехода) вместо копипаста.
  *
- * Бленд в полосе перехода: нормали — тот же whiteout-паттерн, что уже
- * применяется между крупной и мелкой шкалой (nLocal = normalize(nLocal +
- * k·(nDetail − nLocal)), последовательно родной вес (1−m), затем steep вес
- * m — а не единая интерполяция двух нормалей, которая укорачивает вектор
- * ближе к краям сферы Buhler). AO/tint — не направления, им whiteout не
- * нужен, обычный mix(native, steep, m).
+ * В полосе перехода оба материала используют одну исходную нормаль.
+ * Их нормали интерполируются по покрытию m и нормализуются, затем сила
+ * детали и fade применяются один раз. Это альтернативные материалы:
+ * последовательное наложение меняло наклон даже у двух одинаковых карт
+ * и делало освещение зависимым от порядка наборов. Крупная и мелкая
+ * шкалы по-прежнему накладываются последовательно. AO/tint — обычный mix.
  *
  * БЮДЖЕТ ПОЛОСЫ (худший случай, обе шкалы + все три канала крупной, ОБА
  * набора крупной шкалы одновременно): 3 карты (нормаль/ARM/диффуз) × 3
@@ -160,11 +165,19 @@
  * и полоса перехода) — до mix/whiteout с родным тинтом, поэтому доля вклада
  * в полосе задаётся той же m, что и у остальных каналов.
  */
+import { bedrockTalusFunctions, bedrockTalusUniforms } from './TerrainBedrockTalus'
+
 export const terrainDetailUniforms = `
+  ${bedrockTalusUniforms}
   uniform sampler2D uDetailDiffMap;
   uniform sampler2D uDetailNorMap;
   uniform sampler2D uDetailArmMap;
   uniform sampler2D uDetailNor2Map;
+  #ifdef USE_TERRAIN_TALUS
+    uniform sampler2D uTalusDiffMap;
+    uniform float uTalusGate;
+    uniform float uTalusTintNorm;
+  #endif
   uniform float uDetailScale;
   uniform float uDetailScale2;
   uniform float uDetailNormalScale;
@@ -194,6 +207,7 @@ export const terrainDetailUniforms = `
 `
 
 export const terrainDetailFunctions = `
+  ${bedrockTalusFunctions}
   // Полуширина ветвления маски зон (см. докстроку чанка, «ЗОНЫ МАТЕРИАЛА»):
   // < EPS/> 1-EPS читает один набор, между ними — оба.
   #define STEEP_EPS 0.003
@@ -350,7 +364,7 @@ export const terrainDetailFunctions = `
     }
   }
 
-  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan, inout float roughness) {
+  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan, float talusCoverage, inout float roughness) {
     // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
     // в юниты на CPU (см. докстрока чанка и TerrainShader.uDetailFadeRange).
     float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
@@ -393,6 +407,9 @@ export const terrainDetailFunctions = `
         // как до этой задачи. Без slope-карты slopeTan = 0 (см. вызывающую
         // сторону, TerrainShaderTemplate) — тот же эффект.
         float m = uSteepGate * smoothstep(uSteepMask.x, uSteepMask.y, slopeTan + uSteepMask.z * (l.z / 8.0 - 0.5));
+        // Loose deposits cover the lower riser. Fine granular normal remains;
+        // the large dune normal is reduced beneath the transported material.
+        m *= 1.0 - talusCoverage;
 
         vec3 nNative, nSteep;
         float aoNative, aoSteep;
@@ -402,6 +419,8 @@ export const terrainDetailFunctions = `
         if (m < STEEP_EPS) {
           // Вне зоны — читается ровно один (родной) набор.
           sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative, rNative);
+          nNative = normalize(mix(nNative, nLocal, 0.8 * talusCoverage));
+          tintNative = mix(tintNative, vec3(1.0), 0.8 * talusCoverage);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nNative - nLocal));
           occlusion *= mix(1.0, aoNative, fade1);
           albedoMul *= mix(vec3(1.0), tintNative, fade1);
@@ -416,15 +435,16 @@ export const terrainDetailFunctions = `
           roughness = mix(1.0, rSteep, fade1);
         } else {
           // Полоса перехода: оба набора (бюджет — см. докстроку чанка).
-          // Нормали — whiteout, последовательно родной вес (1-m), затем
-          // steep вес m (тот же паттерн, что крупная/мелкая шкала ниже).
+          // Обе альтернативы читаются относительно одной базовой нормали;
+          // покрытие смешивает материалы, сила/fade накладывают результат.
           // AO/tint/шероховатость — не направления, обычный mix(a, b, m).
           sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative, rNative);
-          nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (1.0 - m) * (nNative - nLocal));
-
+          nNative = normalize(mix(nNative, nLocal, 0.8 * talusCoverage));
+          tintNative = mix(tintNative, vec3(1.0), 0.8 * talusCoverage);
           sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep, rSteep);
           tintSteep *= uSteepTint;
-          nLocal = normalize(nLocal + uDetailNormalScale * fade1 * m * (nSteep - nLocal));
+          vec3 nBlended = normalize(mix(nNative, nSteep, m));
+          nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nBlended - nLocal));
 
           occlusion *= mix(1.0, mix(aoNative, aoSteep, m), fade1);
           albedoMul *= mix(vec3(1.0), mix(tintNative, tintSteep, m), fade1);
@@ -439,6 +459,16 @@ export const terrainDetailFunctions = `
         // своего vnoise для мелкой шкалы нет.
         vec3 nDetail2 = triplanarNormalDetiled(uDetailNor2Map, uvSmall, nLocal, w, l);
         nLocal = normalize(nLocal + uDetailNormalScale * fade2 * (nDetail2 - nLocal));
+        // The same fine UVs/variants as the grain normal, with already-computed
+        // gradients. No color fetch outside the apron or before its map loads.
+        #ifdef USE_TERRAIN_TALUS
+        if (uTalusGate * talusCoverage > STEEP_EPS) {
+          vec3 gravel = clamp(triplanarAlbedoDetiled(uTalusDiffMap, uvSmall, w, l) * uTalusTintNorm, 0.0, 2.0);
+          float lum = dot(gravel, vec3(0.2126, 0.7152, 0.0722));
+          gravel = mix(vec3(lum), gravel, uDetailSaturation) * uDetailBrightness;
+          albedoMul *= mix(vec3(1.0), gravel, talusCoverage * fade2);
+        }
+        #endif
       }
     }
   }

@@ -22,6 +22,8 @@ export interface DetailTextureStats {
 export const DETAIL_TEXTURE_STATS: Readonly<Record<string, Readonly<Partial<DetailTextureStats>>>> = {
   'terrain/rocky_trail_diff.webp': { meanLum: 0.233 },
   'terrain/rocky_trail_arm.webp': { meanAo: 0.628 },
+  'terrain/cliff_side_diff.webp': { meanLum: 0.104456 },
+  'terrain/cliff_side_arm.webp': { meanAo: 0.960332 },
   'terrain/ice_diff.webp': { meanLum: 0.258 },
   'terrain/ice_arm.webp': { meanAo: 0.942 },
   'terrain/sand_diff.webp': { meanLum: 0.342 },

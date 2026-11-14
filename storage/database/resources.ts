@@ -204,5 +204,9 @@ export const Resources: IResource[] = [
   { id: 245, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/w26/nivalis_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
   { id: 246, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/alkaid/isvara_height.raw" },
   { id: 247, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/alkaid/isvara_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
-  { id: 248, resourceType: "cloud", lifecycle: "streamable", path: "planets/titan/titan_methane_coverage.png", colorSpace: "", wrapS: 1e3 }
+  { id: 248, resourceType: "cloud", lifecycle: "streamable", path: "planets/titan/titan_methane_coverage.png", colorSpace: "", wrapS: 1e3 },
+  { id: 249, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/cliff_side_diff.webp", wrapS: 1e3, wrapT: 1e3, colorSpace: "srgb" },
+  { id: 250, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/cliff_side_nor.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 251, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/cliff_side_arm.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 252, resourceType: "detailNormal2", lifecycle: "streamable", path: "terrain/rocky_trail_nor.webp", wrapS: 1e3, wrapT: 1e3 }
 ]

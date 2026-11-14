@@ -84,8 +84,47 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
     // страж пула (ревью Task 5, фикс-раунд 1): набор листьев у самой
     // поверхности обязан оставаться заметно ниже потолка живых патчей —
-    // иначе глубина L8 вычерпывает пул уже на одном теле
+    // иначе ближняя детализация вычерпывает пул уже на одном теле
     expect(leaves.length).toBeLessThanOrEqual(0.8 * MAX_LIVE_PATCHES)
+  })
+
+  it('ближняя детализация учитывает весь диапазон высот стены, но не захватывает весь массив', () => {
+    const params = makeParams(0.2)
+    // Камера у верхней границы карты; центр патча может лежать намного ниже.
+    // Глобальный перепад должен расширять область только по радиусу тела,
+    // а не уточнять все соседние склоны в десятках километров по горизонтали.
+    params.cameraLocal.set(toThreeJSUnits(R_KM + params.field.maxMeters / 1000), 0, 0)
+    const { leaves } = selectTerrainNodes(params)
+    expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
+    expect(leaves.length).toBeLessThanOrEqual(0.8 * MAX_LIVE_PATCHES)
+  })
+
+  it('дополнительная детализация держится в полосе гистерезиса и освобождается после удаления камеры', () => {
+    const params = makeParams(0.2)
+    const node = { face: 0, level: 9, i: 256, j: 256 }
+    const key = terrainNodeKey(node)
+    const direction = cubeFaceDirection(0, 1 / 512, 1 / 512, new Vector3())
+    const center = direction.clone().multiplyScalar(params.field.surfaceRadiusUnits(direction))
+    const tangent = new Vector3(0, 1, 0).cross(direction).normalize()
+    const at = (distanceKm: number, currentlySplit = new Set<number>()) =>
+      selectTerrainNodes({
+        ...params,
+        cameraLocal: center.clone().addScaledVector(tangent, toThreeJSUnits(distanceKm)),
+        currentlySplit
+      })
+    const entered = at(6.1)
+    expect(entered.split.has(key)).toBe(true)
+    expect(at(6.7).split.has(key)).toBe(false)
+    const held = at(6.7, entered.split)
+    expect(held.split.has(key)).toBe(true)
+    expect(at(7.3, held.split).split.has(key)).toBe(false)
+    const far = selectTerrainNodes({
+      ...params,
+      cameraLocal: center.clone().addScaledVector(direction, toThreeJSUnits(500)),
+      currentlySplit: held.split
+    })
+    expect(far.leaves.every((a) => a.level <= 8)).toBe(true)
+    expect(far.leaves.reduce((coverage, a) => coverage + 4 ** -a.level, 0)).toBeCloseTo(6, 10)
   })
 
   it('гистерезис: между τ_merge и τ_split разбитый узел не схлопывается, kMerge реально применяется', () => {
@@ -109,7 +148,9 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     // (в) та же высота и та же история, но kMerge=1 (порог схлопывания = порог
     // разбиения — гистерезис нейтрализован): пограничные узлы схлопываются,
     // результат совпадает с чистым пересчётом без всякой истории
-    const withoutHysteresis = selectTerrainNodes(makeParams(ALT_MERGE_ZONE, { currentlySplit: runA.split, mergeFactor: 1 }))
+    const withoutHysteresis = selectTerrainNodes(
+      makeParams(ALT_MERGE_ZONE, { currentlySplit: runA.split, mergeFactor: 1 })
+    )
     const fresh = selectTerrainNodes(makeParams(ALT_MERGE_ZONE))
     expect(new Set(withoutHysteresis.leaves.map(terrainNodeKey))).toEqual(new Set(fresh.leaves.map(terrainNodeKey)))
 
@@ -264,7 +305,13 @@ describe('сфера узла: дуга меряется по сфере ВЕР�
 // узел на грани поля может не покрыть свой же рельеф с полосой.
 describe('сфера узла учитывает амплитуду полосы (Task 5)', () => {
   it('radius(с полосой) − radius(без полосы) = toThreeJSUnits(2·midband.maxAmplitudeMeters/1000)', () => {
-    const map = makeMap(64, 32, Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535), -2000, 9000)
+    const map = makeMap(
+      64,
+      32,
+      Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535),
+      -2000,
+      9000
+    )
     const on = new TerrainHeightField(map, R_KM)
     const off = new TerrainHeightField(map, R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
     expect(on.midband).not.toBeNull()
@@ -283,10 +330,9 @@ describe('сфера узла учитывает амплитуду полосы
 // пад узла уже несёт глобальный 2·maxAmplitude полосы (см. describe выше),
 // попиксельная оценка полосы в центре была избыточна. Ниже — прямое
 // доказательство избыточности: копия СТАРОГО алгоритма (heightMeters в
-// центре, тот же обход, что и до фикса) должна отбирать РОВНО ТЕ ЖЕ листья,
-// что текущий selectTerrainNodes, на одном и том же band-ON поле, при любой
-// дистанции камеры — иначе замена была бы не оптимизацией, а поведенческим
-// регрессом.
+// центре, тот же обход, что и до фикса) должна отбирать те же листья вдали.
+// Вблизи теперь действует отдельный диапазон уточнения L9/L10; его покрытие
+// и бюджет проверяются выше, совпадение со старой политикой не требуется.
 describe('отбор узлов не зависит от полосы в центре сферы', () => {
   const MIN_DISTANCE_METERS_REF = 100
 
@@ -311,13 +357,17 @@ describe('отбор узлов не зависит от полосы в цен�
       const tc = -1 + j * span + span / 2
       cubeFaceDirection(face, sc, tc, centerDirScratch)
       const centerHeightMeters = field.heightMeters(centerDirScratch) // СТАРЫЙ путь: карта + полоса
-      sphereCenterScratch.copy(centerDirScratch).multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
+      sphereCenterScratch
+        .copy(centerDirScratch)
+        .multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
       const sphereRadius = nodeBoundingSphereRadiusUnits(field, level, centerHeightMeters)
       const minDistanceUnits = toThreeJSUnits(MIN_DISTANCE_METERS_REF / 1000)
       const distance = Math.max(params.cameraLocal.distanceTo(sphereCenterScratch) - sphereRadius, minDistanceUnits)
       const distanceMeters = (distance / SpaceScale) * 1000
-      const sse = (field.nodeGeometricErrorMeters(face, level, i, j) * params.screenHeight) / (2 * Math.tan(params.fovYRadians / 2) * distanceMeters)
-      const key = (face << 20) | (level << 16) | (i << 8) | j
+      const sse =
+        (field.nodeGeometricErrorMeters(face, level, i, j) * params.screenHeight) /
+        (2 * Math.tan(params.fovYRadians / 2) * distanceMeters)
+      const key = terrainNodeKey({ face, level, i, j })
       const alreadySplit = params.currentlySplit.has(key)
       const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
       let visible = true
@@ -338,12 +388,18 @@ describe('отбор узлов не зависит от полосы в цен�
     return leaves
   }
 
-  it('набор листьев старого (heightMeters@центр) и нового (mapHeightMeters@центр) алгоритма совпадает на любой дистанции', () => {
-    const map = makeMap(64, 32, Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535), -2000, 9000)
+  it('вдали набор листьев с heightMeters@центр и mapHeightMeters@центр совпадает', () => {
+    const map = makeMap(
+      64,
+      32,
+      Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535),
+      -2000,
+      9000
+    )
     const field = new TerrainHeightField(map, R_KM)
     expect(field.midband).not.toBeNull()
 
-    for (const altKm of [500000, 500, 50, 5, 0.2]) {
+    for (const altKm of [500000, 500, 50]) {
       const r = field.surfaceRadiusUnits(new Vector3(1, 0, 0))
       const params: SelectParams = {
         field,
@@ -362,11 +418,19 @@ describe('отбор узлов не зависит от полосы в цен�
   })
 
   it('ε-добавка полосы присутствует в SSE (geometricErrorMeters с полосой строго больше, чем без неё)', () => {
-    const map = makeMap(64, 32, Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535), -2000, 9000)
+    const map = makeMap(
+      64,
+      32,
+      Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535),
+      -2000,
+      9000
+    )
     const on = new TerrainHeightField(map, R_KM)
     const off = new TerrainHeightField(map, R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
 
-    expect(on.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeGreaterThan(off.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL))
+    expect(on.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeGreaterThan(
+      off.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)
+    )
     expect(on.midbandErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeGreaterThan(0)
   })
 })
@@ -392,7 +456,8 @@ const WATER_MAX_METERS = 40000
 // Uint16Array хранит RAW-код (0..65535), не метры напрямую — минус/максимум
 // карты кодируют интерполяцию, отрицательные метры нельзя писать в raw как
 // есть (переполнение). rawFor — точная обратная формула к sampleMeters.
-const rawFor = (meters: number): number => Math.round(((meters - WATER_MIN_METERS) / (WATER_MAX_METERS - WATER_MIN_METERS)) * 65535)
+const rawFor = (meters: number): number =>
+  Math.round(((meters - WATER_MIN_METERS) / (WATER_MAX_METERS - WATER_MIN_METERS)) * 65535)
 
 function waterField(): TerrainHeightField {
   const values: number[] = []
@@ -416,7 +481,12 @@ const dirAtWaterCol = (col: number): Vector3 => {
 const OCEAN_INTERIOR_DIR = dirAtWaterCol(16)
 const LAND_INTERIOR_DIR = dirAtWaterCol(48)
 
-function waterParamsAt(field: TerrainHeightField, dir: Vector3, altKm: number, waterLevelMeters: number | undefined): SelectParams {
+function waterParamsAt(
+  field: TerrainHeightField,
+  dir: Vector3,
+  altKm: number,
+  waterLevelMeters: number | undefined
+): SelectParams {
   const r = field.surfaceRadiusUnits(dir)
 
   return {
@@ -575,7 +645,8 @@ describe('selectTerrainNodes: честный максимум узла лови�
     const values: number[] = []
     for (let row = 0; row < ISLAND_HEIGHT; row++) {
       for (let col = 0; col < ISLAND_WIDTH; col++) {
-        const nearIsland = Math.abs(col - islandCol) <= ISLAND_TEXEL_RADIUS && Math.abs(row - islandRow) <= ISLAND_TEXEL_RADIUS
+        const nearIsland =
+          Math.abs(col - islandCol) <= ISLAND_TEXEL_RADIUS && Math.abs(row - islandRow) <= ISLAND_TEXEL_RADIUS
         const checker = (col + row) % 2 === 0
         const meters = nearIsland ? ISLAND_PEAK_METERS : checker ? ISLAND_OCEAN_LOW : ISLAND_OCEAN_HIGH
         values.push(islandRawFor(meters))
@@ -624,11 +695,23 @@ describe('selectTerrainNodes: честный максимум узла лови�
 })
 
 describe('byBuildPriority: видимые по убыванию SSE, потом невидимые по уровню', () => {
-  const leaf = (level: number, visible: boolean, sse: number): TerrainLeaf => ({ face: 0, level, i: 0, j: 0, visible, sse })
+  const leaf = (level: number, visible: boolean, sse: number): TerrainLeaf => ({
+    face: 0,
+    level,
+    i: 0,
+    j: 0,
+    visible,
+    sse
+  })
 
   it('видимый L8 раньше невидимого L3; среди видимых — большая SSE первой; среди невидимых — грубые первыми', () => {
     const sorted = [leaf(3, false, 50), leaf(8, true, 2), leaf(5, true, 9), leaf(2, false, 80)].sort(byBuildPriority)
-    expect(sorted.map((l) => [l.level, l.visible])).toEqual([[5, true], [8, true], [2, false], [3, false]])
+    expect(sorted.map((l) => [l.level, l.visible])).toEqual([
+      [5, true],
+      [8, true],
+      [2, false],
+      [3, false]
+    ])
   })
 
   it('листья отбора несут visible и sse: без фрустума все видимы, sse конечна и неотрицательна', () => {
@@ -645,7 +728,9 @@ describe('byBuildPriority: видимые по убыванию SSE, потом 
     const camera = new PerspectiveCamera(50, 1, 1e-6, 1e9)
     camera.position.set(toThreeJSUnits(1737.4 + 50), 0, 0)
     camera.updateMatrixWorld(true)
-    const frustum = new Frustum().setFromProjectionMatrix(new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse))
+    const frustum = new Frustum().setFromProjectionMatrix(
+      new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    )
     const { leaves } = selectTerrainNodes(makeParams(50, { frustumLocal: frustum }))
     expect(leaves.some((l) => !l.visible)).toBe(true)
     expect(leaves.some((l) => l.visible)).toBe(true)

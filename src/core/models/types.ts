@@ -255,6 +255,15 @@ export interface IPlanetRenderingObject {
   /** Сила альбедо полосы от её геометрии (гребни светлее, лощины темнее); дефолт 0.5, 0 — прежний вид. */
   midbandShade?: number
 
+  /** Геометрические уступы на крутых склонах, [0,1]; дефолт 0. */
+  bedrockStrength?: number
+  /** Вертикальный шаг пластов, метры; дефолт 800. */
+  bedrockStepMeters?: number
+  /** Сколы кромок и осыпь у подножия уступов, [0,1]. */
+  bedrockWeathering?: number
+  /** Density of instanced talus boulders: 0 disables the layer, range 0..2. */
+  boulderDensity?: number
+
   /**
    * Ламберт суши (терраформный путь): 0 — выключен (дневной цвет не зависит
    * от N·L, как у легаси-текстур с запечённым освещением), 1 — полный

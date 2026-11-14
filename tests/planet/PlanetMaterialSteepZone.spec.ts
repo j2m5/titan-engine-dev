@@ -33,7 +33,7 @@ function enceladus(): Actor {
   return Actor.find(25)!
 }
 
-// Луна (actorId 19) — родной набор detailDiffuse УЖЕ rocky_trail (сам steep-набор)
+// Луна (actorId 19) — грунт rocky_trail, обнажённые склоны имеют отдельный набор.
 function moon(): Actor {
   return Actor.find(19)!
 }
@@ -83,7 +83,7 @@ describe('TerrainMaterial: steep-зоны материала (гейт и юни
     expect((material.uniforms.uSteepMask.value as { x: number; y: number; z: number }).z).toBeCloseTo(0.15)
   })
 
-  it('гейт=0 у Луны — родной detailDiffuse уже сам steep-набор (rocky_trail)', () => {
+  it('скалы Луны используют отдельный набор, сохраняя rocky_trail на грунте', () => {
     seedPlaceholderKeys()
     seedTexture(pathOf(moon(), 'diffuse'))
     seedSteepTextures()
@@ -91,7 +91,9 @@ describe('TerrainMaterial: steep-зоны материала (гейт и юни
     const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
-    expect(material.uniforms.uSteepGate.value).toBe(0)
+    expect(pathOf(moon(), 'detailDiffuse')).toBe('terrain/rocky_trail_diff.webp')
+    expect(STEEP_DETAIL_PATHS.diffuse).not.toBe(pathOf(moon(), 'detailDiffuse'))
+    expect(material.uniforms.uSteepGate.value).toBe(1)
   })
 
   it('без одной из трёх steep-текстур у Энцелада — гейт 0', () => {

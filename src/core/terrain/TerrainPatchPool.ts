@@ -12,11 +12,11 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  * Потолок одновременно живых патчей квадродерева. Замер: на HiDPI (H=2160)
  * при τ≈2 желаемый набор SSE-отбора уже 552+ листьев, а живых на переходах
  * split/merge больше (старый и новый узел видны одновременно, см. инвариант
- * «без дыр» в TerrainSphere) — 640 пробивается. Пул рельефа: 15 float на
- * вершину (position 3 + height 1 + midTilt 2 + midShade 2 + morphDelta 3 +
- * midTiltParent 2 + midShadeParent 2) и 10 float на патч (patchCenter 3 +
+ * «без дыр» в TerrainSphere) — 640 пробивается. Пул рельефа: 17 float на
+ * вершину (position 3 + height 1 + midTilt 3 + midShade 2 + morphDelta 3 +
+ * midTiltParent 3 + midShadeParent 2) и 10 float на патч (patchCenter 3 +
  * patchMorph 1 + detailOrigin 3 + detailOrigin2 3), TERRAIN_PATCH_SEGMENTS=64
- * → 4481 вершина, 268 900 Б на слот, ~275 МБ на 1024 слота. Домен детали —
+ * → 4481 вершина, 304 748 Б на слот, ~312 МБ на 1024 слота. Домен детали —
  * смещение на патч, вершинник собирает position + detailOrigin. Ленивая
  * аллокация (createHandle зовётся по факту, не заранее) — платит только
  * дошедший до этой глубины набор. Потолок страхует от неограниченного роста
@@ -32,7 +32,7 @@ export const MAX_LIVE_PATCHES = 1024
 export type PatchLayout = 'terrain' | 'water'
 
 /** float на вершину и на патч по раскладке — сверяется с фактическими атрибутами слота в тестах. */
-const VERTEX_FLOATS: Record<PatchLayout, number> = { terrain: 15, water: 3 }
+const VERTEX_FLOATS: Record<PatchLayout, number> = { terrain: 17, water: 3 }
 const INSTANCE_FLOATS: Record<PatchLayout, number> = { terrain: 10, water: 6 }
 
 /** Видеопамять атрибутов одного слота (без общего индекса), байт. */
@@ -235,12 +235,12 @@ class TerrainPatchPool {
     geometry.setAttribute('detailOrigin', detailOrigin)
     if (this.layout === 'terrain') {
       const height = vertexAttribute(1)
-      const midTilt = vertexAttribute(2)
+      const midTilt = vertexAttribute(3)
       const midShade = vertexAttribute(2)
       const detailOrigin2 = new InstancedBufferAttribute(new Float32Array(3), 3)
       // родительская форма для геоморфинга (см. buildTerrainPatchArrays) + прогресс перехода патча
       const morphDelta = vertexAttribute(3)
-      const midTiltParent = vertexAttribute(2)
+      const midTiltParent = vertexAttribute(3)
       const midShadeParent = vertexAttribute(2)
       const patchMorph = new InstancedBufferAttribute(new Float32Array(1), 1)
       for (const attribute of [height, midTilt, midShade, detailOrigin2, morphDelta, midTiltParent, midShadeParent, patchMorph]) {

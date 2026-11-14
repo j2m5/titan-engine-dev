@@ -16,15 +16,16 @@
  * out vec2 mapSlopeOut отдаёт наружу декод карты (до bumpScale, extraSlope и
  * проекции на TBN) — маска зон материала берёт length(mapSlopeOut) без второй
  * выборки: наклон полосы B в маску не попадает (см. хост). extraSlope —
- * наклон геометрии полосы B (атрибут midTilt, tan в базисе T/B), складывается
- * с декодом ДО наклона нормали: одна нормаль на сумму. bumpScale —
- * художественный множитель декода карты, extraSlope не масштабируется.
+ * extraSlope.xy — добавочный наклон (tan в T/B); extraSlope.z — отклик
+ * уступов на уклон DEM минус 1. Он умножает фильтрованный декод, чтобы
+ * локальная производная DEM не переворачивала сглаженную нормаль на изломе.
+ * bumpScale масштабирует декод с этим откликом, добавочный наклон — нет.
  * У полюса (len < 1e-4) mapSlopeOut = vec2(0.0).
  */
 export const slopeNormalUniforms = `uniform float uSlopeRange;`
 
 export const slopeNormalFunctions = `
-  vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 mapSlopeOut) {
+  vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec3 extraSlope, out vec2 mapSlopeOut) {
     float len = length(east);
     if (len < 1e-4) {
       mapSlopeOut = vec2(0.0);
@@ -37,9 +38,10 @@ export const slopeNormalFunctions = `
     vec2 decoded = (texture2D(bumpMap, uv).xy * 255.0 - 128.0) * (uSlopeRange / 127.0);
     // маска зон материала берёт уклон карты без полосы B (см. хост)
     mapSlopeOut = decoded;
-    // bumpScale - художественный множитель декода карты; наклон полосы B
-    // (extraSlope) честный, входит как есть
-    vec2 slope = bumpScale * decoded + extraSlope;
+    // bumpScale scales the DEM; additive noise/warp derivatives enter as-is.
+    // z is the bedrock DEM response; >= -1, so shelves cannot reverse the
+    // filtered base even when mip filtering or bumpScale attenuates it.
+    vec2 slope = bumpScale * decoded * (1.0 + extraSlope.z) + extraSlope.xy;
 
     return normalize(surfNormal - (slope.x * T + slope.y * B));
   }

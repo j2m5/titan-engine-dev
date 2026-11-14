@@ -5,7 +5,7 @@ import { IRenderingObject } from '@/core/models/types'
 
 export const RenderingObjects: IRenderingObject[] = [
   { id: 1, actorId: 5, data: { emission: 1, bumpScale: 1, macroStrength: 0.25, terrainLambert: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3 } },
-  { id: 2, actorId: 8, data: { emission: 1, bumpScale: 1, macroStrength: 0.25, terrainLambert: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3 } },
+  { id: 2, actorId: 8, data: { emission: 1, bumpScale: 1, macroStrength: 0.25, terrainLambert: 1, detailScaleMeters: 40, detailScale2Meters: 24, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, bedrockStrength: 0.45, bedrockStepMeters: 800, bedrockWeathering: 1, boulderDensity: 1 } },
   { id: 3, actorId: 9, data: { emission: 1, bumpScale: 1, macroStrength: 0.25, terrainLambert: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 4, actorId: 13, data: { emission: 1, giantDetail: true } },
   { id: 5, actorId: 19, data: { emission: 1, bumpScale: 1, macroStrength: 0.25, terrainLambert: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3 } },

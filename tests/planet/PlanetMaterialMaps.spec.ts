@@ -356,8 +356,8 @@ describe('TerrainMaterial: slope-карта у тел с честным рель
 // Каллисто (actorId 23) — второе тело с честным рельефом (терраформная арка
 // synth-heightmap): height/slope из оффлайн-генератора, детальные текстуры
 // делятся по пути с Луной (общие terrain/*.webp, шаринг ресурсов по id)
-/** Детальная тройка тела = один архетип (terrain/<archetype>_*), мелкая нормаль — общая с Луной (ресурс 129). */
-function expectArchetypeDetailSet(actor: Actor, archetype: 'ice' | 'sand' | 'volcanic'): void {
+/** Детальная тройка тела = один архетип, мелкая нормаль задаётся отдельно. */
+function expectArchetypeDetailSet(actor: Actor, archetype: 'ice' | 'sand' | 'volcanic', fineNormal = 'moon_01'): void {
   const expectedPaths = {
     detailDiffuse: `terrain/${archetype}_diff.webp`,
     detailNormal: `terrain/${archetype}_nor.webp`,
@@ -374,9 +374,8 @@ function expectArchetypeDetailSet(actor: Actor, archetype: 'ice' | 'sand' | 'vol
     expect(row!.getAttribute('wrapT')).toBe(RepeatWrapping)
   }
 
-  const moonMicro = moon().resources.where('resourceType', 'detailNormal2').first()!
   const micro = actor.resources.where('resourceType', 'detailNormal2').first()!
-  expect(micro.getAttribute('id')).toBe(moonMicro.getAttribute('id'))
+  expect(micro.getAttribute('path')).toBe(`terrain/${fineNormal}_nor.webp`)
 }
 
 function callisto(): Actor {
@@ -697,8 +696,8 @@ describe('поверхность планеты: данные Марса — hei
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-тройка Марса — песчаный архетип terrain/sand_* (пилот приёмки), мелкая нормаль общая с Луной', () => {
-    expectArchetypeDetailSet(mars(), 'sand')
+  it('detail-тройка Марса — песчаный архетип terrain/sand_*, мелкая нормаль каменистая для осыпей', () => {
+    expectArchetypeDetailSet(mars(), 'sand', 'rocky_trail')
   })
 
   it('renderingObjects Марса несёт ручки детального слоя террейна (detailSaturation 0.15 — планета)', () => {
@@ -706,7 +705,7 @@ describe('поверхность планеты: данные Марса — hei
 
     expect(data.bumpScale).toBe(1)
     expect(data.detailScaleMeters).toBe(40)
-    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailScale2Meters).toBe(24)
     expect(data.detailNormalScale).toBe(1)
     expect(data.detailSaturation).toBe(0.15)
     expect(data.detailBrightness).toBe(1)
@@ -1378,7 +1377,8 @@ describe('поверхность планеты: данные waterNormal-асс
 })
 
 // Архетипы грунта (кампания «облик рельефа», арка 1): детальная тройка тела —
-// diffuse+normal+ARM ОДНОГО набора terrain/<archetype>_*, мелкая нормаль общая.
+// diffuse+normal+ARM ОДНОГО набора terrain/<archetype>_*, мелкая нормаль общая,
+// кроме каменистого набора осыпи Марса.
 // Тест дискриминирует ПУТИ: смесь «лёд-нормаль + камень-диффуз» — дефект пивотов.
 const SHARED_MICRO_NORMAL_PATH = 'terrain/moon_01_nor.webp'
 
@@ -1397,7 +1397,7 @@ describe('поверхность планеты: у каждого терраф�
   })
 
   it.each(terraformActors.map((actor) => [actor.getAttribute('id') as number] as const))(
-    'actorId %i: diffuse/normal/ARM из одной тройки terrain/<archetype>_*, мелкая нормаль — общая',
+    'actorId %i: diffuse/normal/ARM из одной тройки, мелкая нормаль соответствует типу грунта',
     (actorId) => {
       const actor = Actor.find(actorId)!
       const archetypes = (['detailDiffuse', 'detailNormal', 'detailArm'] as const).map((type) => {
@@ -1411,7 +1411,7 @@ describe('поверхность планеты: у каждого терраф�
 
       const micro = actor.resources.where('resourceType', 'detailNormal2').first()
       expect(micro, `actorId ${actorId}: detailNormal2`).toBeDefined()
-      expect(micro!.getAttribute('path')).toBe(SHARED_MICRO_NORMAL_PATH)
+      expect(micro!.getAttribute('path')).toBe(actorId === 8 ? 'terrain/rocky_trail_nor.webp' : SHARED_MICRO_NORMAL_PATH)
     }
   )
 

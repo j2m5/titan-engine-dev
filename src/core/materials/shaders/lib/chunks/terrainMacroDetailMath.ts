@@ -141,15 +141,21 @@ export function terraceCastShadow(
   phaseFootprint: number
 ): number {
   if (k <= 0 || sunUp <= 0 || sunUphill <= 1e-4) return 1
-  const t = phase - Math.floor(phase)
-  const edgeAhead = TERRACE_EDGE_PHASE - t
-  const u = edgeAhead - Math.floor(edgeAhead)
   const g = Math.max(sunUp / (sunUphill * Math.max(slopeTan, 1e-4)) - 1, 0)
-  const f = k * (TERRACE_EDGE_PROFILE - terraceProfile(phase).value) - g * u
-  const w = (2 * k + g) * phaseFootprint + 1e-4
-  const lit = 1 - smoothstep(-w, w, f)
+  if (g >= k * (1.5 / TERRACE_RISER - 1)) return 1
+  // Угловой запас до окклюдера устраняет ложную полутень при u = dh = 0.
+  const margin = (p: number): number => {
+    const edgeAhead = TERRACE_EDGE_PHASE - (p - Math.floor(p))
+    const u = edgeAhead - Math.floor(edgeAhead)
+    const horizon = Math.max(TERRACE_EDGE_PROFILE - terraceProfile(p).value, 0) / Math.max(u, 1e-3)
+    return k * horizon - g
+  }
+  const coverage = (a: number, b: number): number => Math.max(0, Math.min(1, Math.max(a, b) / Math.max(Math.abs(a - b), 1e-6)))
+  const halfWidth = 0.5 * Math.max(phaseFootprint, 1e-4)
+  const center = margin(phase)
+  const shadow = 0.5 * (coverage(margin(phase - halfWidth), center) + coverage(center, margin(phase + halfWidth)))
 
-  return 1 + (lit - 1) * smoothstep(0, TERRACE_SHADOW_K_FADE, k)
+  return 1 - shadow * smoothstep(0, TERRACE_SHADOW_K_FADE, k)
 }
 
 /** Множитель собственного уклона 1 + m, m = clamp(NORMAL_SCALE·k·derivative, −1, MUL_MAX − 1) — строка нормали террас в чанке. */

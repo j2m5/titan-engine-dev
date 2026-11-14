@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { Vector3 } from 'three'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
-import { selectTerrainNodes, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import {
+  selectTerrainNodes,
+  TERRAIN_QUADTREE_MAX_LEVEL,
+  TERRAIN_QUADTREE_MIN_LEVEL
+} from '@/core/terrain/terrainQuadtreeSelect'
 import { CUBE_FACES } from '@/core/terrain/cubeSphere'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
@@ -59,14 +63,12 @@ describe('TerrainHeightField: пер-узловая ε различает шер
     expect(smooth).toBeLessThan(rough / 10)
   })
 
-  // Таймаут поднят (Task 5, фикс-раунд 1): пирамида снова строится только до
-  // TERRAIN_MODEL_LEVEL(6) — быстро, — но ЭТОТ перебор идёт по глубине ОТБОРА
-  // (TERRAIN_QUADTREE_MAX_LEVEL=8): родитель/4×ребёнка по всем граням и
-  // уровням растёт как 4^level, уровни 7-8 вдобавок считают экстраполяцию
-  // (сдвиг индекса предка + масштаб) на каждый вызов — дефолтные 5с тесны
-  // под параллельной нагрузкой полного прогона.
+  // Полный перебор сохраняется и на L10. Сводим числовой инвариант перед
+  // expect: миллионы отдельных matcher-вызовов стоили десятков секунд.
+  // Math.max сохраняет NaN, поэтому нечисловая ошибка тоже провалит тест.
   it('ε родителя не меньше ε любого его ребёнка — иначе спуск по дереву мог бы увеличить ошибку', () => {
     const field = halfRoughField()
+    let largestIncrease = 0
 
     for (let face = 0; face < CUBE_FACES; face++) {
       for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level < TERRAIN_QUADTREE_MAX_LEVEL; level++) {
@@ -80,17 +82,17 @@ describe('TerrainHeightField: пер-узловая ε различает шер
               for (let dj = 0; dj < 2; dj++) {
                 const child = field.nodeGeometricErrorMeters(face, level + 1, i * 2 + di, j * 2 + dj)
 
-                expect(parent).toBeGreaterThanOrEqual(child - 1e-9)
+                largestIncrease = Math.max(largestIncrease, child - parent)
               }
             }
           }
         }
       }
     }
+    expect(largestIncrease).toBeLessThanOrEqual(1e-9)
   }, 20_000)
 
-  // см. таймаут теста выше — тот же класс нагрузки (полный перебор листьев
-  // уровня ОТБОРА TERRAIN_QUADTREE_MAX_LEVEL, не глубины пирамиды)
+  // Полный перебор листьев отбора, включая экстраполированные уровни.
   it('одиночный битый блок не задирает ε НИ ОДНОГО узла — лист берёт второй по величине размах', () => {
     // Артефакт DEM (шов, NODATA, выброс) — один блок с огромным размахом на
     // идеально плоской карте. При свёртке максимумом он поднял бы ε своего
@@ -101,14 +103,19 @@ describe('TerrainHeightField: пер-узловая ε различает шер
     data[10 * WIDTH + 11] = 0
 
     const field = new TerrainHeightField(makeMap(data), R_KM)
+    let largestError = 0
 
     for (let face = 0; face < CUBE_FACES; face++) {
       for (let i = 0; i < 2 ** TERRAIN_QUADTREE_MAX_LEVEL; i++) {
         for (let j = 0; j < 2 ** TERRAIN_QUADTREE_MAX_LEVEL; j++) {
-          expect(field.nodeGeometricErrorMeters(face, TERRAIN_QUADTREE_MAX_LEVEL, i, j)).toBe(0)
+          largestError = Math.max(
+            largestError,
+            Math.abs(field.nodeGeometricErrorMeters(face, TERRAIN_QUADTREE_MAX_LEVEL, i, j))
+          )
         }
       }
     }
+    expect(largestError).toBe(0)
   }, 20_000)
 
   it('константное поле (вода) пер-узловой ε не имеет — падает на по-уровневую, дерево воды не трогается', () => {

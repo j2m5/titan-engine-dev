@@ -19,7 +19,8 @@ import { decideStreaming } from '@/core/streaming/decideStreaming'
 import type { MapCandidate, StreamDecision } from '@/core/streaming/types'
 import { MAP_TYPE_RANK, mapTypeRank, STEEP_TYPE_RANKS } from '@/core/streaming/types'
 import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff'
-import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
+import { STEEP_DETAIL_PATHS, TALUS_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
+import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { config } from '@/core/framework/config'
 import type { BackgroundSource } from '@/config/background'
@@ -288,7 +289,12 @@ class ResourceObserver {
    * пользователю шлёт tryLoad для актуальной эпохи запроса. onSettled зовётся по
    * завершении каждого ресурса — и удачного, и провалившегося.
    */
-  private async loadInto(resources: IResource[], onSettled: (name: string) => void, epoch: number, signal: AbortSignal): Promise<void> {
+  private async loadInto(
+    resources: IResource[],
+    onSettled: (name: string) => void,
+    epoch: number,
+    signal: AbortSignal
+  ): Promise<void> {
     await Promise.all(
       resources.map(async (resource: IResource): Promise<void> => {
         const request: TextureRequest = textureRequestFrom(resource)
@@ -317,7 +323,11 @@ class ResourceObserver {
    * обработчика нет ни в одном звене, так что без перехвата здесь приложение
    * зависает на экране загрузки без сообщения.
    */
-  private async tryLoad(request: TextureRequest, epoch: number = this.epoch, signal: AbortSignal = this.epochController.signal): Promise<LoadResult | null> {
+  private async tryLoad(
+    request: TextureRequest,
+    epoch: number = this.epoch,
+    signal: AbortSignal = this.epochController.signal
+  ): Promise<LoadResult | null> {
     try {
       const result = await this.textures.load(request, signal)
       if (!result.ok && !signal.aborted) this.reportLoadError(request, result.error, epoch)
@@ -573,12 +583,11 @@ class ResourceObserver {
         pushCandidate(resource.getAttribute('path', ''), mapTypeRank(resource.getAttribute('resourceType') ?? ''))
       }
 
-      // Steep-набор зон материала (задача 4 «Material Zones»): rocky_trail на
-      // крутых склонах ЛЮБОГО терраформного тела — решение владельца
-      // 2026-09-02. Гейт — есть честный height-ресурс (тело терраформно, не
+      // Общий скальный набор на крутых склонах терраформных тел.
+      // Гейт — есть честный height-ресурс (тело терраформно, не
       // легаси-гигант) И родной detailDiffuse ещё не сам steep-набор
-      // (rocky-архетип уже совпадает с STEEP_DETAIL_PATHS — дублировать
-      // нечего). Steep-набор шарится всей базой; провал загрузки —
+      // (при совпадении с STEEP_DETAIL_PATHS дублировать нечего).
+      // Steep-набор шарится всей базой; провал загрузки —
       // второстепенная карта: тело живёт одной зоной, гейт материала
       // остаётся 0.
       const hasHeight: boolean = heightPathOf(actor) !== undefined
@@ -590,6 +599,14 @@ class ResourceObserver {
         pushCandidate(STEEP_DETAIL_PATHS.normal, STEEP_TYPE_RANKS.normal)
         pushCandidate(STEEP_DETAIL_PATHS.arm, STEEP_TYPE_RANKS.arm)
         pushCandidate(STEEP_DETAIL_PATHS.diffuse, STEEP_TYPE_RANKS.diffuse)
+      }
+      if (hasHeight) {
+        const bedrock = midbandParamsOf(actor)
+        const grainPath = streamableResources
+          .find((resource) => resource.getAttribute('resourceType') === 'detailNormal2')
+          ?.getAttribute('path')
+        if (bedrock.bedrockStrength > 0 && bedrock.bedrockWeathering > 0 && grainPath === TALUS_DETAIL_PATHS.normal)
+          pushCandidate(TALUS_DETAIL_PATHS.diffuse, STEEP_TYPE_RANKS.diffuse)
       }
     }
 
@@ -700,9 +717,8 @@ class ResourceObserver {
 
     for (const actorId of owners) {
       try {
-        this.withActorMaterial(
-          actorId,
-          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial())
+        this.withActorMaterial(actorId, (material: AbstractShaderMaterial): void =>
+          isDiffuse ? material.resetMaterial() : material.updateMaterial()
         )
       } catch {
         // см. докблок выше
@@ -779,7 +795,8 @@ class ResourceObserver {
     const epoch = this.epoch
     let reservation = this.pathLoads.get(path)
     let owner = false
-    const current = (): boolean => this.epoch === epoch &&
+    const current = (): boolean =>
+      this.epoch === epoch &&
       (!reservation || (this.pathLoads.get(path) === reservation && !reservation.controller.signal.aborted))
 
     this.rememberOwners(path, candidate.actorId)
@@ -792,7 +809,10 @@ class ResourceObserver {
           const resource = Resource.where({ path }).first()
           if (resource) {
             const controller = new AbortController()
-            reservation = { controller, promise: this.tryLoad(textureRequestFrom(resource.toJSON() as IResource), epoch, controller.signal) }
+            reservation = {
+              controller,
+              promise: this.tryLoad(textureRequestFrom(resource.toJSON() as IResource), epoch, controller.signal)
+            }
             this.pathLoads.set(path, reservation)
             owner = true
           }
@@ -817,10 +837,7 @@ class ResourceObserver {
       }
       this.loadedAt.set(path, Date.now())
       for (const actorId of this.materialOwners(path, candidate.actorId)) {
-        this.withActorMaterial(
-          actorId,
-          (material: AbstractShaderMaterial): void => material.updateMaterial()
-        )
+        this.withActorMaterial(actorId, (material: AbstractShaderMaterial): void => material.updateMaterial())
       }
     } catch (cause) {
       if (current()) {
@@ -871,9 +888,8 @@ class ResourceObserver {
 
     for (const actorId of this.materialOwners(candidate.path, candidate.actorId)) {
       try {
-        this.withActorMaterial(
-          actorId,
-          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial())
+        this.withActorMaterial(actorId, (material: AbstractShaderMaterial): void =>
+          isDiffuse ? material.resetMaterial() : material.updateMaterial()
         )
       } catch {
         // см. докблок выше

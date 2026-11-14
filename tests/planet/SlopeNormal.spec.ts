@@ -31,7 +31,7 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     const declarations = (slopeNormalFunctions.match(/vec3 perturbNormalFromSlope\(/g) ?? []).length
     expect(declarations).toBe(1)
     expect(slopeNormalFunctions).toContain(
-      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 mapSlopeOut)'
+      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec3 extraSlope, out vec2 mapSlopeOut)'
     )
     expect(slopeNormalFunctions).toContain('mapSlopeOut = decoded;')
     // ровно одна текстурная выборка на весь чанк

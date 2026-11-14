@@ -99,7 +99,14 @@ interface PendingEntry {
 }
 
 /** Живой патч в сцене: m — прогресс геоморфа (0 своя форма, 1 родительская), target — куда идёт. */
-interface LiveEntry {
+export interface TerrainSurfacePatch {
+  readonly handle: PatchHandle
+  readonly address: TerrainNodeAddress
+  readonly morph: number
+  readonly target: 0 | 1
+}
+
+interface LiveEntry extends TerrainSurfacePatch {
   handle: PatchHandle
   address: TerrainNodeAddress
   morph: number
@@ -473,6 +480,7 @@ abstract class TerrainPatchGroup extends Group {
 
     if (this.pool.liveCount > this.peakLive) this.peakLive = this.pool.liveCount
     this.pool.trimFree(Math.ceil(this.pool.liveCount / 4) + 16)
+    this.onSurfaceUpdated(ctx, cameraLocal)
   }
 
   public dispose(): void {
@@ -667,6 +675,11 @@ abstract class TerrainPatchGroup extends Group {
    * переопределяющим потомкам типобезопасно.
    */
   protected onVisibleUpdate(_ctx: UpdateContext): void {}
+
+  /** Consumers read the final visible mesh state, after atomic LOD swaps and morph steps. */
+  protected onSurfaceUpdated(_ctx: UpdateContext, _cameraLocal: Vector3): void {}
+
+  protected get surfacePatches(): Iterable<TerrainSurfacePatch> { return this.live.values() }
 
   /** Зовётся каждый кадр, пока группа или её родитель скрыты: потомок освобождает то, что нужно только видимому телу. Без аллокаций. */
   protected onHiddenUpdate(): void {}

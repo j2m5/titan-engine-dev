@@ -78,15 +78,13 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(terrainDetailFunctions).toContain('triplanarAlbedoDetiled(diff')
   })
 
-  it('мелкая шкала несёт только нормаль — на uDetailNor2Map', () => {
+  it('мелкая шкала несёт нормаль и опциональный цвет осыпи, без дополнительной ARM-карты', () => {
     expect(terrainDetailFunctions).toContain('triplanarNormalDetiled(uDetailNor2Map')
-    // мелкая шкала не модулирует AO/diffuse — второго вызова triplanarArmDetiled/
-    // AlbedoDetiled нет. Обёртки объявлены тут же (1 вхождение — определение),
-    // так что второе вхождение подстроки — единственный вызов (крупная шкала).
+    // Определение + общий вызов крупного набора; у цвета есть ещё вызов осыпи.
     const armCalls = terrainDetailFunctions.split('triplanarArmDetiled(').length - 1
     const albedoCalls = terrainDetailFunctions.split('triplanarAlbedoDetiled(').length - 1
     expect(armCalls).toBe(2)
-    expect(albedoCalls).toBe(2)
+    expect(albedoCalls).toBe(3)
   })
 
   it('стохастические обёртки существуют, разделяют общий l и зовут triplanar-ядро бленда, не копируют его', () => {
@@ -162,15 +160,15 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(firstUseIdx).toBeGreaterThan(-1)
     expect(lIdx).toBeLessThan(firstUseIdx)
 
-    // общий l передаётся во все четыре вызова *Detiled-обёртки: три — внутри
+    // общий l передаётся во все пять вызовов *Detiled-обёртки: три — внутри
     // sampleDetailSet (родной/steep набор читает его же тело параметризованно),
-    // один — мелкая шкала (fade2-ветка, вне зон). Область поиска — от
+    // два — мелкая шкала (нормаль и цвет осыпи). Область поиска — от
     // sampleDetailSet и дальше, иначе сигнатуры sampleDetiled/triplanar*Detiled
     // (тоже заканчиваются на «vec3 l)») ложно засчитываются как вызовы.
     const helperStart = terrainDetailFunctions.indexOf('void sampleDetailSet(')
     const tail = terrainDetailFunctions.slice(helperStart)
     const lPassedCount = (tail.match(/Detiled\([^)]*\bl\)/g) ?? []).length
-    expect(lPassedCount).toBe(4)
+    expect(lPassedCount).toBe(5)
   })
 
   it('всё тело — за общей веткой fade: гейт стоит текстуально раньше первой выборки', () => {
@@ -193,9 +191,9 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(terrainDetailFunctions).toContain('uDetailLayerGates.z')
   })
 
-  it('сигнатура applyTerrainDetail совпадает с интерфейсом брифа задачи 2 (+ slopeTan для маски зон)', () => {
+  it('applyTerrainDetail принимает уклон и покрытие осыпью для маски зон', () => {
     expect(terrainDetailFunctions).toContain(
-      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan, inout float roughness)'
+      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan, float talusCoverage, inout float roughness)'
     )
   })
 
@@ -216,7 +214,7 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
 
   it('applyTerrainDetail зовётся строго перед финальным normalMatrix', () => {
     const callIdx = frag.indexOf(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness)'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, talusCoverage, terrainRoughness)'
     )
     const finalIdx = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(callIdx).toBeGreaterThan(-1)

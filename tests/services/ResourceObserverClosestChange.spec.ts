@@ -9,6 +9,7 @@ import { Scenarios } from '@/config/scenarios'
 import { config } from '@/core/framework/config'
 import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
@@ -122,7 +123,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       texture.name = request.name
       return { ok: true, texture }
     })
-    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
     const mesh = new Mesh()
     mesh.name = 'Saturn'
@@ -154,7 +155,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set(observedActor('Korriban I').getAttribute('id')!, record('Korriban I', 100))
     data.set(observedActor('Korriban II').getAttribute('id')!, record('Korriban II', 100))
     const first = handlers.ClosestChange(record('Korriban I', 100))
-    const shared = pending.find((load) => load.request.paths[0] === 'terrain/rocky_trail_diff.webp')!
+    const shared = pending.find((load) => load.request.paths[0] === STEEP_DETAIL_PATHS.diffuse)!
     expect(shared).toBeDefined()
     data.delete(observedActor('Korriban I').getAttribute('id')!)
     const second = handlers.ClosestChange(record('Korriban II', 100))
@@ -168,7 +169,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
   })
   it.each(['resolve', 'reject'] as const)('cancels orphan demand and protects an immediate same-epoch restart from late %s', async (settlement) => {
     const pending: { signal?: AbortSignal; resolve: (result: LoadResult) => void; reject: (error: Error) => void; request: TextureRequest }[] = []
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, (request, signal) => new Promise<LoadResult>((resolve, reject) => {
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, (request, signal) => new Promise<LoadResult>((resolve, reject) => {
       pending.push({ request, signal, resolve, reject })
     }))
     observer.scenario = SOLAR_SYSTEM
@@ -224,7 +225,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       texture.name = request.name
       return { ok: true, texture }
     }
-    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
     const actor = [...observer.map.values()].find((actor) => actor.getAttribute('name') === 'Uranus')!
     const material = new SphereSurfaceMaterial(actor)
@@ -327,7 +328,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
     data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
@@ -350,16 +351,15 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       (): Promise<LoadResult> => Promise.resolve({ ok: false as const, texture: null, error: new Error('сеть недоступна') })
     )
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
     data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
     // Цикл 1: провал, актор уходит в attempted.
     await handlers['ClosestChange'](record('Mercury', 300))
-    // диффуз + slope + 4 detail — терраформный набор Меркурия (легаси-bump
-    // удалён из данных: тело переведено на height+slope, см. хендофф задачи 2).
-    expect(load).toHaveBeenCalledTimes(6)
+    // Диффуз + slope + 4 карты грунта + 3 карты скал.
+    expect(load).toHaveBeenCalledTimes(9)
 
     // Цикл 2: Меркурий по-прежнему на первом месте по приоритету (та же
     // дистанция) — значит decision.wanted всё ещё содержит его, и attempted
@@ -370,10 +370,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // wanted считался из decision.load, где исключённый никогда не
     // появляется, и снятие блокировки происходило уже на цикле 2), актор
     // ретраится здесь — новые вызовы load. Если фикс на месте, вызовов
-    // по-прежнему ровно шесть.
+    // по-прежнему ровно девять.
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    expect(load).toHaveBeenCalledTimes(6)
+    expect(load).toHaveBeenCalledTimes(9)
   })
 
   it('крупное дальнее тело обходит мелкое ближнее и грузится первым', async () => {
@@ -383,7 +383,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture: makeTexture() })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
     // Меркурий (радиус 2440 км) втрое дальше Цереры (469.7 км), но угловой
@@ -465,8 +465,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       callIndex += 1
 
       // Только диффуз Меркурия держится открытым — он и создаёт окно "в
-      // полёте", которое проверяет тест. Остальные пять путей (slope+4
-      // detail; легаси-bump удалён из данных) — независимые кандидаты (задача
+      // полёте", которое проверяет тест. Остальные восемь путей (slope+4
+      // detail+3steep) — независимые кандидаты (задача
       // 2 грузит пути конкурентно, не последовательно по актору) и
       // резолвятся сразу, чтобы все загрузки могли нормально завершиться.
       if (callIndex === 1) {
@@ -478,7 +478,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture: makeTexture() })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictPath')
 
@@ -486,16 +486,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
 
-    // Все шесть путей Меркурия (диффуз+slope+4detail) — независимые
+    // Все девять путей Меркурия (диффуз+slope+4detail+3steep) — независимые
     // кандидаты, стартуют в этом же цикле.
-    expect(load).toHaveBeenCalledTimes(6)
+    expect(load).toHaveBeenCalledTimes(9)
 
     // Второй пересчёт с той же дистанцией — все пути Меркурия уже loaded, а
     // диффуз ещё и inFlight.
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    // Не переспросили (те же шесть вызовов) и не вытеснили.
-    expect(load).toHaveBeenCalledTimes(6)
+    // Не переспросили (те же девять вызовов) и не вытеснили.
+    expect(load).toHaveBeenCalledTimes(9)
     expect(evictSpy).not.toHaveBeenCalled()
 
     hold.resolve?.({ ok: true, texture: makeTexture() })
@@ -513,7 +513,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = HORUSET_SYSTEM
 
     // Korriban I и II (реальные акторы 93 и 94) делят четыре detail-текстуры
@@ -524,14 +524,14 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // виден), но height/slope у каждого свои (фикс-раунд 1 Task 4: общая
     // карта, откалиброванная под радиус I, давала VII 577% его бюджета
     // высоты — батч перешёл на пер-тело генерации korriban1..korriban7).
-    const sharedPaths = ['terrain/rocky_trail_diff.webp', 'terrain/rocky_trail_nor.webp', 'terrain/rocky_trail_arm.webp', 'terrain/moon_01_nor.webp']
+    const sharedPaths = [...Object.values(STEEP_DETAIL_PATHS), 'terrain/rocky_trail_diff.webp', 'terrain/rocky_trail_nor.webp', 'terrain/rocky_trail_arm.webp', 'terrain/moon_01_nor.webp']
     const korribanISlope = 'planets/StarWars/korriban/i/korriban1_slope.webp'
     const korribanIISlope = 'planets/StarWars/korriban/i/korriban2_slope.webp'
 
     data.set(observedActor('Korriban I').getAttribute('id')!, record('Korriban I', 100))
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    expect(load).toHaveBeenCalledTimes(5) // своя slope + 4 detail (без диффуза — процедурное тело)
+    expect(load).toHaveBeenCalledTimes(8) // slope + 4 detail грунта + 3 карты скал
     for (const path of [...sharedPaths, korribanISlope]) expect(resourceStorage.getTexture(path), path).toBeDefined()
 
     // Korriban II входит в зону. Detail уже в реестре — повторного
@@ -539,7 +539,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set(observedActor('Korriban II').getAttribute('id')!, record('Korriban II', 120))
     await handlers['ClosestChange'](record('Korriban II', 120))
 
-    expect(load).toHaveBeenCalledTimes(6)
+    expect(load).toHaveBeenCalledTimes(9)
     expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
   })
 
@@ -660,13 +660,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    // Четыре общих detail-пути (легаси-bump и диффуз-ресурс удалены из
-    // данных — тело процедурное, Task 6) грузятся по разу, а не по два (на
-    // каждого из двух акторов, разделяющих детальный комплект); плюс две
-    // собственные slope-карты (korriban1/korriban2 — фикс-раунд 1 Task 4
-    // снял общую карту) — итого шесть сетевых запросов, а не десять
-    // (было бы 4×2 + 2 при полном провале дедупа общих путей).
-    expect(load).toHaveBeenCalledTimes(6)
+    // Четыре карты грунта и три карты скал грузятся по разу для двух
+    // акторов; плюс две собственные slope-карты. Итого 9 запросов,
+    // а не 16 при полном провале дедупликации.
+    expect(load).toHaveBeenCalledTimes(9)
 
     // И ровно одна запись в реестре на путь, а не две — иначе вторая
     // Texture осталась бы в реестре недиспоузнутой и недостижимой. Одной из
@@ -690,7 +687,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     //
     // Держится открытым только запрос SHARED_DETAIL (одна из четырёх общих
     // detail-текстур Korriban — диффуз-ресурса у процедурного тела больше
-    // нет, Task 6) — путей у Korriban I пять, и задача 2 грузит их
+    // нет, Task 6) — пути грунта и скал задача 2 грузит
     // конкурентно (не по одному на актора, как было раньше), так что
     // "первый вызов, второй вызов" по номеру больше не адресует именно
     // держащийся путь. Остальные пути (detail/собственная slope) резолвятся
@@ -707,7 +704,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = HORUSET_SYSTEM
     const pathLoads = streamingState(observer).pathLoads
 
@@ -771,29 +768,22 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Задача 2 сделала все пути ОДНОГО тела независимыми кандидатами:
     // `Promise.all(decision.load.map(loadPath))` дозапускает их конкурентно
     // (а не строго друг за другом, как было у actor-центричного `loadActor`),
-    // так что в рамках одного пересчёта все шесть путей Меркурия (терраформная
-    // арка: диффуз+slope+4detail; легаси-bump удалён из данных) стартуют
-    // синхронно. Держим открытыми только вызовы диффуза (1-й — цикл 1
-    // "устаревший", 7-й, первый в цикле 2, — "живой"); остальные пять путей
-    // каждого цикла резолвятся сразу — тест их не касается, но им нужно
-    // завершиться, чтобы Promise.all не завис.
+    // так что все карты Меркурия стартуют синхронно. Держим открытыми
+    // только диффуз по имени ресурса; остальные пути завершаются сразу.
     const resolvers: Array<(result: LoadResult) => void> = []
-    let callIndex: number = 0
-    const load = vi.fn((): Promise<LoadResult> => {
-      callIndex += 1
-
-      if (callIndex === 1 || callIndex === 7) {
+    const MERCURY_DIFFUSE = 'planets/mercury/mercury.jpg'
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      if (request.name === MERCURY_DIFFUSE) {
         return new Promise<LoadResult>((resolve) => resolvers.push(resolve))
       }
 
       return Promise.resolve({ ok: true as const, texture: makeTexture() })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
     const state = streamingState(observer)
     const MERCURY_ACTOR_ID = 5
-    const MERCURY_DIFFUSE = 'planets/mercury/mercury.jpg'
 
     data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
 
@@ -947,7 +937,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
     data.set(observedActor('Saturn').getAttribute('id')!, record('Saturn', 300))
@@ -972,7 +962,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // undefined бросает необработанным исключением из closestChange.
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
 
-    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
     const mesh = new Mesh()
@@ -1004,7 +994,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Promise.all).
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
 
-    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
     const MERCURY_DIFFUSE = 'planets/mercury/mercury.jpg'
     const MERCURY_SLOPE = 'planets/mercury/mercury_slope.webp'
@@ -1046,7 +1036,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // эту дистанцию).
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
     data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 2000))
@@ -1108,7 +1098,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
           : Promise.resolve({ ok: true as const, texture: makeTexture() })
     )
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
 
     data.set(observedActor('Mercury').getAttribute('id')!, record('Mercury', 300))
@@ -1144,7 +1134,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
     vi.useFakeTimers()
 
@@ -1175,7 +1165,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
   it('releases orphan in-flight reservations and disposes their late result', async () => {
     let finish!: (result: LoadResult) => void
     let signal: AbortSignal | undefined
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, (request, abortSignal) => {
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, (request, abortSignal) => {
       if (request.name === 'planets/uranus/uranus.png') {
         signal = abortSignal
         return new Promise<LoadResult>((resolve) => { finish = resolve })
@@ -1215,7 +1205,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = SOLAR_SYSTEM
     vi.useFakeTimers()
 

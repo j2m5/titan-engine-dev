@@ -12,6 +12,7 @@ import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { roundedFloat32UpperBound } from '@/core/terrain/terrainRange'
 import type { SurfaceProbe } from '@/core/libs/surfaceCamera'
+import { boulderObstaclesFor } from '@/core/terrain/TerrainBoulderObstacles'
 
 export type Collider = {
   object: Object3D
@@ -378,6 +379,12 @@ class CameraCollision {
     let nearest: SweepHit | null = null
 
     for (const collider of this.colliders) {
+      const rocks = collider.object.model ? boulderObstaclesFor(collider.object.model) : undefined
+      const rockT = rocks?.intersect(this.ray, maxDistance, this.hitContact, this.hitNormal)
+      if (rockT !== null && rockT !== undefined && (!nearest || rockT < nearest.t)) {
+        nearest = { collider, t: rockT, contact: this.bestContact.copy(this.hitContact),
+          normal: this.bestNormal.copy(this.hitNormal), exhausted: false }
+      }
       let t: number
       let exhausted = false
 
@@ -526,6 +533,7 @@ class CameraCollision {
       let moved = false
 
       for (const collider of this.colliders) {
+        if (collider.object.model && boulderObstaclesFor(collider.object.model)?.pushOut(position)) moved = true
         if (collider.heightField) {
           if (this.pushOutTerrain(collider, collider.heightField, position)) moved = true
           continue

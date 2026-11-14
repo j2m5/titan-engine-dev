@@ -1,6 +1,8 @@
 import { Vector3 } from 'three'
 import type { HeightMapData } from './heightMapFormat'
 import type { MidbandParams } from './midbandParams'
+import type { BedrockField } from './bedrockField'
+import type { BedrockSlope } from './bedrockSlope'
 import { ENVELOPE_GRID_HEIGHT, ENVELOPE_GRID_WIDTH, type MidbandEnvelopeGrid } from './midbandEnvelopeGrid'
 import {
   MIDBAND_ENVELOPE_MAX,
@@ -29,6 +31,8 @@ interface CollisionBoundsSource {
   sampleMap: (u: number, v: number) => number
   sampleSag: (u: number, v: number) => number
   midband: MidbandField | null
+  bedrock: BedrockField | null
+  bedrockSlope: BedrockSlope | null
   envelope: MidbandEnvelopeGrid | null
   params: MidbandParams
 }
@@ -77,7 +81,8 @@ export class TerrainCollisionBounds {
           midband.amplitudesMeters.reduce((sum, value) => sum + value, 0)
     // Aux records the maximum after Float32 pointSag aggregation, which may round down.
     const maxSag = roundedFloat32UpperBound(source.maxSagMeters)
-    const globalUpper = map.maxMeters + positiveBand + maxSag + source.marginMeters
+    const globalUpper =
+      map.maxMeters + positiveBand + 3 * (source.bedrock?.maxAmplitudeMeters ?? 0) + maxSag + source.marginMeters
     if (center.lengthSq() < 1e-20) return globalUpper
     center.normalize()
     const chord = Math.max(center.distanceTo(a), center.distanceTo(b)) + 1e-12
@@ -117,8 +122,103 @@ export class TerrainCollisionBounds {
     if (midband !== null && midband.octaveCount > 0 && source.envelope !== null) {
       band = this.midbandUpper(mapRange, center, chord, minCos, maxCos)
     }
-    const upper = mapRange.max + band + sagRange.max + source.marginMeters
+    const bedrock =
+      source.bedrock === null
+        ? 0
+        : source.bedrock.range(
+            mapRange,
+            source.bedrockSlope!.range(uv, minCos, maxCos),
+            center,
+            chord,
+            minCos,
+            maxCos,
+            range(0, 0)
+          ).max
+    const bedrockSag = source.bedrock === null ? 0 : this.bedrockSagUpper(center, chord)
+    const upper = mapRange.max + band + bedrock + sagRange.max + bedrockSag + source.marginMeters
     return upper + 1e-8 + 1e-10 * (Math.abs(mapRange.max) + Math.abs(band) + sagRange.max)
+  }
+
+  public bedrockSagMeters(dir: Vector3): number {
+    return this.source.bedrock === null ? 0 : this.bedrockSagUpper(dir, 1e-12)
+  }
+
+  private bedrockSagUpper(center: Vector3, queryChord: number): number {
+    const { source, uv } = this
+    const layer = source.bedrock!
+    const footprint = (2 * layer.canonicalStepMeters) / source.radiusMeters
+    const chord = Math.min(2, queryChord + footprint)
+    const angle = 2 * Math.asin(Math.min(1, chord / 2))
+    const colat = Math.atan2(Math.hypot(center.x, center.z), center.y)
+    const lo = Math.max(0, colat - angle),
+      hi = Math.min(Math.PI, colat + angle)
+    uv.v0 = Math.acos(Math.min(1, Math.cos(lo) + 4 * Number.EPSILON)) / Math.PI
+    uv.v1 = Math.acos(Math.max(-1, Math.cos(hi) - 4 * Number.EPSILON)) / Math.PI
+    const minCos = Math.max(0, Math.min(Math.sin(lo), Math.sin(hi)))
+    const maxCos = lo <= Math.PI / 2 && hi >= Math.PI / 2 ? 1 : Math.max(Math.sin(lo), Math.sin(hi))
+    const longitude = Math.atan2(center.z, -center.x) / (2 * Math.PI)
+    const du = minCos <= 1e-12 ? 0.5 : Math.min(0.5, angle / (2 * Math.PI * minCos) + 1e-12)
+    uv.u0 = longitude - du
+    uv.u1 = longitude + du
+    const map = bilinearRange(
+      source.sampleMap,
+      source.map.width,
+      source.map.height,
+      uv,
+      range(source.map.minMeters, source.map.maxMeters),
+      range(0, 0),
+      this.mapRows
+    )
+    const sag = bilinearRange(
+      source.sampleSag,
+      source.map.width,
+      source.map.height,
+      uv,
+      range(0, roundedFloat32UpperBound(source.maxSagMeters)),
+      range(0, 0),
+      this.sagRows
+    )
+    return layer.sagAllowance(
+      map,
+      source.bedrockSlope!.range(uv, minCos, maxCos),
+      center,
+      chord,
+      minCos,
+      maxCos,
+      this.mapSlopeUpper(minCos),
+      sag.max
+    )
+  }
+
+  /** Exact bilinear derivative extrema over the touched DEM cells; large caps use the amplitude fallback. */
+  private mapSlopeUpper(minCos: number): number {
+    const { map, radiusMeters } = this.source
+    const { width: w, height: h, data } = map
+    const x0 = Math.floor(this.uv.u0 * w - 0.5),
+      x1 = Math.floor(this.uv.u1 * w - 0.5)
+    const y0 = Math.max(0, Math.min(h - 1, Math.floor(this.uv.v0 * h - 0.5)))
+    const y1 = Math.max(0, Math.min(h - 1, Math.floor(this.uv.v1 * h - 0.5)))
+    // The pole row is blended toward its mean by sampleMeters, not ordinary bilinear data.
+    if (minCos <= 1e-12 || y0 === 0 || y1 === h - 1 || (x1 - x0 + 1) * (y1 - y0 + 1) > 64) return Infinity
+    let dx = 0,
+      dy = 0
+    for (let y = y0; y <= y1; y++) {
+      const nextY = Math.min(h - 1, y + 1)
+      for (let x = x0; x <= x1; x++) {
+        const col = ((x % w) + w) % w,
+          nextX = (col + 1) % w
+        const a = data[y * w + col],
+          b = data[y * w + nextX],
+          c = data[nextY * w + col],
+          d = data[nextY * w + nextX]
+        dx = Math.max(dx, Math.abs(b - a), Math.abs(d - c))
+        dy = Math.max(dy, Math.abs(c - a), Math.abs(d - b))
+      }
+    }
+    const metersPerRaw = (map.maxMeters - map.minMeters) / 65535
+    return (
+      metersPerRaw * Math.hypot((dx * w) / (2 * Math.PI * radiusMeters * minCos), (dy * h) / (Math.PI * radiusMeters))
+    )
   }
 
   private channel(key: keyof MidbandEnvelope, fallback: ValueRange): ValueRange {

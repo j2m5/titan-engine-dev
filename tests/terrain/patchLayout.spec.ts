@@ -27,9 +27,9 @@ function build(morph: boolean | null): PatchBuildResult {
 }
 
 describe('раскладка слота пула', () => {
-  it('вес слота: рельеф 268 900 Б, вода 53 796 Б при 64 сегментах', () => {
+  it('вес слота: рельеф 304 748 Б, вода 53 796 Б при 64 сегментах', () => {
     expect(terrainPatchVertexCount(TERRAIN_PATCH_SEGMENTS)).toBe(4481)
-    expect(patchSlotBytes(TERRAIN_PATCH_SEGMENTS, 'terrain')).toBe(268900)
+    expect(patchSlotBytes(TERRAIN_PATCH_SEGMENTS, 'terrain')).toBe(304748)
     expect(patchSlotBytes(TERRAIN_PATCH_SEGMENTS, 'water')).toBe(53796)
   })
 

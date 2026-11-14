@@ -73,6 +73,18 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     return vec2(rise - t, dRise - 1.0);
   }
 
+  // Угол до ближайшей кромки. В её максимуме dh убывает квадратично,
+  // поэтому секущая стремится к 0 по обе стороны смены периода.
+  float terraceHorizon(float phase, float profile) {
+    float u = fract(TERRACE_EDGE_PHASE - fract(phase));
+    return max(TERRACE_EDGE_PROFILE - profile, 0.0) / max(u, 1e-3);
+  }
+
+  // Доля отрезка, где линейно интерполированный угловой запас положителен.
+  float terraceShadowCoverage(float a, float b) {
+    return clamp(max(a, b) / max(abs(a - b), 1e-6), 0.0, 1.0);
+  }
+
   // Тень уступов на площадках ниже (солнце со стороны верха склона): кромка
   // ближайшего уступа выше по склону закрывает луч, если
   // k·(кромка − профиль) > u·max(tgE/s − 1, 0); u — фаза до кромки, tgE —
@@ -80,11 +92,21 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   // самозатенение уступа круче солнца. Доля прямого света: 1 — свет
   float terraceCastShadow(float phase, float profile, float k, float sunUp, float sunUphill, float slopeTan, float phaseFootprint) {
     if (k <= 0.0 || sunUp <= 0.0 || sunUphill <= 1e-4) return 1.0;
-    float u = fract(TERRACE_EDGE_PHASE - fract(phase));
     float g = max(sunUp / (sunUphill * max(slopeTan, 1e-4)) - 1.0, 0.0);
-    float f = k * (TERRACE_EDGE_PROFILE - profile) - g * u;
-    float w = (2.0 * k + g) * phaseFootprint + 1e-4;
-    return mix(1.0, 1.0 - smoothstep(-w, w, f), smoothstep(0.0, TERRACE_SHADOW_K_FADE, k));
+    // Максимальная производная профиля: солнце выше неё не закрывает
+    // ни одна точка уступа, независимо от ширины фильтра.
+    if (g >= k * (1.5 / TERRACE_RISER - 1.0)) return 1.0;
+    // Сравниваем углы, а не высоты: прежнее f = k·dh - g·u обращалось
+    // в 0 на освещённой кромке (u = dh = 0), рисуя 50 % ложной полутени.
+    float f = k * terraceHorizon(phase, profile) - g;
+    // Покрытие двух половин следа пикселя: фильтр пересекает смену
+    // окклюдера непрерывно. Локальная производная там разрывна и вновь
+    // давала тёмную линию. Два дополнительных профиля — только ALU.
+    float halfWidth = 0.5 * max(phaseFootprint, 1e-4);
+    float left = k * terraceHorizon(phase - halfWidth, terraceProfile(phase - halfWidth).x) - g;
+    float right = k * terraceHorizon(phase + halfWidth, terraceProfile(phase + halfWidth).x) - g;
+    float shadow = 0.5 * (terraceShadowCoverage(left, f) + terraceShadowCoverage(f, right));
+    return 1.0 - shadow * smoothstep(0.0, TERRACE_SHADOW_K_FADE, k);
   }
 
   // Струи одной плоскости трипланара: uv — координаты плоскости в периодах,

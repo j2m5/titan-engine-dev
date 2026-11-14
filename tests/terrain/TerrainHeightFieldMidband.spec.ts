@@ -14,6 +14,22 @@ function makeMap(width: number, height: number, values: number[], minMeters = 0,
   return { width, height, minMeters, maxMeters, data: new Uint16Array(values) }
 }
 const R_KM = 1736
+
+describe('close terrain resolution preserves the physical relief', () => {
+  it('resolves the Mars surface at a vertex step below 100 meters', () => {
+    const field = new TerrainHeightField(bumpyMap(), 3390)
+    expect(field.vertexStepMeters(TERRAIN_QUADTREE_MAX_LEVEL)).toBeLessThan(100)
+  })
+
+  it('does not introduce previously excluded short wavelengths when the mesh becomes finer', () => {
+    const field = new TerrainHeightField(bumpyMap(), 3390, { ...MIDBAND_DEFAULTS, midbandWavelengthKm: 0.8 })
+    // The established L8 relief excludes 400/200 m waves on Mars (cutoff ~650 m).
+    // A finer render mesh must keep the same height field, collision bounds and shadow tile.
+    expect(field.midband!.wavelengthsMeters).toEqual([800])
+    expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL)).toBe(0)
+  })
+})
+
 function bumpyMap(): HeightMapData {
   const w = 64,
     h = 32
@@ -106,8 +122,7 @@ describe('TerrainHeightField: геометрия средней полосы в 
 })
 
 describe('ε-пирамида с полосой B', () => {
-  it('MAX_LEVEL 8; добавка ε = residualAmplitudeMeters(шаг уровня); на грубых уровнях — вся полоса, на L8 — 0', () => {
-    expect(TERRAIN_QUADTREE_MAX_LEVEL).toBe(8)
+  it('добавка ε = residualAmplitudeMeters(шаг уровня); на грубых уровнях — вся полоса, на предельном — 0', () => {
     const field = new TerrainHeightField(bumpyMap(), R_KM)
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       const step = (2 * Math.PI * R_KM * 1000) / (4 * 2 ** level * 64)

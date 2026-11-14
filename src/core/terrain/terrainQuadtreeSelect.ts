@@ -16,16 +16,14 @@ export type TerrainNodeAddress = { face: number; level: number; i: number; j: nu
 export type TerrainLeaf = TerrainNodeAddress & { visible: boolean; sse: number }
 
 /**
- * Числовой ключ узла: face(3 бита)|level(4)|i(8)|j(8) — 23 бита, SMI.
- * Диапазоны: face 0..5, level 0..TERRAIN_QUADTREE_MAX_LEVEL(8), i/j 0..255
- * (2^level патчей на грани, level=8 ⇒ 256). Раскладка была 3|3|6|6 (18 бит,
- * i/j 0..63) под MAX_LEVEL=6 — подъём до 8 требует i/j до 255 (8 бит), старая
- * раскладка бы молча коллизировала (i=64 задевает бит level). Ключ строковым
- * был источником 74 880 строковых аллокаций/кадр в дифе покрытия (ревью
- * 2026-08-17, перф-долг №5/№10) — Map/Set по числу их не платят.
+ * Числовой ключ узла: face(3 бита)|level(4)|i(10)|j(10) — 27 бит, SMI.
+ * На L10 координаты доходят до 1023. Прежние 8 бит смешивали j=256 с i=1
+ * и i=256 с битами уровня, теряя участки в Map/Set. Ключ непрозрачен для
+ * потребителей: родитель/ребёнок определяются по адресу, не декодированием.
+ * Числовое представление сохраняет горячие пути без строковых аллокаций.
  */
 export const nodeKeyOf = (face: number, level: number, i: number, j: number): number =>
-  (face << 20) | (level << 16) | (i << 8) | j
+  (face << 24) | (level << 20) | (i << 10) | j
 
 /** Тот же ключ по адресу; горячие пути считают его из компонент (nodeKeyOf), без промежуточного объекта. */
 export const terrainNodeKey = (a: TerrainNodeAddress): number => nodeKeyOf(a.face, a.level, a.i, a.j)
@@ -41,7 +39,19 @@ export const TERRAIN_QUADTREE_MIN_LEVEL = 1
  * `TERRAIN_MODEL_LEVEL`). Модель провиса/клиренса и пер-узловые пирамиды
  * калиброваны мельче этого потолка — консервативно, см. `TERRAIN_MODEL_LEVEL`.
  */
-export const TERRAIN_QUADTREE_MAX_LEVEL = 8
+export const TERRAIN_QUADTREE_MAX_LEVEL = 10
+
+/**
+ * Частотный состав средней полосы зафиксирован на прежней сетке L8.
+ * Повышение детализации меша уточняет ту же поверхность, не добавляет
+ * коротких волн и не меняет высоту для коллизий/ближней карты теней.
+ */
+export const TERRAIN_RELIEF_MODEL_LEVEL = 8
+
+// Дополнительные уровни нужны у камеры. Глобальный пад высоты в SSE-сфере
+// остаётся консервативным, но не должен уточнять до L10 весь горный массив.
+const NEAR_DETAIL_RANGE_KM = 4
+const NEAR_DETAIL_MERGE_FACTOR = 1.25
 
 /**
  * Уровень калибровки модели провиса/клиренса (`TerrainHeightField`:
@@ -66,7 +76,7 @@ const MIN_DISTANCE_METERS = 100
  * этом уровне или глубже, чей ЧЕСТНЫЙ максимум высоты (`TerrainHeightField.nodeMaxHeightMeters`,
  * пирамида честных per-node максимумов — не статистика) уверенно ниже уровня
  * воды, дальше не делится — цель: океанские патчи не глубже ~L4 (не
- * TERRAIN_QUADTREE_MAX_LEVEL=8). Ниже этого уровня потолок не действует —
+ * TERRAIN_QUADTREE_MAX_LEVEL). Ниже этого уровня потолок не действует —
  * береговые/мелководные узлы обязаны домешаться честно на общих основаниях
  * (SSE), запрет применяется только к уже достаточно мелким узлам, где
  * визуальная разница под непрозрачной водой всё равно не видна.
@@ -121,6 +131,7 @@ export interface SelectParams {
 const centerDirScratch = new Vector3()
 const sphereCenterScratch = new Vector3()
 const sphereScratch = new Sphere()
+const nearDetailCenterScratch = new Vector3()
 
 /**
  * Стретч диагонали ячейки равноугольной развёртки у угла грани относительно
@@ -138,17 +149,51 @@ const CORNER_DIAGONAL_STRETCH = Math.sqrt(4 / 3)
  * угловой ширины на радиусе R + h длиннее в (R + h)/R раз. Впадины
  * (max ≤ 0) множителя не дают — сфера не должна сжиматься.
  */
-export function nodeBoundingSphereRadiusUnits(field: TerrainHeightField, level: number, centerHeightMeters: number): number {
+function nodePatchHalfDiagonalUnits(field: TerrainHeightField, level: number): number {
   const arcRadiusKm = field.radiusKm + Math.max(field.maxMeters, 0) / 1000
-  const patchHalfDiagonal =
-    ((toThreeJSUnits(arcRadiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2) * CORNER_DIAGONAL_STRETCH
+  return ((toThreeJSUnits(arcRadiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2) * CORNER_DIAGONAL_STRETCH
+}
+
+/**
+ * Расстояние до радиального отрезка высот в центре патча. В отличие от
+ * SSE-сферы, глобальный перепад высот расширяет область только по радиусу:
+ * высокая стена рядом уточняется, но весь горный массив не получает L10.
+ */
+function inNearDetailRange(
+  field: TerrainHeightField,
+  level: number,
+  cameraLocal: Vector3,
+  nodeDirection: Vector3,
+  alreadySplit: boolean
+): boolean {
+  if (level < TERRAIN_RELIEF_MODEL_LEVEL) return true
+
+  const amplitude = field.midbandMaxAmplitudeMeters
+  const minRadius = toThreeJSUnits(field.radiusKm + (field.minMeters - amplitude) / 1000)
+  const maxRadius = toThreeJSUnits(field.radiusKm + (field.maxMeters + amplitude) / 1000)
+  const closestRadius = Math.max(minRadius, Math.min(maxRadius, cameraLocal.dot(nodeDirection)))
+  nearDetailCenterScratch.copy(nodeDirection).multiplyScalar(closestRadius)
+  const range =
+    nodePatchHalfDiagonalUnits(field, level) +
+    toThreeJSUnits(NEAR_DETAIL_RANGE_KM / 2 ** (level - TERRAIN_RELIEF_MODEL_LEVEL)) *
+      (alreadySplit ? NEAR_DETAIL_MERGE_FACTOR : 1)
+
+  return cameraLocal.distanceToSquared(nearDetailCenterScratch) <= range * range
+}
+
+export function nodeBoundingSphereRadiusUnits(
+  field: TerrainHeightField,
+  level: number,
+  centerHeightMeters: number
+): number {
+  const patchHalfDiagonal = nodePatchHalfDiagonalUnits(field, level)
   // + 2·maxAmplitude полосы (Task 5): полоса не привязана к сетке узлов
   // (аналитическая добавка поверх карты, см. докблок TerrainHeightField) —
   // тот же паттерн, что у архивных октав: глобальный потолок амплитуды на
   // каждый узел, а не per-node оценка
   const heightPadMeters =
     Math.max(field.maxMeters - centerHeightMeters, centerHeightMeters - field.minMeters, 0) +
-    2 * (field.midband?.maxAmplitudeMeters ?? 0)
+    2 * field.midbandMaxAmplitudeMeters
 
   return patchHalfDiagonal + toThreeJSUnits(heightPadMeters / 1000)
 }
@@ -188,7 +233,8 @@ function visitNode(
   const sphereRadius = nodeBoundingSphereRadiusUnits(field, level, centerHeightMeters)
 
   const minDistanceUnits = toThreeJSUnits(MIN_DISTANCE_METERS / 1000)
-  const distance = Math.max(params.cameraLocal.distanceTo(sphereCenterScratch) - sphereRadius, minDistanceUnits)
+  const centerDistance = params.cameraLocal.distanceTo(sphereCenterScratch)
+  const distance = Math.max(centerDistance - sphereRadius, minDistanceUnits)
   const distanceMeters = (distance / SpaceScale) * 1000
 
   const sse =
@@ -200,6 +246,10 @@ function visitNode(
   const key = nodeKeyOf(face, level, i, j)
   const alreadySplit = params.currentlySplit.has(key)
   const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
+
+  // Радиус патча учитывается, чтобы близкая кромка могла уточняться до
+  // подхода к центру. Гистерезис диапазона дополняет SSE-гистерезис.
+  const nearEnough = inNearDetailRange(field, level, params.cameraLocal, centerDirScratch, alreadySplit)
 
   let visible = true
   if (params.frustumLocal) {
@@ -223,7 +273,11 @@ function visitNode(
   // (merge-порог), иначе поворот камеры схлопывал бы поддерево до L1 и при
   // возврате в кадр требовал полной пересборки (бюджет времени terrain.lod.patchBuildBudgetMs).
   const shouldSplit =
-    level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && (visible || alreadySplit) && !belowWaterCeiling
+    level < TERRAIN_QUADTREE_MAX_LEVEL &&
+    nearEnough &&
+    sse > threshold &&
+    (visible || alreadySplit) &&
+    !belowWaterCeiling
 
   if (shouldSplit) {
     split.add(key)

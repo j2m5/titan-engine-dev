@@ -38,7 +38,7 @@ describe('TerrainShaderTemplate: средняя полоса детали в т�
       'applyTerrainMacroDetail(nLocal, albedoMul, occlusion, terraceShadow, dirLocal, eastLocal, sunLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));'
     )
     const detail = frag.indexOf(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, talusCoverage, terrainRoughness);'
     )
     const normalOut = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(call).toBeGreaterThan(cavity)
@@ -51,7 +51,7 @@ describe('TerrainShaderTemplate: средняя полоса детали в т�
     const sample = frag.indexOf('vec4 macroSlopeSample = texture2D(bumpMap, uv);', gate)
     expect(sample).toBeGreaterThan(gate)
     expect(frag).toContain('vec2 macroMapSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0);')
-    expect(frag).toContain('vec2 macroSlope = macroMapSlope + vMidTilt;')
+    expect(frag).toContain('vec2 macroSlope = macroMapSlope * (1.0 + vMidTilt.z) + vMidTilt.xy;')
     expect(frag).not.toContain('(2.0 / 127.0)')
     // Присваивание канала B зажато между #ifdef USE_CAVITY и его #endif
     const cavityGate = frag.indexOf('#ifdef USE_CAVITY', sample)

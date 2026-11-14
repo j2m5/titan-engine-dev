@@ -80,7 +80,7 @@ export const TerrainShaderTemplate: ShaderProps = {
       varying vec3 vDetailPos2;
     #endif
 
-    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)
+    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST) || defined(USE_TERRAIN_DETAIL)
       // Высота КАРТЫ в вершине (метры над референсом, без полосы B) — фаза
       // террас, мокрая кромка берега и линия инея
       attribute float height;
@@ -98,9 +98,9 @@ export const TerrainShaderTemplate: ShaderProps = {
     #ifdef USE_SLOPE
       // Наклон геометрии средней полосы B (tan в базисе T/B SlopeNormal) —
       // домешивается в декод slope-карты во фрагменте
-      attribute vec2 midTilt;
-      varying vec2 vMidTilt;
-      attribute vec2 midTiltParent;
+      attribute vec3 midTilt;
+      varying vec3 vMidTilt;
+      attribute vec3 midTiltParent;
     #endif
 
     void main() {
@@ -120,7 +120,7 @@ export const TerrainShaderTemplate: ShaderProps = {
         vDetailPos2 = position + detailOrigin2;
       #endif
 
-      #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)
+      #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST) || defined(USE_TERRAIN_DETAIL)
         vHeightMeters = height;
       #endif
 
@@ -138,6 +138,11 @@ export const TerrainShaderTemplate: ShaderProps = {
   fragmentShader: `
     ${planetSurfaceFragmentPars}
 
+    #ifdef USE_TERRAIN_BOULDER
+      varying vec3 vBoulderNormal;
+      varying vec3 vBoulderState;
+    #endif
+
     // slope-карта (R/G — уклон, B — полость), множитель декода (чанк SlopeNormal), сила полости
     uniform sampler2D bumpMap;
     uniform float bumpScale;
@@ -147,7 +152,7 @@ export const TerrainShaderTemplate: ShaderProps = {
 
     #ifdef USE_SLOPE
       // Наклон геометрии средней полосы B — домешивается в декод slope-карты
-      varying vec2 vMidTilt;
+      varying vec3 vMidTilt;
       #include <slopeNormalUniforms>
       #include <slopeNormalFunctions>
     #endif
@@ -172,7 +177,7 @@ export const TerrainShaderTemplate: ShaderProps = {
       #include <terrainDetailFunctions>
     #endif
 
-    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)
+    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST) || defined(USE_TERRAIN_DETAIL)
       varying float vHeightMeters;
     #endif
 
@@ -244,12 +249,23 @@ export const TerrainShaderTemplate: ShaderProps = {
       // один раз, после всех слоёв (с поворотом коммутирует: она ортогональна
       // с точностью до масштаба, normalize его снимает).
       vec3 nLocal = dirLocal;
+      #ifdef USE_TERRAIN_BOULDER
+        // Opaque coverage avoids transparent sorting and keeps depth correct during the fade.
+        float coverageThreshold = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715))));
+        if (vBoulderState.x <= coverageThreshold) discard;
+        nLocal = normalize(vBoulderNormal);
+        albedoMul *= vBoulderState.y;
+        occlusion *= mix(0.72, 1.0, vBoulderState.z);
+      #endif
       // Восток попиксельно, из точного dirLocal (интерполяция varying'ом
       // закручивала TBN у полюса); длина ∝ cos(широты) — от неё полюсный гард чанков.
       vec3 eastLocal = cross(vec3(0.0, 1.0, 0.0), dirLocal);
 
       // tan уклона карты для маски зон детали и инея; без slope-карты 0 — steep-зона закрыта
       float terrainSlopeTan = 0.0;
+      #ifdef USE_TERRAIN_BOULDER
+        terrainSlopeTan = 2.0;
+      #endif
       #ifdef USE_SLOPE
         // perturbNormalFromSlope отдаёт декодированный вектор уклона КАРТЫ
         // (наклон полосы B открывал бы камень вдоль её гребней)
@@ -279,7 +295,7 @@ export const TerrainShaderTemplate: ShaderProps = {
         // Гейт форм склона — по уклону КАРТЫ: с наклоном полосы B он
         // открывался бы на холмистых равнинах (террасы как горизонтали)
         vec2 macroMapSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0);
-        vec2 macroSlope = macroMapSlope + vMidTilt;
+        vec2 macroSlope = macroMapSlope * (1.0 + vMidTilt.z) + vMidTilt.xy;
         float macroCavity = 0.0;
         #ifdef USE_CAVITY
           macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;
@@ -298,7 +314,12 @@ export const TerrainShaderTemplate: ShaderProps = {
       #endif
 
       #ifdef USE_TERRAIN_DETAIL
-        applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);
+        #ifdef USE_TERRAIN_BOULDER
+        float talusCoverage = 0.0;
+        #else
+        float talusCoverage = terrainBedrockTalus(dirLocal, vHeightMeters, terrainSlopeTan, length(vViewPosition));
+        #endif
+        applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, talusCoverage, terrainRoughness);
       #endif
 
       occlusion = clamp(occlusion, 0.0, 2.0); // гребни cavity × AO детали уходят выше 2 — единый потолок перед светом

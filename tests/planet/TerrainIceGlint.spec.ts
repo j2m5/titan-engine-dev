@@ -138,7 +138,7 @@ describe('Шейдер: блеск льда', () => {
     expect(frag).toContain('float terrainRoughness = 1.0;')
     expect(frag.indexOf('float terrainRoughness = 1.0;')).toBeLessThan(frag.indexOf('applyTerrainDetail('))
     expect(frag).toContain(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, talusCoverage, terrainRoughness);'
     )
   })
 

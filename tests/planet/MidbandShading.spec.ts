@@ -17,21 +17,21 @@ describe('Полоса B в затенении: наклон по вершина
   it('атрибут и varying под USE_SLOPE в обоих стадиях', () => {
     const gateV = vert.indexOf('#ifdef USE_SLOPE')
     expect(gateV).toBeGreaterThan(-1)
-    expect(vert.indexOf('attribute vec2 midTilt;')).toBeGreaterThan(gateV)
+    expect(vert.indexOf('attribute vec3 midTilt;')).toBeGreaterThan(gateV)
     expect(vert).toContain('vMidTilt = mix(midTilt, midTiltParent, morphT);')
-    expect(frag).toContain('varying vec2 vMidTilt;')
+    expect(frag).toContain('varying vec3 vMidTilt;')
   })
 
   it('перегрузка SlopeNormal складывает добавку с декодированным вектором до наклона нормали', () => {
-    expect(slopeNormalFunctions).toContain('vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 mapSlopeOut)')
-    const body = slopeNormalFunctions.slice(slopeNormalFunctions.indexOf('vec2 extraSlope, out vec2 mapSlopeOut)'))
+    expect(slopeNormalFunctions).toContain('vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec3 extraSlope, out vec2 mapSlopeOut)')
+    const body = slopeNormalFunctions.slice(slopeNormalFunctions.indexOf('vec3 extraSlope, out vec2 mapSlopeOut)'))
     expect(body).toContain('+ extraSlope')
     expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainMapSlopeVec)')
   })
 
   it('macroSlope средней полосы несёт наклон полосы B, а гейт форм склона — только уклон карты', () => {
     expect(frag).toContain('vec2 macroMapSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0);')
-    expect(frag).toContain('vec2 macroSlope = macroMapSlope + vMidTilt;')
+    expect(frag).toContain('vec2 macroSlope = macroMapSlope * (1.0 + vMidTilt.z) + vMidTilt.xy;')
     // приёмка 3.png: с суммой в гейте террасы читались горизонталями топокарты на
     // холмистых равнинах (на Луне гейт открывался на 10–47 % точек с уклоном карты 0.05–0.2)
     expect(frag).toContain('applyTerrainMacroDetail(nLocal, albedoMul, occlusion, terraceShadow, dirLocal, eastLocal, sunLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));')
@@ -106,7 +106,7 @@ describe('TerrainMaterial: uMidbandShade из midbandParamsOf; дефолты а
     expect(material.defaultAttributeValues.morphDelta).toEqual([0, 0, 0])
     expect(material.defaultAttributeValues.patchMorph).toEqual([0])
     expect(material.defaultAttributeValues.midShadeParent).toEqual([0, 0])
-    expect(material.defaultAttributeValues.midTiltParent).toEqual([0, 0])
+    expect(material.defaultAttributeValues.midTiltParent).toEqual([0, 0, 0])
     seedTexture('', 4, 2)
     seedTexture('default.png', 4, 2)
     seedTexture('night.jpg', 4, 2)

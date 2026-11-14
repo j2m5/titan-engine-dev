@@ -66,6 +66,8 @@ export interface MidbandSample {
   /** Наклон полосы, tan: производная высоты по дуге вдоль востока / севера точки. */
   tiltE: number
   tiltN: number
+  /** Mesh shading only: multiply the filtered DEM slope by 1 + this coefficient. */
+  mapSlopeScale?: number
   /** Σwᵢ/N — доля октав, представимых шагом уровня: 1 — вся полоса, 0 — полосы нет. */
   octaveWeightSum: number
   /** Огибающая точки (уклон/кривизна карты, с водным fade), [0, ENVELOPE_MAX]; 0 — полосы здесь нет. */

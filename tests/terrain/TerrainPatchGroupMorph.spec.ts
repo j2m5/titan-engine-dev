@@ -494,12 +494,12 @@ describe('TerrainPatchGroup: сводка пула и реестр', () => {
     expect(group.stats().peakLive).toBe(group.stats().live)
   })
 
-  it('bytesPerSlot по раскладке: рельеф 268 900, вода 53 796', () => {
+  it('bytesPerSlot по раскладке: рельеф 304 748, вода 53 796', () => {
     const vertices = terrainPatchVertexCount(TERRAIN_PATCH_SEGMENTS)
     expect(vertices).toBe(4481)
     const terrain = makeAsync(true)
     const water = makeAsync(false)
-    expect(terrain.group.stats().bytesPerSlot).toBe((vertices * 15 + 10) * 4)
+    expect(terrain.group.stats().bytesPerSlot).toBe((vertices * 17 + 10) * 4)
     expect(water.group.stats().bytesPerSlot).toBe((vertices * 3 + 6) * 4)
     // резидентная куча слота: position + инстансные (остальное отпущено после заливки)
     expect(terrain.group.stats().heapBytesPerSlot).toBe(53812)

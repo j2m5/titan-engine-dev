@@ -45,6 +45,35 @@ describe('terraceCastShadow: тень уступа на площадке ниж�
     expect(terraceCastShadow(0.95, k, s.up, s.uphill, slope, 0)).toBe(1)
   })
 
+  it('освещённая кромка не рисует линию полутени при смене периода', () => {
+    const s = sun(2)
+    for (const footprint of [0, 0.001, 0.02, 0.2]) {
+      for (const offset of [-1e-5, 0, 1e-5]) {
+        expect(terraceCastShadow(TERRACE_EDGE_PHASE + offset, k, s.up, s.uphill, slope, footprint)).toBe(1)
+      }
+    }
+  })
+
+  it('солнце выше самого крутого участка профиля освещает весь период при любом следе пикселя', () => {
+    const s = sun(slope * (1 + 2 * k + 0.01))
+    for (const footprint of [0, 0.01, 0.1, 0.5]) {
+      for (let i = 0; i <= 100; i++) {
+        expect(terraceCastShadow(i / 100, k, s.up, s.uphill, slope, footprint)).toBe(1)
+      }
+    }
+  })
+
+  it('фильтр непрерывен на кромке и рядом с ней при низком солнце', () => {
+    const s = sun(0.42)
+    for (const footprint of [0.005, 0.02, 0.1]) {
+      for (const phase of [TERRACE_EDGE_PHASE, TERRACE_EDGE_PHASE - 0.001]) {
+        const left = terraceCastShadow(phase - 1e-6, k, s.up, s.uphill, slope, footprint)
+        const right = terraceCastShadow(phase + 1e-6, k, s.up, s.uphill, slope, footprint)
+        expect(Math.abs(left - right)).toBeLessThan(0.001)
+      }
+    }
+  })
+
   it('солнце со стороны низа склона или под горизонтом — теней уступов нет', () => {
     expect(terraceCastShadow(0.95, k, 0.2, -0.98, slope, 0)).toBe(1)
     expect(terraceCastShadow(0.95, k, -0.1, 0.99, slope, 0)).toBe(1)

@@ -14,6 +14,8 @@ import type { UpdateContext } from '@/core/UpdateContext'
 import { requestTerrainShadowMap } from '@/core/terrain/terrainShadowMap'
 import { NearShadowTile } from '@/core/terrain/NearShadowTile'
 import { config } from '@/core/framework/config'
+import { TerrainBoulders } from '@/core/terrain/TerrainBoulders'
+import { resolveBoulderDensity } from '@/core/terrain/boulderScatter'
 
 /**
  * Fail-fast на разрыв DI-цепочки (стиль сообщения — как `requireRenderingData`):
@@ -60,6 +62,7 @@ class TerrainSphere extends TerrainPatchGroup {
 
   /** Плитка ближней тени у камеры: владеет текстурой, материал только читает. */
   private readonly nearTile: NearShadowTile
+  private readonly boulders: TerrainBoulders | null
 
   public constructor(
     model: Actor,
@@ -73,6 +76,7 @@ class TerrainSphere extends TerrainPatchGroup {
     builder?: TerrainPatchBuilder
   ) {
     assertProceduralWiring(model, proceduralSurfaceGenerator)
+    const density = resolveBoulderDensity(readRenderingData<IPlanetRenderingObject>(model)?.boulderDensity)
 
     // Диффуз процедурного тела обязан лежать в resourceStorage ДО постройки
     // материала: диффуз в юниформ сажает updateMaterial (см. diffuseKey в
@@ -93,6 +97,7 @@ class TerrainSphere extends TerrainPatchGroup {
     // материал держит заглушку — ровную сферу на датуме
     requestTerrainShadowMap(field, this.builder)
     this.nearTile = new NearShadowTile(field, this.builder, config('terrain.nearShadow'), renderer.extensions.has('OES_texture_float_linear'))
+    this.boulders = density > 0 ? new TerrainBoulders(this, model, field, sharedMaterial, density) : null
 
     this.name = this.model.getAttribute('name', '') + 'Planet'
     this.userData.type = 'planet'
@@ -130,9 +135,15 @@ class TerrainSphere extends TerrainPatchGroup {
   /** Скрытое тело плитку не держит: текстура освобождена, ответ в полёте устареет. */
   protected override onHiddenUpdate(): void {
     this.releaseNearTile()
+    this.boulders?.hide()
+  }
+
+  protected override onSurfaceUpdated(ctx: UpdateContext, cameraLocal: Vector3): void {
+    this.boulders?.update(this.surfacePatches, cameraLocal, ctx.elapsed)
   }
 
   public override dispose(): void {
+    this.boulders?.dispose()
     this.nearTile.dispose()
     this.sharedMaterial.setNearTile(null)
     super.dispose()

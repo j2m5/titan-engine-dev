@@ -54,20 +54,20 @@ function seedFor(actor: Actor): void {
 describe('TerrainMaterial: uDetailTintNorm/uSteepTintNorm из путей ресурсов', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('Луна (rocky_trail родной): родная норма = steep-норма = 1/средние rocky', () => {
+  it('Луна: грунт и скала нормируются по средним собственных файлов', () => {
     const moon = Actor.find(19)!
     seedFor(moon)
     const material = new TerrainMaterial(moon)
     material.updateMaterial()
     const native = material.uniforms.uDetailTintNorm.value as Vector2
     const steep = material.uniforms.uSteepTintNorm.value as Vector2
-    expect(native.x).toBeCloseTo(1 / DETAIL_TEXTURE_STATS[STEEP_DETAIL_PATHS.diffuse]!.meanLum!, 9)
-    expect(native.y).toBeCloseTo(1 / DETAIL_TEXTURE_STATS[STEEP_DETAIL_PATHS.arm]!.meanAo!, 9)
-    expect(steep.x).toBe(native.x)
-    expect(steep.y).toBe(native.y)
+    expect(native.x).toBeCloseTo(1 / DETAIL_TEXTURE_STATS['terrain/rocky_trail_diff.webp']!.meanLum!, 9)
+    expect(native.y).toBeCloseTo(1 / DETAIL_TEXTURE_STATS['terrain/rocky_trail_arm.webp']!.meanAo!, 9)
+    expect(steep.x).toBeCloseTo(1 / DETAIL_TEXTURE_STATS[STEEP_DETAIL_PATHS.diffuse]!.meanLum!, 9)
+    expect(steep.y).toBeCloseTo(1 / DETAIL_TEXTURE_STATS[STEEP_DETAIL_PATHS.arm]!.meanAo!, 9)
   })
 
-  it('Энцелад (ice родной): родная норма — ice, steep — rocky; resetMaterial возвращает 1', () => {
+  it('Энцелад: родная норма — ice, steep — cliff; resetMaterial возвращает 1', () => {
     const enceladus = Actor.find(25)!
     seedFor(enceladus)
     const material = new TerrainMaterial(enceladus)

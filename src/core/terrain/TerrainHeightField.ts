@@ -4,9 +4,16 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { HeightMapData } from './heightMapFormat'
 import type { TerrainAuxPayload } from './terrainAuxFormat'
 import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from './cubeSphere'
-import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
+import {
+  TERRAIN_MODEL_LEVEL,
+  TERRAIN_QUADTREE_MAX_LEVEL,
+  TERRAIN_QUADTREE_MIN_LEVEL,
+  TERRAIN_RELIEF_MODEL_LEVEL
+} from './terrainQuadtreeSelect'
 import { MidbandEnvelopeGrid } from './midbandEnvelopeGrid'
 import { MidbandField, type MidbandEnvelope, type MidbandSample } from './midbandField'
+import { BedrockField } from './bedrockField'
+import { BedrockSlope } from './bedrockSlope'
 import { MIDBAND_DEFAULTS, midbandCacheKey, midbandWavelengthMeters, type MidbandParams } from './midbandParams'
 
 /**
@@ -213,6 +220,7 @@ class TerrainHeightField {
   private readonly clearanceGridWidth: number
   private readonly clearanceGridHeight: number
   public readonly maxClearanceMeters: number
+  private readonly mapMaxClearanceMeters: number
   private readonly levelErrorMeters: Float64Array
   /** Блок ε-пирамиды в текселях (`terrainBlockTexels`) — тот же закон в билдере и в экстраполяции глубже модели. */
   private readonly block: number
@@ -231,6 +239,7 @@ class TerrainHeightField {
    * граница для интервалов, охватывающих много текселей.
    */
   public readonly maxSagMeters: number
+  private readonly mapMaxSagMeters: number
   /**
    * Длина экваториального текселя в метрах; масштаб исходной DEM.
    */
@@ -311,6 +320,8 @@ class TerrainHeightField {
    * готовой по-карте пирамиды при ЧТЕНИИ, см. `midbandErrorTable` ниже).
    */
   public readonly midband: MidbandField | null
+  public readonly bedrock: BedrockField | null
+  private readonly bedrockSlope: BedrockSlope | null
   private readonly envelopeGrid: MidbandEnvelopeGrid | null
   private readonly collisionBounds: TerrainCollisionBounds
   /** maxMeters карты + честная верхняя оценка амплитуды полосы (0 без полосы). */
@@ -363,6 +374,8 @@ class TerrainHeightField {
     this.clearanceCellEquatorArcMeters = (TWO_PI * radiusKm * 1000) / aux.blocksX
     this.maxClearanceMeters = aux.maxClearanceMeters
     this.maxSagMeters = aux.maxSagMeters
+    this.mapMaxClearanceMeters = aux.maxClearanceMeters
+    this.mapMaxSagMeters = aux.maxSagMeters
     this.levelErrorMeters = aux.levelErrorMeters
     this.block = block
     this.hurst = terrainHurst(
@@ -372,33 +385,43 @@ class TerrainHeightField {
     this.nodeMaxHeightMetersPyramid = aux.nodeMaxHeightMetersPyramid
     this.nodeErrorMetersPyramid = aux.nodeErrorMetersPyramid
 
+    this.bedrock = midbandParams.bedrockStrength > 0 ? new BedrockField(midbandParams, radiusKm * 1000) : null
+    this.bedrockSlope =
+      this.bedrock === null
+        ? null
+        : new BedrockSlope((u, v) => this.sampleMeters(u, v), map.width, map.height, radiusKm * 1000, {
+            min: map.minMeters,
+            max: map.maxMeters
+          })
+    this.maxClearanceMeters += 2 * (this.bedrock?.maxAmplitudeMeters ?? 0)
+    this.maxSagMeters += 2 * (this.bedrock?.maxAmplitudeMeters ?? 0)
     if (midbandParams.midbandStrength > 0) {
-      // λ < 2·шага L8: на самом мелком уровне вес уже < 1 — октава алиасит везде, не строится
+      // Спектр прежней L8-поверхности фиксирован: более плотная сетка не
+      // добавляет новые октавы и сохраняет канон высоты/коллизий/теней.
       this.midband = new MidbandField(
         midbandParams,
         midbandWavelengthMeters(this.equatorTexelMeters, midbandParams),
         radiusKm * 1000,
-        (2 * (TWO_PI * radiusKm * 1000)) / terrainEquatorSegmentsAtLevel(TERRAIN_QUADTREE_MAX_LEVEL)
-      )
-      this.envelopeGrid = new MidbandEnvelopeGrid(
-        (u, v) => this.sampleMeters(u, v),
-        map.width,
-        map.height,
-        radiusKm * 1000
+        (2 * (TWO_PI * radiusKm * 1000)) / terrainEquatorSegmentsAtLevel(TERRAIN_RELIEF_MODEL_LEVEL)
       )
     } else {
       this.midband = null
-      this.envelopeGrid = null
     }
-    this.maxHeightWithMidbandMeters = map.maxMeters + (this.midband?.maxAmplitudeMeters ?? 0)
+    this.envelopeGrid =
+      this.midband !== null
+        ? new MidbandEnvelopeGrid((u, v) => this.sampleMeters(u, v), map.width, map.height, radiusKm * 1000)
+        : null
+    this.maxHeightWithMidbandMeters = map.maxMeters + this.midbandMaxAmplitudeMeters
     this.collisionBounds = new TerrainCollisionBounds({
       map,
       radiusMeters: radiusKm * 1000,
-      maxSagMeters: this.maxSagMeters,
+      maxSagMeters: aux.maxSagMeters,
       marginMeters: CLEARANCE_MARGIN_METERS,
       sampleMap: (u, v) => this.sampleMeters(u, v),
       sampleSag: (u, v) => this.sampleSag(u, v),
       midband: this.midband,
+      bedrock: this.bedrock,
+      bedrockSlope: this.bedrockSlope,
       envelope: this.envelopeGrid,
       params: midbandParams
     })
@@ -409,7 +432,9 @@ class TerrainHeightField {
     const midbandErrorTable = new Float64Array(TERRAIN_QUADTREE_MAX_LEVEL + 1)
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       const stepMeters = (TWO_PI * radiusKm * 1000) / terrainEquatorSegmentsAtLevel(level)
-      midbandErrorTable[level] = this.midband ? this.midband.residualAmplitudeMeters(stepMeters) : 0
+      midbandErrorTable[level] =
+        (this.midband?.residualAmplitudeMeters(stepMeters) ?? 0) +
+        (this.bedrock?.residualAmplitudeMeters(stepMeters) ?? 0)
     }
     this.midbandErrorTable = midbandErrorTable
   }
@@ -481,8 +506,8 @@ class TerrainHeightField {
     return {
       blocksX: this.clearanceGridWidth,
       blocksY: this.clearanceGridHeight,
-      maxClearanceMeters: this.maxClearanceMeters,
-      maxSagMeters: this.maxSagMeters,
+      maxClearanceMeters: this.mapMaxClearanceMeters,
+      maxSagMeters: this.mapMaxSagMeters,
       clearanceGrid: this.clearanceGrid,
       levelErrorMeters: this.levelErrorMeters,
       nodeMaxHeightMetersPyramid: this.nodeMaxHeightMetersPyramid,
@@ -561,18 +586,20 @@ class TerrainHeightField {
 
   /** Полная амплитуда полосы, метры (0 без полосы). */
   public get midbandMaxAmplitudeMeters(): number {
-    return this.midband?.maxAmplitudeMeters ?? 0
+    return (this.midband?.maxAmplitudeMeters ?? 0) + (this.bedrock?.maxAmplitudeMeters ?? 0)
   }
 
   /**
    * Высота И наклон полосы одним вызовом по УЖЕ посчитанному uv — единственная
    * точка входа (heightMeters/midbandTilt и мешер зовут её, второй dirToUv не
-   * нужен нигде). Нули при отключённой полосе (`midband === null`).
+   * нужен нигде). Нули, когда отключены и шум, и геометрические уступы.
    * `stepMeters` — шаг вершин уровня, по нему взвешены октавы; 0 — вся полоса.
    * `withTilt` — нужен ли наклон: производная огибающей стоит четырёх выборок
    * сетки и карты, высоте (коллизия) она не нужна.
    * `parentOut` (при `parentStepMeters >= 0`) — та же полоса на шаге родителя, что дал бы
    * отдельный вызов, но тем же проходом шума.
+   * `splitMapSlope` — мешер передаёт DEM-отклик уступов отдельно, чтобы
+   * шейдер применил его к своему фильтрованному уклону карты.
    */
   public midbandSample(
     dir: Vector3,
@@ -583,8 +610,13 @@ class TerrainHeightField {
     stepMeters: number = 0,
     withTilt: boolean = true,
     parentStepMeters: number = -1,
-    parentOut: MidbandSample | null = null
+    parentOut: MidbandSample | null = null,
+    splitMapSlope = false
   ): MidbandSample {
+    if (splitMapSlope) {
+      out.mapSlopeScale = 0
+      if (parentOut !== null) parentOut.mapSlopeScale = 0
+    }
     if (this.midband === null || this.envelopeGrid === null) {
       if (parentOut !== null) {
         parentOut.heightMeters = 0
@@ -600,6 +632,19 @@ class TerrainHeightField {
       out.octaveWeightSum = 0
       out.envelope = 0
 
+      if (this.bedrock !== null)
+        this.addBedrockSample(
+          dir,
+          u,
+          v,
+          mapMeters,
+          out,
+          stepMeters,
+          withTilt,
+          parentStepMeters,
+          parentOut,
+          splitMapSlope
+        )
       return out
     }
 
@@ -621,26 +666,71 @@ class TerrainHeightField {
       }
     }
 
-    return this.midband.sample(
-      dir.x,
-      dir.y,
-      dir.z,
-      env,
-      mapMeters,
-      out,
-      stepMeters,
-      gradE,
-      gradN,
-      parentStepMeters,
-      parentOut
-    )
+    this.midband.sample(dir.x, dir.y, dir.z, env, mapMeters, out, stepMeters, gradE, gradN, parentStepMeters, parentOut)
+    if (this.bedrock !== null)
+      this.addBedrockSample(dir, u, v, mapMeters, out, stepMeters, withTilt, parentStepMeters, parentOut, splitMapSlope)
+    return out
+  }
+
+  private addBedrockSample(
+    dir: Vector3,
+    u: number,
+    v: number,
+    mapMeters: number,
+    out: MidbandSample,
+    stepMeters: number,
+    withTilt: boolean,
+    parentStepMeters = -1,
+    parentOut: MidbandSample | null = null,
+    splitMapSlope = false
+  ): void {
+    const layer = this.bedrock!
+    const cosLat = Math.hypot(dir.x, dir.z)
+    const slope = this.bedrockSlope!.sample(u, v, cosLat)
+    let mapE = 0,
+      mapN = 0,
+      heightE = mapMeters,
+      heightN = mapMeters,
+      slopeE = slope,
+      slopeN = slope,
+      cosN = cosLat
+    if (withTilt && cosLat > 1e-8) {
+      const radius = this.radiusKm * 1000
+      const du = ENVELOPE_GRAD_STEP_METERS / (2 * Math.PI * radius * cosLat)
+      const dv = ENVELOPE_GRAD_STEP_METERS / (Math.PI * radius)
+      heightE = this.sampleMeters(u + du, v)
+      heightN = this.sampleMeters(u, v - dv)
+      mapE = (heightE - mapMeters) / ENVELOPE_GRAD_STEP_METERS
+      mapN = (heightN - mapMeters) / ENVELOPE_GRAD_STEP_METERS
+      cosN = Math.max(
+        0,
+        cosLat * Math.cos(ENVELOPE_GRAD_STEP_METERS / radius) - dir.y * Math.sin(ENVELOPE_GRAD_STEP_METERS / radius)
+      )
+      slopeE = this.bedrockSlope!.sample(u + du, v, cosLat)
+      slopeN = this.bedrockSlope!.sample(u, v - dv, cosN)
+    }
+    const count = parentOut !== null && parentStepMeters >= 0 ? 2 : 1
+    for (let sampleIndex = 0; sampleIndex < count; sampleIndex++) {
+      const target = sampleIndex === 0 ? out : parentOut!
+      const step = sampleIndex === 0 ? stepMeters : parentStepMeters
+      const envelope = layer.envelope(slope, mapMeters, cosLat, step)
+      const gradE = withTilt
+        ? (layer.envelope(slopeE, heightE, cosLat, step) - envelope) / ENVELOPE_GRAD_STEP_METERS
+        : 0
+      const gradN = withTilt ? (layer.envelope(slopeN, heightN, cosN, step) - envelope) / ENVELOPE_GRAD_STEP_METERS : 0
+      layer.addSample(dir, mapMeters, envelope, mapE, mapN, gradE, gradN, target, withTilt, splitMapSlope)
+      if (envelope > 0) {
+        target.envelope = Math.max(target.envelope, envelope)
+        target.octaveWeightSum = Math.max(target.octaveWeightSum, 1)
+      }
+    }
   }
 
   private envelopeAt(u: number, v: number): number {
     return this.midband!.envelope(this.envelopeGrid!.sample(u, v, this.envGradScratch), this.sampleMeters(u, v))
   }
 
-  /** Канон высоты: карта + средняя полоса (`null` — полоса выключена, бит-в-бит карта). */
+  /** Канон высоты: карта + средняя полоса + уступы; при обоих выключенных слоях — бит-в-бит карта. */
   public heightMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
     const base = this.sampleMeters(uv.x, uv.y)
@@ -664,6 +754,13 @@ class TerrainHeightField {
     const uv = this.dirToUv(dir, this.uvScratch)
 
     return this.sampleMeters(uv.x, uv.y)
+  }
+
+  public bedrockTalusCoverage(dir: Vector3): number {
+    if (!this.bedrock || !this.bedrockSlope) return 0
+    const uv = this.dirToUv(dir, this.uvScratch)
+    return this.bedrock.talusCoverage(dir, this.sampleMeters(uv.x, uv.y),
+      this.bedrockSlope.sample(uv.x, uv.y, Math.hypot(dir.x, dir.z)))
   }
 
   /** Наклон полосы (tan) в местном базисе E/N точки; `(0, 0)` без полосы. `stepMeters` — шаг вершин уровня, 0 — вся полоса. */
@@ -696,7 +793,7 @@ class TerrainHeightField {
   public clearanceMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
 
-    return this.sampleClearance(uv.x, uv.y)
+    return this.sampleClearance(uv.x, uv.y) + this.collisionBounds.bedrockSagMeters(dir)
   }
 
   /**
@@ -761,7 +858,7 @@ class TerrainHeightField {
   public sagMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
 
-    return this.sampleSag(uv.x, uv.y)
+    return this.sampleSag(uv.x, uv.y) + this.collisionBounds.bedrockSagMeters(dir)
   }
 
   private sampleSag(u: number, v: number): number {
@@ -895,7 +992,7 @@ class TerrainHeightField {
   }
 
   /**
-   * Нормаль поверхности из градиента карты — для скольжения камеры. Метрический
+   * Нормаль карты с геометрическими уступами — для скольжения камеры. Метрический
    * базис по-восточному расширяется как в slope-энкодере: у полюсов ±1 тексель
    * усиливал бы квантование высот в 1/cos раз.
    */
@@ -916,12 +1013,26 @@ class TerrainHeightField {
     const texelArc = (2 * Math.PI * radiusMeters * cosLat) / width
     const northArc = (Math.PI * radiusMeters) / height
 
-    const gradEast =
+    let gradEast =
       (this.sampleMeters(uv.x + span / width, uv.y) - this.sampleMeters(uv.x - span / width, uv.y)) /
       (2 * span * texelArc)
-    const gradNorth =
+    let gradNorth =
       (this.sampleMeters(uv.x, uv.y - 1 / height) - this.sampleMeters(uv.x, uv.y + 1 / height)) / (2 * northArc)
 
+    if (this.bedrock !== null) {
+      // Bedrock deforms the local DEM gradient. Combining it with a texel-smoothed
+      // base can reverse the normal at a flat-to-steep DEM kink.
+      const map = this.sampleMeters(uv.x, uv.y)
+      const du = ENVELOPE_GRAD_STEP_METERS / (2 * Math.PI * radiusMeters * cosLat)
+      const dv = ENVELOPE_GRAD_STEP_METERS / (Math.PI * radiusMeters)
+      gradEast = (this.sampleMeters(uv.x + du, uv.y) - map) / ENVELOPE_GRAD_STEP_METERS
+      gradNorth = (this.sampleMeters(uv.x, uv.y - dv) - map) / ENVELOPE_GRAD_STEP_METERS
+      const bed = this.midbandSampleScratch
+      bed.heightMeters = bed.tiltE = bed.tiltN = bed.envelope = bed.octaveWeightSum = 0
+      this.addBedrockSample(dir, uv.x, uv.y, map, bed, 0, true)
+      gradEast += bed.tiltE
+      gradNorth += bed.tiltN
+    }
     return out.copy(dir).addScaledVector(east, -gradEast).addScaledVector(north, -gradNorth).normalize()
   }
 

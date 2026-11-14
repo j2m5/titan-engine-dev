@@ -206,7 +206,7 @@ describe('TerrainPatchPool', () => {
   it('слот рельефа несёт morphDelta/midTiltParent/midShadeParent и инстансный patchMorph; слот воды — нет', () => {
     const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 'terrain', 4).acquire()!
     const count = terrainPatchVertexCount(SEGMENTS)
-    for (const [name, itemSize] of [['morphDelta', 3], ['midTiltParent', 2], ['midShadeParent', 2]] as const) {
+    for (const [name, itemSize] of [['morphDelta', 3], ['midTiltParent', 3], ['midShadeParent', 2]] as const) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       expect(attr.itemSize).toBe(itemSize)
       expect(attr.count).toBe(count)
@@ -325,11 +325,11 @@ describe('TerrainPatchPool', () => {
   // acquire (см. докблок класса), pool.dispose() освобождает их и общий
   // индекс, но НЕ трогает слоты, которые вызывающий не release'нул —
   // это его ответственность (см. TerrainSphere.dispose)
-  it('геометрия слота несёт midTilt/midShade (vec2), все DynamicDrawUsage', () => {
+  it('геометрия слота несёт midTilt (vec3)/midShade (vec2), все DynamicDrawUsage', () => {
     const pool = makePool()
     const handle = pool.acquire()!
     const attrs: Array<[string, number]> = [
-      ['midTilt', 2],
+      ['midTilt', 3],
       ['midShade', 2]
     ]
     for (const [name, itemSize] of attrs) {

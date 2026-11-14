@@ -6,7 +6,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
-import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
+import { STEEP_DETAIL_PATHS, TALUS_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 import { detailTintNorm } from '@/core/terrain/detailTextureStats'
 import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
 import { resolveFrostParams } from '@/core/terrain/frostParams'
@@ -33,7 +33,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     morphDelta: [number, number, number]
     patchMorph: [number]
     midShadeParent: [number, number]
-    midTiltParent: [number, number]
+    midTilt: [number, number, number]
+    midTiltParent: [number, number, number]
   }
 
   /** Множитель полутени собственной тени рельефа (ручка данных) — читает syncTerrainShadow. */
@@ -59,7 +60,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
       morphDelta: [0, 0, 0],
       patchMorph: [0],
       midShadeParent: [0, 0],
-      midTiltParent: [0, 0]
+      midTilt: [0, 0, 0],
+      midTiltParent: [0, 0, 0]
     }
 
     // Steep-зона (чанк TerrainDetail): второй набор detail-сэмплеров и маска
@@ -79,11 +81,27 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     // Нормировка детальных наборов к их средним (detailTextureStats.ts), 1 = нет
     this.uniforms.uDetailTintNorm = new Uniform(new Vector2(1, 1))
     this.uniforms.uSteepTintNorm = new Uniform(new Vector2(1, 1))
+    this.uniforms.uTalusDiffMap = new Uniform(null)
+    this.uniforms.uTalusGate = new Uniform(0)
+    this.uniforms.uTalusTintNorm = new Uniform(detailTintNorm(TALUS_DETAIL_PATHS.diffuse, undefined).x)
 
     // Альбедо полосы B от её геометрии: гребни светлее, лощины темнее (ручка
     // пиксельная, в ключ кеша поля высот не входит). Гейт наклона fbm —
     // не юниформ, а доля октав уровня в атрибуте midShade.y.
     this.uniforms.uMidbandShade = new Uniform(midbandParamsOf(model).midbandShade)
+    const bedrock = midbandParamsOf(model)
+    this.uniforms.uBedrockShape = new Uniform(
+      new Vector4(
+        bedrock.bedrockStrength,
+        bedrock.bedrockStepMeters,
+        bedrock.bedrockWeathering,
+        this.uniforms.uBodyRadiusMeters.value
+      )
+    )
+    this.uniforms.uBedrockWater = new Uniform(
+      new Vector2(bedrock.waterLevelMeters ?? 0, bedrock.waterLevelMeters === null ? 0 : 1)
+    )
+    this.uniforms.uBedrockFade = new Uniform(new Vector2(toThreeJSUnits(1.5), toThreeJSUnits(4)))
   }
 
   /** Полутень тени рельефа (пол и ручка мягкости) и тени кольца (честный тангенс) — один тангенс солнца. */
@@ -191,6 +209,12 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     this.uniforms.uDetailArmMap.value = detailArmMap ?? null
     this.uniforms.uDetailNor2Map.value = detailNor2Map ?? null
     this.uniforms.uDetailLayerGates.value.set(detailArmMap ? 1 : 0, detailDiffMap ? 1 : 0, detailNor2Map ? 1 : 0)
+    const talusDiffuse = resourceStorage.getTexture(TALUS_DETAIL_PATHS.diffuse)
+    const grainPath = this.model.resources.where('resourceType', 'detailNormal2').first()?.getAttribute('path')
+    const bedrockShape = this.uniforms.uBedrockShape.value as Vector4
+    const talusConfigured = bedrockShape.x > 0 && bedrockShape.z > 0 && grainPath === TALUS_DETAIL_PATHS.normal
+    this.uniforms.uTalusDiffMap.value = talusDiffuse ?? null
+    this.uniforms.uTalusGate.value = talusConfigured && detailNor2Map && talusDiffuse ? 1 : 0
 
     // Нормировка к средним файлов: деталь модулирует альбедо вокруг 1, а не
     // умножает на среднюю яркость набора (иначе тело темнеет по мере fade-in)
@@ -202,10 +226,10 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     ;(this.uniforms.uDetailTintNorm.value as Vector2).set(nativeNorm.x, nativeNorm.y)
     ;(this.uniforms.uSteepTintNorm.value as Vector2).set(steepNorm.x, steepNorm.y)
 
-    // Steep-зона: rocky_trail поверх крутых склонов любого терраформного тела
+    // Steep-зона: отдельная скальная порода на крутых склонах терраформного тела
     // (см. STEEP_DETAIL_PATHS). Гейт открыт только когда набор полный (все три
-    // текстуры доехали) И родной detailDiffuse тела — не сам steep-набор (у
-    // Луны родной набор уже rocky_trail, второй проход был бы двойной выборкой).
+    // текстуры доехали) И родной detailDiffuse тела — не сам steep-набор
+    // (при совпадении второй проход был бы двойной выборкой).
     const steepNorMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.normal)
     const steepArmMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.arm)
     const steepDiffMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.diffuse)
@@ -270,6 +294,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     return {
       ...(useSlope && { USE_SLOPE: '1' }),
       ...(USE_TERRAIN_DETAIL && { USE_TERRAIN_DETAIL: '1' }),
+      ...(USE_TERRAIN_DETAIL && talusConfigured && { USE_TERRAIN_TALUS: '1' }),
       // Гейт: тот же slope, что USE_SLOPE (без него канал B недоступен), И
       // ненулевая ручка — при cavityStrength 0 путь бит-в-бит прежним.
       ...(useSlope && cavityStrength > 0 && { USE_CAVITY: '1' }),
@@ -317,6 +342,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     this.uniforms.uSteepArmMap.value = null
     this.uniforms.uSteepDiffMap.value = null
     this.uniforms.uSteepGate.value = 0
+    this.uniforms.uTalusDiffMap.value = null
+    this.uniforms.uTalusGate.value = 0
 
     this.unsubscribeShadowReady?.()
     this.unsubscribeShadowReady = null

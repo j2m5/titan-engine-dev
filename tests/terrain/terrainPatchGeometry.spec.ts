@@ -484,7 +484,7 @@ describe('buildTerrainPatchGeometry: атрибут midTilt', () => {
     const { geometry, center } = buildAt(field, 11, 0, 1, 0)
     const pos = geometry.getAttribute('position')
     const tilt = geometry.getAttribute('midTilt')
-    expect(tilt.itemSize).toBe(2)
+    expect(tilt.itemSize).toBe(3)
     expect(tilt.count).toBe(pos.count)
     const expected = new Vector2()
     let nonZero = 0

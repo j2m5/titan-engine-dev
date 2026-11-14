@@ -16,19 +16,18 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
  * Steep-набор зон материала (задача 4 «Material Zones»): у терраформного тела
  * с height-ресурсом и родным detailDiffuse ≠ STEEP_DETAIL_PATHS.diffuse
  * `collectCandidates` обязан добавить в кандидатов ТРИ синтетических пути
- * (rocky_trail_diff/nor/arm) с рангами 2.31/2.32/2.33 — тот же поток, что и
+ * (STEEP_DETAIL_PATHS) с рангами 2.31/2.32/2.33 — тот же поток, что и
  * у соседних `ResourceObserver*.spec.ts`: реальная БД, честный проход через
  * `closestChange`, без прямых вызовов приватных методов.
  *
  * Энцелад (ice-архетип) — тело с честным родным detail-набором, отличным от
- * steep. Луна (rocky-архетип) уже стримит сам steep-набор как родной
- * detailDiffuse — гейт обязан не дублировать его. Сатурн — легаси-гигант без
+ * steep. Луна (rocky-архетип) стримит грунт и отдельный скальный набор
+ * без дублирования запросов. Сатурн — легаси-гигант без
  * height-ресурса вовсе, steep-набору неоткуда взяться.
  */
 
 const SOLAR_SYSTEM = Scenarios.find((s) => s.rootId === 1)!
 const SIZE_8K: number = textureBytes(8192, 4096)
-
 
 function makeObserver(
   budgetBytes: number,
@@ -63,6 +62,24 @@ function makeObserver(
 }
 
 describe('ResourceObserver: steep-набор зон материала в кандидатах', () => {
+  it('Mars streams the shared talus color and grain normal once, alongside sand and cliffs', async () => {
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      const texture = new Texture()
+      texture.image = { width: 2048, height: 2048 }
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
+    observer.scenario = SOLAR_SYSTEM
+    data.set(observedActor('Mars').getAttribute('id')!, record('Mars', 10))
+    await handlers['ClosestChange'](record('Mars', 10))
+    const paths = load.mock.calls.map(([request]) => request.name)
+    expect(paths.filter((p) => p === 'terrain/rocky_trail_diff.webp')).toHaveLength(1)
+    expect(paths.filter((p) => p === 'terrain/rocky_trail_nor.webp')).toHaveLength(1)
+    expect(paths).toContain('terrain/sand_diff.webp')
+    expect(paths).toContain(STEEP_DETAIL_PATHS.diffuse)
+  })
+
   afterEach(() => {
     resourceStorage.deleteAllTextures()
   })
@@ -110,7 +127,7 @@ describe('ResourceObserver: steep-набор зон материала в кан
     expect(idxSteepDiffuse).toBeGreaterThan(idxSteepArm)
   })
 
-  it('Луна (rocky-архетип) — родной detail уже совпадает со steep-набором, дублей нет', async () => {
+  it('Луна — грунт и отдельный набор скал загружаются без дублей', async () => {
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
       const texture = new Texture()
       texture.image = { width: 2048, height: 1024 }
@@ -124,13 +141,32 @@ describe('ResourceObserver: steep-набор зон материала в кан
     data.set(observedActor('Moon').getAttribute('id')!, record('Moon', 10))
     await handlers['ClosestChange'](record('Moon', 10))
 
-    // Родной набор Луны: диффуз+slope+4 detail (уже rocky_trail-семейство) — 6 путей.
-    expect(load).toHaveBeenCalledTimes(6)
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/moon/moon.jpg' }), expect.any(AbortSignal))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/moon/moon_slope.webp' }), expect.any(AbortSignal))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }), expect.any(AbortSignal))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }), expect.any(AbortSignal))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }), expect.any(AbortSignal))
+    // Диффуз+slope+4 detail грунта и 3 общие карты скал.
+    expect(load).toHaveBeenCalledTimes(9)
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'planets/moon/moon.jpg' }),
+      expect.any(AbortSignal)
+    )
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'planets/moon/moon_slope.webp' }),
+      expect.any(AbortSignal)
+    )
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'terrain/rocky_trail_diff.webp' }),
+      expect.any(AbortSignal)
+    )
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }),
+      expect.any(AbortSignal)
+    )
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }),
+      expect.any(AbortSignal)
+    )
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }),
+      expect.any(AbortSignal)
+    )
 
     // Каждый путь запрошен ровно один раз — гейт не задвоил родной steep-набор.
     expect(resourceStorage.textures.where('name', STEEP_DETAIL_PATHS.diffuse).count()).toBe(1)
@@ -154,9 +190,21 @@ describe('ResourceObserver: steep-набор зон материала в кан
 
     // Только диффуз планеты — легаси-тело, ни height, ни steep-набора.
     expect(load).toHaveBeenCalledTimes(1)
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }), expect.any(AbortSignal))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }), expect.any(AbortSignal))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }), expect.any(AbortSignal))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }),
+      expect.any(AbortSignal)
+    )
+    expect(load).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: STEEP_DETAIL_PATHS.diffuse }),
+      expect.any(AbortSignal)
+    )
+    expect(load).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: STEEP_DETAIL_PATHS.normal }),
+      expect.any(AbortSignal)
+    )
+    expect(load).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: STEEP_DETAIL_PATHS.arm }),
+      expect.any(AbortSignal)
+    )
   })
 })

@@ -1,9 +1,15 @@
 import type { Actor } from '@/core/models/Actor'
 import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 
-/** Ручки геометрии средней полосы (арка B); дефолты глобальные, БД не трогается. */
+/** Параметры средней полосы и геометрических уступов; переопределяются данными тела. */
 export interface MidbandParams {
-  /** Множитель амплитуды; 0 — полоса выключена, поле = карта бит-в-бит. */
+  /** Сила геометрических уступов, [0,1]; 0 — отключены независимо от средней полосы. */
+  bedrockStrength: number
+  /** Вертикальный шаг пластов, метры. */
+  bedrockStepMeters: number
+  /** Сколы кромок и осыпь у подножия уступов, [0,1]. */
+  bedrockWeathering: number
+  /** Множитель амплитуды шума; 0 — шум выключен независимо от уступов. */
   midbandStrength: number
   /** Базовая длина волны, км; null — авто: clamp(1.2·тексель, 0.8, 3). */
   midbandWavelengthKm: number | null
@@ -24,6 +30,9 @@ export interface MidbandParams {
 }
 
 export const MIDBAND_DEFAULTS: MidbandParams = {
+  bedrockStrength: 0,
+  bedrockStepMeters: 800,
+  bedrockWeathering: 0,
   midbandStrength: 1,
   midbandWavelengthKm: null,
   midbandFlat: 0.15,
@@ -46,7 +55,8 @@ export function resolveMidbandParams(data: unknown, context: string): MidbandPar
   const num = (field: keyof MidbandParams, fallback: number): number => {
     const v = raw[field]
     if (v === undefined) return fallback
-    if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`midband ${context}: ${field} — не число: ${String(v)}`)
+    if (typeof v !== 'number' || !Number.isFinite(v))
+      throw new Error(`midband ${context}: ${field} — не число: ${String(v)}`)
     return v
   }
 
@@ -78,6 +88,9 @@ export function resolveMidbandParams(data: unknown, context: string): MidbandPar
   }
 
   const params: MidbandParams = {
+    bedrockStrength: num('bedrockStrength', MIDBAND_DEFAULTS.bedrockStrength),
+    bedrockStepMeters: num('bedrockStepMeters', MIDBAND_DEFAULTS.bedrockStepMeters),
+    bedrockWeathering: num('bedrockWeathering', MIDBAND_DEFAULTS.bedrockWeathering),
     midbandStrength: num('midbandStrength', MIDBAND_DEFAULTS.midbandStrength),
     midbandWavelengthKm,
     midbandFlat: num('midbandFlat', MIDBAND_DEFAULTS.midbandFlat),
@@ -89,12 +102,22 @@ export function resolveMidbandParams(data: unknown, context: string): MidbandPar
     midbandWaterFadeMeters
   }
 
-  if (params.midbandStrength < 0) throw new Error(`midband ${context}: midbandStrength должен быть >= 0: ${params.midbandStrength}`)
+  if (params.bedrockStrength < 0 || params.bedrockStrength > 1)
+    throw new Error(`terrain ${context}: bedrockStrength должен быть в [0,1]: ${params.bedrockStrength}`)
+  if (params.bedrockStepMeters <= 0)
+    throw new Error(`terrain ${context}: bedrockStepMeters должен быть > 0: ${params.bedrockStepMeters}`)
+  if (params.bedrockWeathering < 0 || params.bedrockWeathering > 1)
+    throw new Error(`terrain ${context}: bedrockWeathering должен быть в [0,1]: ${params.bedrockWeathering}`)
+  if (params.midbandStrength < 0)
+    throw new Error(`midband ${context}: midbandStrength должен быть >= 0: ${params.midbandStrength}`)
   if (params.midbandFlat < 0) throw new Error(`midband ${context}: midbandFlat должен быть >= 0: ${params.midbandFlat}`)
-  if (params.midbandSlopeRef <= 0) throw new Error(`midband ${context}: midbandSlopeRef должен быть > 0: ${params.midbandSlopeRef}`)
-  if (params.midbandRidge < 0) throw new Error(`midband ${context}: midbandRidge должен быть >= 0: ${params.midbandRidge}`)
+  if (params.midbandSlopeRef <= 0)
+    throw new Error(`midband ${context}: midbandSlopeRef должен быть > 0: ${params.midbandSlopeRef}`)
+  if (params.midbandRidge < 0)
+    throw new Error(`midband ${context}: midbandRidge должен быть >= 0: ${params.midbandRidge}`)
   if (params.midbandWarp < 0) throw new Error(`midband ${context}: midbandWarp должен быть >= 0: ${params.midbandWarp}`)
-  if (params.midbandShade < 0) throw new Error(`midband ${context}: midbandShade должен быть >= 0: ${params.midbandShade}`)
+  if (params.midbandShade < 0)
+    throw new Error(`midband ${context}: midbandShade должен быть >= 0: ${params.midbandShade}`)
 
   return params
 }
@@ -114,6 +137,9 @@ export function midbandWavelengthMeters(equatorTexelMeters: number, params: Midb
 /** Ключ кеша поля высот: midbandShade сюда НЕ входит — ручка пиксельная (альбедо в шейдере), геометрия от неё не зависит. */
 export function midbandCacheKey(params: MidbandParams): string {
   return [
+    params.bedrockStrength,
+    params.bedrockStepMeters,
+    params.bedrockWeathering,
     params.midbandStrength,
     params.midbandWavelengthKm ?? 'auto',
     params.midbandFlat,

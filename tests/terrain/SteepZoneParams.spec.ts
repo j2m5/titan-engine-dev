@@ -4,11 +4,11 @@ import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
 
 describe('STEEP_DETAIL_PATHS', () => {
-  it('универсальный «крутой» набор — ровно rocky_trail-тройка', () => {
+  it('универсальный скальный набор — тройка Cliff Side', () => {
     expect(STEEP_DETAIL_PATHS).toEqual({
-      diffuse: 'terrain/rocky_trail_diff.webp',
-      normal: 'terrain/rocky_trail_nor.webp',
-      arm: 'terrain/rocky_trail_arm.webp'
+      diffuse: 'terrain/cliff_side_diff.webp',
+      normal: 'terrain/cliff_side_nor.webp',
+      arm: 'terrain/cliff_side_arm.webp'
     })
   })
 })

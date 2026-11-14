@@ -28,6 +28,7 @@
     "cloud:manifest": "vite-node scripts/cloud-manifest.ts --",
     "cloud:sync": "vite-node scripts/cloud-sync.ts --",
     "build:archetype-set": "vite-node scripts/build-archetype-set.ts --",
+    "build:cliff-set": "vite-node scripts/build-cliff-set.ts --",
     "build:shape-models": "vite-node scripts/build-shape-models.ts --",
     "build:terrain-aux": "vite-node scripts/build-terrain-aux.ts --",
     "build:terrain-aux-all": "vite-node scripts/rebuild-terrain-aux.ts --",

@@ -46,13 +46,6 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     expect(helperBody).toContain('triplanarAlbedoDetiled(diff')
   })
 
-  it('бленд полосы перехода: нормали — whiteout последовательными весами (1-m)/m, ARM/диффуз — mix(a, b, m)', () => {
-    expect(terrainDetailFunctions).toContain('fade1 * (1.0 - m) * (nNative - nLocal)')
-    expect(terrainDetailFunctions).toContain('fade1 * m * (nSteep - nLocal)')
-    expect(terrainDetailFunctions).toContain('mix(aoNative, aoSteep, m)')
-    expect(terrainDetailFunctions).toContain('mix(tintNative, tintSteep, m)')
-  })
-
   it('шаблон декодирует tan уклона из основного slope-декода (не macroSlope) и передаёт его в applyTerrainDetail', () => {
     const frag: string = TerrainShaderTemplate.fragmentShader
     expect(frag).toContain('float terrainSlopeTan = 0.0;')
@@ -63,15 +56,15 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     expect(frag).toContain('terrainSlopeTan = length(terrainMapSlopeVec);')
     expect(frag).not.toContain('terrainSlopeVec')
     expect(slopeNormalFunctions).toContain(
-      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 mapSlopeOut)'
+      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec3 extraSlope, out vec2 mapSlopeOut)'
     )
     expect(slopeNormalFunctions).toContain('mapSlopeOut = decoded;')
     // bumpScale множит только декод карты; наклон полосы входит в нормаль как есть
-    expect(slopeNormalFunctions).toContain('vec2 slope = bumpScale * decoded + extraSlope;')
+    expect(slopeNormalFunctions).toContain('vec2 slope = bumpScale * decoded * (1.0 + extraSlope.z) + extraSlope.xy;')
     expect(slopeNormalFunctions).toContain('return normalize(surfNormal - (slope.x * T + slope.y * B));')
     expect(slopeNormalFunctions).not.toContain('bumpScale * (slope.x')
     expect(frag).toContain(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, talusCoverage, terrainRoughness);'
     )
 
     // terrainSlopeTan объявлен ДО #ifdef USE_SLOPE — имя в скоупе вызова

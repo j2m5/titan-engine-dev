@@ -141,7 +141,7 @@ function parentPositions(gridCount: number): Float64Array {
 export interface PatchMorphArrays {
   /** Родительская позиция минус своя, RTC-юниты патча, vec3 на вершину. */
   deltas: Float32Array
-  /** Родительский midTilt, vec2. */
+  /** Родительский midTilt: additive E/N plus bedrock DEM response, vec3. */
   midTilts: Float32Array
   /** Родительский midShade, vec2. */
   midShades: Float32Array
@@ -178,10 +178,10 @@ export function allocatePatchArrays(segments: number, withMorph = false, withBan
   return {
     positions: new Float32Array(n * 3),
     heights: withBand ? new Float32Array(n) : null,
-    midTilts: withBand ? new Float32Array(n * 2) : null,
+    midTilts: withBand ? new Float32Array(n * 3) : null,
     midShades: withBand ? new Float32Array(n * 2) : null,
     morph: withMorph
-      ? { deltas: new Float32Array(n * 3), midTilts: new Float32Array(n * 2), midShades: new Float32Array(n * 2) }
+      ? { deltas: new Float32Array(n * 3), midTilts: new Float32Array(n * 3), midShades: new Float32Array(n * 2) }
       : null
   }
 }
@@ -235,7 +235,9 @@ export function applyPatchBounds(geometry: BufferGeometry, bounds: PatchBounds):
  * height — метры над референсом ТОЛЬКО по карте (без полосы) — фаза террас
  * средней полосы в шейдере; позиция вершины при этом несёт карту + полосу,
  * взвешенную по шагу вершин уровня (октаву короче шага сетка не несёт).
- * midTilt — наклон полосы (tan) в базисе восток/север вершины.
+ * midTilt.xy — добавочный наклон полосы (tan) в базисе восток/север;
+ * midTilt.z — bedrock-множитель уклона DEM минус 1. Фильтрованный уклон
+ * карты умножается в шейдере, не смешивается с её локальной производной.
  * midShade — геометрия полосы для затенения: x — высота полосы в долях её
  * максимальной амплитуды (−1..1), y — доля октав уровня, взвешенная огибающей
  * (гейт пиксельного fbm: где полоса ЕСТЬ, fbm не дублирует её рельеф; у уреза
@@ -323,15 +325,16 @@ export function buildTerrainPatchArrays(
       // берут середины рёбер во втором проходе: цена полосы почти не растёт
       const even = parentPos !== null && a % 2 === 0 && b % 2 === 0
       const band = even
-        ? field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters, true, parentStep, parentScratch)
-        : field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters)
+        ? field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters, true, parentStep, parentScratch, true)
+        : field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters, true, -1, null, true)
       const heightMeters = mapMeters + band.heightMeters
       if (hasBand) {
         // Фаза террас — от высоты КАРТЫ: бугры полосы (до ~84 м при шаге 150 м)
         // рисовали бы замкнутые горизонтали вокруг каждого бугра
         heights[k] = mapMeters
-        midTilts[k * 2] = band.tiltE
-        midTilts[k * 2 + 1] = band.tiltN
+        midTilts[k * 3] = band.tiltE
+        midTilts[k * 3 + 1] = band.tiltN
+        midTilts[k * 3 + 2] = band.mapSlopeScale ?? 0
         midShades[k * 2] = maxAmplitude > 0 ? band.heightMeters / maxAmplitude : 0
         // доля октав, взвешенная огибающей: у уреза воды и на равнине (flat 0.15)
         // пиксельный fbm остаётся, на склонах полоса вытесняет его
@@ -348,8 +351,9 @@ export function buildTerrainPatchArrays(
         parentPos[k * 3] = dir.x * rP - center.x
         parentPos[k * 3 + 1] = dir.y * rP - center.y
         parentPos[k * 3 + 2] = dir.z * rP - center.z
-        morphArrays.midTilts[k * 2] = parentScratch.tiltE
-        morphArrays.midTilts[k * 2 + 1] = parentScratch.tiltN
+        morphArrays.midTilts[k * 3] = parentScratch.tiltE
+        morphArrays.midTilts[k * 3 + 1] = parentScratch.tiltN
+        morphArrays.midTilts[k * 3 + 2] = parentScratch.mapSlopeScale ?? 0
         morphArrays.midShades[k * 2] = maxAmplitude > 0 ? parentScratch.heightMeters / maxAmplitude : 0
         morphArrays.midShades[k * 2 + 1] = parentScratch.octaveWeightSum * Math.min(1, parentScratch.envelope)
       }
@@ -379,8 +383,9 @@ export function buildTerrainPatchArrays(
           deltas[k * 3] = (parentPos[n1 * 3] + parentPos[n2 * 3]) / 2 - positions[k * 3]
           deltas[k * 3 + 1] = (parentPos[n1 * 3 + 1] + parentPos[n2 * 3 + 1]) / 2 - positions[k * 3 + 1]
           deltas[k * 3 + 2] = (parentPos[n1 * 3 + 2] + parentPos[n2 * 3 + 2]) / 2 - positions[k * 3 + 2]
-          tiltsP[k * 2] = (tiltsP[n1 * 2] + tiltsP[n2 * 2]) / 2
-          tiltsP[k * 2 + 1] = (tiltsP[n1 * 2 + 1] + tiltsP[n2 * 2 + 1]) / 2
+          tiltsP[k * 3] = (tiltsP[n1 * 3] + tiltsP[n2 * 3]) / 2
+          tiltsP[k * 3 + 1] = (tiltsP[n1 * 3 + 1] + tiltsP[n2 * 3 + 1]) / 2
+          tiltsP[k * 3 + 2] = (tiltsP[n1 * 3 + 2] + tiltsP[n2 * 3 + 2]) / 2
           shadesP[k * 2] = (shadesP[n1 * 2] + shadesP[n2 * 2]) / 2
           shadesP[k * 2 + 1] = (shadesP[n1 * 2 + 1] + shadesP[n2 * 2 + 1]) / 2
         }
@@ -413,8 +418,9 @@ export function buildTerrainPatchArrays(
       heights[skirtIndex] = heights[edgeIndex]
 
       // юбка несёт наклон полосы своей кромочной вершины
-      midTilts[skirtIndex * 2] = midTilts[edgeIndex * 2]
-      midTilts[skirtIndex * 2 + 1] = midTilts[edgeIndex * 2 + 1]
+      midTilts[skirtIndex * 3] = midTilts[edgeIndex * 3]
+      midTilts[skirtIndex * 3 + 1] = midTilts[edgeIndex * 3 + 1]
+      midTilts[skirtIndex * 3 + 2] = midTilts[edgeIndex * 3 + 2]
 
       // юбка несёт геометрию полосы своей кромочной вершины
       midShades[skirtIndex * 2] = midShades[edgeIndex * 2]
@@ -427,8 +433,9 @@ export function buildTerrainPatchArrays(
       deltas[skirtIndex * 3] = deltas[edgeIndex * 3]
       deltas[skirtIndex * 3 + 1] = deltas[edgeIndex * 3 + 1]
       deltas[skirtIndex * 3 + 2] = deltas[edgeIndex * 3 + 2]
-      tiltsP[skirtIndex * 2] = tiltsP[edgeIndex * 2]
-      tiltsP[skirtIndex * 2 + 1] = tiltsP[edgeIndex * 2 + 1]
+      tiltsP[skirtIndex * 3] = tiltsP[edgeIndex * 3]
+      tiltsP[skirtIndex * 3 + 1] = tiltsP[edgeIndex * 3 + 1]
+      tiltsP[skirtIndex * 3 + 2] = tiltsP[edgeIndex * 3 + 2]
       shadesP[skirtIndex * 2] = shadesP[edgeIndex * 2]
       shadesP[skirtIndex * 2 + 1] = shadesP[edgeIndex * 2 + 1]
     }
@@ -510,11 +517,11 @@ export function buildTerrainPatchGeometry(
   geometry.instanceCount = 1
   geometry.setAttribute('position', new BufferAttribute(positions, 3))
   geometry.setAttribute('height', new BufferAttribute(heights, 1))
-  geometry.setAttribute('midTilt', new BufferAttribute(midTilts, 2))
+  geometry.setAttribute('midTilt', new BufferAttribute(midTilts, 3))
   geometry.setAttribute('midShade', new BufferAttribute(midShades, 2))
   if (arrays.morph !== null) {
     geometry.setAttribute('morphDelta', new BufferAttribute(arrays.morph.deltas, 3))
-    geometry.setAttribute('midTiltParent', new BufferAttribute(arrays.morph.midTilts, 2))
+    geometry.setAttribute('midTiltParent', new BufferAttribute(arrays.morph.midTilts, 3))
     geometry.setAttribute('midShadeParent', new BufferAttribute(arrays.morph.midShades, 2))
   }
   geometry.setAttribute('patchCenter', new InstancedBufferAttribute(new Float32Array([center.x, center.y, center.z]), 3))
