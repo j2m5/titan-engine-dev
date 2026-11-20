@@ -116,6 +116,25 @@ export function terrainBlockTexels(width: number): number {
   return Math.max(1, Math.round(width / CLEARANCE_GRID_BASE_SEGMENTS))
 }
 
+/** Resident auxiliary payload, including the fallback before it is computed. No DEM scan or allocation. */
+export function terrainAuxByteLength(map: Pick<HeightMapData, 'width' | 'height' | 'minMeters' | 'maxMeters' | 'aux'>): number {
+  const aux = map.aux
+  if (aux) {
+    return aux.clearanceGrid.byteLength + aux.levelErrorMeters.byteLength +
+      (aux.nodeMaxHeightMetersPyramid?.byteLength ?? 0) + (aux.nodeErrorMetersPyramid?.byteLength ?? 0)
+  }
+  const block = terrainBlockTexels(map.width)
+  const gridCells = Math.ceil(map.width / block) * Math.ceil(map.height / block)
+  const pyramidCells = map.minMeters === map.maxMeters ? 0 : CUBE_FACES * FACE_NODE_COUNT
+  return gridCells * Float32Array.BYTES_PER_ELEMENT +
+    (TERRAIN_MODEL_LEVEL + 1) * Float64Array.BYTES_PER_ELEMENT +
+    2 * pyramidCells * Float32Array.BYTES_PER_ELEMENT
+}
+
+// The fallback has the same map-only ownership as a baked companion. Field
+// variants retain their own radius/relief state, but share these large arrays.
+const computedAuxByMap = new WeakMap<HeightMapData, TerrainAuxPayload>()
+
 /**
  * Показатель самоподобия по двум окнам ε-пирамиды (2×2 и 1×1 блока): их
  * отношение = 2^H. Кламп [MIN, MAX]; вырожденные окна (плоская карта) → MAX.
@@ -365,7 +384,11 @@ class TerrainHeightField {
     // раньше. Это единственная развилка: дальше обе ветки неотличимы.
     // ВАЖНО: computeAux читает карту через sampleMeters/raw, не через
     // heightMeters — полоса ниже не должна задваиваться в ε/клиренсе.
-    const aux: TerrainAuxPayload = map.aux ?? this.computeAux(block)
+    let aux = map.aux ?? computedAuxByMap.get(map)
+    if (!aux) {
+      aux = this.computeAux(block)
+      computedAuxByMap.set(map, aux)
+    }
 
     this.usedBakedAux = map.aux !== undefined
     this.clearanceGrid = aux.clearanceGrid

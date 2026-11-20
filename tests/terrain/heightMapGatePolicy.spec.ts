@@ -153,6 +153,14 @@ describe('decideHeightMaps: бюджет резидентных карт', () =>
     expect(decision.request).toEqual(['a.raw'])
   })
 
+  it('reserves auxiliary buffers for unknown maps before their first download', () => {
+    // Two largest DEM bodies fill this budget; their auxiliary data needs room too.
+    const decision = decideHeightMaps(
+      [candidate('a.raw', 30), candidate('b.raw', 20)], [], LOAD, RELEASE, () => undefined, 128 * MiB
+    )
+    expect(decision.request).toEqual(['a.raw'])
+  })
+
   it('бюджет не воскрешает то, что ниже порогов: сирота и дальнее тело отпускаются как прежде', () => {
     const decision = decideHeightMaps(
       [candidate('far.raw', 1)],
@@ -202,9 +210,9 @@ describe('decideHeightMaps: множитель копий карты', () => {
     expect(doubled.request).toEqual(['a.raw'])
   })
 
-  it('неизмеренный путь тоже множится: предполагаемые 64 МиБ × 2 копии', () => {
+  it('неизмеренный путь тоже множится: DEM и вспомогательные массивы × 2 копии', () => {
     const wide = (copies: number) =>
-      decideHeightMaps([candidate('a.raw', 30), candidate('b.raw', 20)], [], LOAD, RELEASE, () => undefined, 130 * MiB, copies)
+      decideHeightMaps([candidate('a.raw', 30), candidate('b.raw', 20)], [], LOAD, RELEASE, () => undefined, 150 * MiB, copies)
 
     expect(wide(1).request).toEqual(['a.raw', 'b.raw'])
     expect(wide(2).request).toEqual(['a.raw'])

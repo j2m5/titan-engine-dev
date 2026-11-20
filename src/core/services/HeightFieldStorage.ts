@@ -8,6 +8,7 @@ import {
   type TerrainAuxData,
   type TerrainAuxPayload
 } from '@/core/terrain/terrainAuxFormat'
+import { terrainAuxByteLength } from '@/core/terrain/TerrainHeightField'
 import { disposeTerrainShadowMap, disposeTerrainShadowMaps } from '@/core/terrain/terrainShadowMap'
 
 /**
@@ -78,10 +79,11 @@ class HeightFieldStorage {
   }
 
   /**
-   * Сколько heap занимает загруженная карта — тело плюс её запечённый
-   * компаньон, если он приехал (сетка провиса, ε-пирамида, пирамиды
-   * максимумов и шероховатости узлов — все четыре живут вью на буфере
-   * компаньона и памятью являются такой же, как само тело). `undefined` —
+   * Бюджет буферов загруженной карты — тело плюс вспомогательные массивы
+   * (сетка провиса, ε-пирамида, пирамиды максимумов и шероховатости узлов).
+   * Без компаньона резервируем их по размерам карты ДО построения поля:
+   * fallback займёт столько же памяти, а вычислять его ради оценки нельзя.
+   * `undefined` —
    * путь не загружен или в полёте: размер известен только по факту, и
    * политика бюджета считает такой путь по максимуму (см. ASSUMED_HEIGHT_MAP_BYTES).
    */
@@ -90,17 +92,7 @@ class HeightFieldStorage {
 
     if (!map) return undefined
 
-    const aux: TerrainAuxPayload | undefined = map.aux
-
-    return (
-      map.data.byteLength +
-      (aux === undefined
-        ? 0
-        : aux.clearanceGrid.byteLength +
-          aux.levelErrorMeters.byteLength +
-          (aux.nodeMaxHeightMetersPyramid?.byteLength ?? 0) +
-          (aux.nodeErrorMetersPyramid?.byteLength ?? 0))
-    )
+    return map.data.byteLength + terrainAuxByteLength(map)
   }
 
   /** Загруженные плюс летящие: то, за что гейт уже «заплатил». */

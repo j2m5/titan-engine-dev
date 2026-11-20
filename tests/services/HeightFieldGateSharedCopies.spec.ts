@@ -31,31 +31,41 @@ class RecordingWorker implements WorkerLike {
   }
   terminate(): void { this.state.fields.clear() }
   residentBytes(): number {
-    const buffers = new Set<ArrayBufferLike>()
-    for (const field of this.state.fields.values()) {
-      buffers.add(field.heightMap.data.buffer)
-      const aux = field.exportAux()
-      for (const value of [aux.clearanceGrid, aux.levelErrorMeters, aux.nodeMaxHeightMetersPyramid, aux.nodeErrorMetersPyramid]) {
-        if (value) buffers.add(value.buffer)
-      }
-    }
-    return [...buffers].reduce((sum, buffer) => sum + buffer.byteLength, 0)
+    return residentFieldBytes(this.state.fields.values())
   }
 }
 
 afterEach(() => { heightFieldStorage.clear(); vi.restoreAllMocks() })
 
+function residentFieldBytes(fields: Iterable<TerrainHeightField>): number {
+  const buffers = new Set<ArrayBufferLike>()
+  for (const field of fields) {
+    buffers.add(field.heightMap.data.buffer)
+    const aux = field.exportAux()
+    for (const value of [aux.clearanceGrid, aux.levelErrorMeters, aux.nodeMaxHeightMetersPyramid, aux.nodeErrorMetersPyramid]) {
+      if (value) buffers.add(value.buffer)
+    }
+  }
+  return [...buffers].reduce((sum, buffer) => sum + buffer.byteLength, 0)
+}
+
 it.each([
-  { variation: 'radius', sync: false, sharedFields: 3 },
-  { variation: 'same', sync: false, sharedFields: 1 },
-  { variation: 'midbandStrength', sync: false, sharedFields: 3 },
-  { variation: 'midbandShade', sync: false, sharedFields: 1 },
-  { variation: 'radius', sync: true, sharedFields: 3 }
-])('budgets actual shared-map copies for $variation (sync=$sync) and releases them', ({ variation, sync, sharedFields }) => {
+  { variation: 'radius', sync: false, sharedFields: 3, budgetCopies: 4 },
+  { variation: 'same', sync: false, sharedFields: 1, budgetCopies: 4 },
+  { variation: 'midbandStrength', sync: false, sharedFields: 3, budgetCopies: 4 },
+  { variation: 'midbandShade', sync: false, sharedFields: 1, budgetCopies: 4 },
+  { variation: 'radius', sync: true, sharedFields: 3, budgetCopies: 4 },
+  { variation: 'same', sync: false, sharedFields: 1, budgetCopies: 2 },
+  { variation: 'radius', sync: true, sharedFields: 3, budgetCopies: 1 }
+].flatMap(test => [true, false].map(baked => ({ ...test, baked }))))(
+  'budgets actual shared-map copies for $variation (sync=$sync,baked=$baked,budgetCopies=$budgetCopies) and releases them',
+  ({ variation, sync, sharedFields, budgetCopies, baked }) => {
   const mapBase: HeightMapData = {
     width: 128, height: 64, minMeters: 0, maxMeters: 1000, data: new Uint16Array(128 * 64).fill(32768)
   }
-  const mapA = { ...mapBase, aux: new TerrainHeightField(mapBase, 1000).exportAux() }
+  // Measure a separate reference so admission on mapA cannot reuse precomputed fallback buffers.
+  const reference = new TerrainHeightField(structuredClone(mapBase), 1000)
+  const mapA: HeightMapData = { ...mapBase, ...(baked ? { aux: reference.exportAux() } : {}) }
   const mapB = structuredClone(mapA)
   const sharedActor = Actor.find(19)!
   const bodies = [19, 22, 23].map((id, index) => {
@@ -79,8 +89,8 @@ it.each([
   expect(pathA).not.toBe(pathB)
   heightFieldStorage['maps'].set(pathA, mapA)
   heightFieldStorage['maps'].set(pathB, mapB)
-  const sizeA = heightFieldStorage.bytesOf(pathA)!, sizeB = heightFieldStorage.bytesOf(pathB)!
-  const budget = 2 * sizeA + 2 * sizeB
+  const fullMapBytes = residentFieldBytes([reference])
+  const budget = budgetCopies * fullMapBytes
   const oldBudget = terrain.terrain.heightMapBudgetMiB
   terrain.terrain.heightMapBudgetMiB = budget / 1024 / 1024
   const scene = new Scene(), observer = new SceneObserver(), worker = new RecordingWorker()
@@ -112,10 +122,11 @@ it.each([
         distance: index === 3 ? 10 : 1, position: new Vector3() })
     }
     gate.recompute()
-    const keepsBoth = sync || sharedFields === 1
+    const keepsBoth = (sync ? 2 : sharedFields + 3) <= budgetCopies
     expect(heightFieldStorage.heldPaths()).toEqual(keepsBoth ? [pathA, pathB] : [pathA])
     expect(worker.registrations).toBe(sync ? 0 : sharedFields + (keepsBoth ? 1 : 0))
-    expect(sizeA + (keepsBoth ? sizeB : 0) + worker.residentBytes()).toBeLessThanOrEqual(budget)
+    expect(residentFieldBytes(acquired.values()) + worker.residentBytes()).toBeLessThanOrEqual(budget)
+    expect(heightFieldStorage.bytesOf(pathA)).toBe(fullMapBytes)
     expect(worker.transferredBytes).toBe(worker.residentBytes())
     expect(mapA.data.byteLength).toBe(128 * 64 * 2)
 

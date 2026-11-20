@@ -277,8 +277,9 @@ describe('HeightFieldStorage: отмена и таймаут загрузки', 
         (path) => heightFieldStorage.bytesOf(path), 512 * 1024 * 1024, 2)
       for (const path of decision.release) heightFieldStorage.release(path)
       for (const path of decision.request) heightFieldStorage.request(path)
-      expect(heightFieldStorage.heldPaths()).toEqual(candidates.map((candidate) => candidate.path))
-      expect(signals.filter((signal) => !signal.aborted)).toHaveLength(8)
+      // The fourth 64 MiB DEM no longer fits after reserving auxiliary buffers and worker copies.
+      expect(heightFieldStorage.heldPaths()).toEqual(candidates.slice(0, 3).map((candidate) => candidate.path))
+      expect(signals.filter((signal) => !signal.aborted)).toHaveLength(6)
       await settle()
     }
   })
@@ -536,15 +537,45 @@ describe('HeightFieldStorage: учёт занятой памяти', () => {
     expect(heightFieldStorage.bytesOf(MAP_PATH)).toBeUndefined()
   })
 
-  it('без компаньона — ровно тело карты', async () => {
+  it('reserves computed auxiliary buffers when the optional companion is missing', async () => {
     stubFetch(validBody(), 200, null)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     heightFieldStorage.request(MAP_PATH)
     await settle()
 
-    expect(heightFieldStorage.bytesOf(MAP_PATH)).toBe(heightFieldStorage.get(MAP_PATH)!.data.byteLength)
+    const map = heightFieldStorage.get(MAP_PATH)!
+    const reserved = heightFieldStorage.bytesOf(MAP_PATH)
+    const aux = new TerrainHeightField(map, 1737.4).exportAux()
+    expect(reserved).toBe(map.data.byteLength + aux.clearanceGrid.byteLength + aux.levelErrorMeters.byteLength +
+      aux.nodeMaxHeightMetersPyramid!.byteLength + aux.nodeErrorMetersPyramid!.byteLength)
     warn.mockRestore()
+  })
+
+  it.each([
+    { width: 128, height: 64, minMeters: 0, maxMeters: 1000 },
+    { width: 17, height: 9, minMeters: 120, maxMeters: 120 },
+    { width: 2053, height: 7, minMeters: -20, maxMeters: 400 }
+  ])('predicts fallback buffers without reading DEM samples for %j', dimensions => {
+    const data = new Uint16Array(dimensions.width * dimensions.height).fill(32768)
+    let samplesRead = 0
+    const map: HeightMapData = { ...dimensions, data: new Proxy(data, {
+      get(target, key) {
+        if (typeof key === 'string' && /^\d+$/.test(key)) samplesRead++
+        return Reflect.get(target, key, target)
+      }
+    }) }
+    heightFieldStorage['maps'].set(MAP_PATH, map)
+    const reserved = heightFieldStorage.bytesOf(MAP_PATH)
+    expect(samplesRead).toBe(0)
+    expect(map.aux).toBeUndefined()
+    map.data = data
+    const field = new TerrainHeightField(map, 1737.4)
+    const aux = field.exportAux()
+    expect(reserved).toBe(data.byteLength + aux.clearanceGrid.byteLength + aux.levelErrorMeters.byteLength +
+      (aux.nodeMaxHeightMetersPyramid?.byteLength ?? 0) + (aux.nodeErrorMetersPyramid?.byteLength ?? 0))
+    expect(field.usedBakedAux).toBe(false)
+    expect(heightFieldStorage.bytesOf(MAP_PATH)).toBe(reserved)
   })
 
   it('с компаньоном — тело плюс запечённые блоки: они такая же резидентная память', async () => {
