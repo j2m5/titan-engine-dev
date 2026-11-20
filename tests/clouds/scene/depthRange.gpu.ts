@@ -7,6 +7,7 @@ import {
   NearestFilter,
   NoBlending,
   RawShaderMaterial,
+  Vector2,
   Vector3,
   WebGLRenderTarget,
   type WebGLRenderer
@@ -39,14 +40,19 @@ export function checkSceneCloudDepthRange(
     depthTest: false,
     depthWrite: false,
     blending: NoBlending,
-    uniforms: { centerDepthVelocity: { value: new Vector3() }, neighborDepthVelocity: { value: new Vector3() } },
+    uniforms: {
+      centerDepthVelocity: { value: new Vector3() },
+      neighborDepthVelocity: { value: new Vector3() },
+      probeCoord: { value: new Vector2() }
+    },
     fragmentShader: `precision highp float;
 uniform vec3 centerDepthVelocity, neighborDepthVelocity;
+uniform ivec2 probeCoord;
 layout(location = 0) out vec4 outputColor;
 layout(location = 1) out vec3 outputDepthVelocity;
 void main() {
   outputColor = vec4(0.25, 0.5, 0.75, 0.8);
-  bool center = all(equal(ivec2(gl_FragCoord.xy), ivec2(1, 1)));
+  bool center = all(equal(ivec2(gl_FragCoord.xy), probeCoord));
   outputDepthVelocity = center ? centerDepthVelocity : neighborDepthVelocity;
 }`
   })
@@ -65,13 +71,17 @@ void main() {
       depthTest: false,
       depthWrite: false,
       blending: NoBlending,
-      uniforms: { depthVelocityBuffer: { value: current.textures[1] } },
+      uniforms: {
+        depthVelocityBuffer: { value: current.textures[1] },
+        probeCoord: material.uniforms.probeCoord
+      },
       fragmentShader: `precision highp float;
 uniform sampler2D depthVelocityBuffer;
+uniform ivec2 probeCoord;
 layout(location = 0) out vec4 outputColor;
 ${offsets}
 ${kernel}
-void main() { outputColor = getClosestFragment(ivec2(1, 1)); }`
+void main() { outputColor = getClosestFragment(probeCoord); }`
     })
   )
   const motionA = [1 / 256, -1 / 512] as const
@@ -92,29 +102,52 @@ void main() { outputColor = getClosestFragment(ivec2(1, 1)); }`
   try {
     for (const [width, height] of [
       [3, 3],
-      [7, 5]
+      [7, 5],
+      [1, 1]
     ]) {
       current.setSize(width, height)
-      for (const fixture of cases) {
-        material.uniforms.centerDepthVelocity.value.set(fixture.center, ...motionA)
-        material.uniforms.neighborDepthVelocity.value.set(fixture.neighbor, ...motionB)
-        writer.render(renderer, null, current)
-        selector.render(renderer, null, selected)
-        const result = new Float32Array(4)
-        renderer.readRenderTargetPixels(selected, 0, 0, 1, 1, result)
-        check(
-          result[0] === Math.fround(fixture.want) && result[1] === fixture.motion[0] && result[2] === fixture.motion[1],
-          `${fixture.label} ${width}x${height}: closest depth/motion ${[...result.slice(0, 3)]}, ` +
-            `expected ${[Math.fround(fixture.want), ...fixture.motion]}`
-        )
-        const data = current.textures[1].type === FloatType ? new Float32Array(4) : new Uint16Array(4)
-        renderer.readRenderTargetPixels(current, 1, 1, 1, 1, data, undefined, 1)
-        const stored = data instanceof Float32Array ? [...data] : Array.from(data, DataUtils.fromHalfFloat)
-        check(
-          stored[0] === Math.fround(fixture.center),
-          `${fixture.label}: stored depth ${stored[0]} != ${fixture.center}`
-        )
-        check(stored[1] === motionA[0] && stored[2] === motionA[1], `${fixture.label}: stored motion is intact`)
+      const locations =
+        width === 1
+          ? [[0, 0]]
+          : [
+              [1, 1],
+              [0, 0],
+              [width - 1, 0],
+              [0, height - 1],
+              [width - 1, height - 1],
+              [1, 0],
+              [0, 1],
+              [width - 1, 1],
+              [1, height - 1]
+            ]
+      for (const [x, y] of locations) {
+        material.uniforms.probeCoord.value.set(x, y)
+        for (const fixture of cases) {
+          material.uniforms.centerDepthVelocity.value.set(fixture.center, ...motionA)
+          material.uniforms.neighborDepthVelocity.value.set(fixture.neighbor, ...motionB)
+          writer.render(renderer, null, current)
+          selector.render(renderer, null, selected)
+          const result = new Float32Array(4)
+          renderer.readRenderTargetPixels(selected, 0, 0, 1, 1, result)
+          // A 1x1 buffer contains only the center. At (0,0), the first
+          // clamped neighbor is the center, so it also wins equal-depth ties.
+          const wantDepth = width === 1 ? fixture.center : fixture.want
+          const wantMotion =
+            width === 1 || (x === 0 && y === 0 && fixture.center === fixture.neighbor) ? motionA : fixture.motion
+          check(
+            result[0] === Math.fround(wantDepth) && result[1] === wantMotion[0] && result[2] === wantMotion[1],
+            `${fixture.label} ${width}x${height} at (${x},${y}): closest depth/motion ${[...result.slice(0, 3)]}, ` +
+              `expected ${[Math.fround(wantDepth), ...wantMotion]}`
+          )
+          const data = current.textures[1].type === FloatType ? new Float32Array(4) : new Uint16Array(4)
+          renderer.readRenderTargetPixels(current, x, y, 1, 1, data, undefined, 1)
+          const stored = data instanceof Float32Array ? [...data] : Array.from(data, DataUtils.fromHalfFloat)
+          check(
+            stored[0] === Math.fround(fixture.center),
+            `${fixture.label}: stored depth ${stored[0]} != ${fixture.center}`
+          )
+          check(stored[1] === motionA[0] && stored[2] === motionA[1], `${fixture.label}: stored motion is intact`)
+        }
       }
     }
     check(renderer.getContext().getError() === 0, 'depth-range GPU check has no GL errors')

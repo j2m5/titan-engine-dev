@@ -1137,7 +1137,9 @@ The backend configures its final owned texture after quality/light-shaft setters
 have recreated targets. Nearest filtering avoids requiring float-linear support.
 The closest-depth selector starts with the first of its nine real samples,
 preserving tie order and handling giant-planet distances and the 1e30 clear-sky
-depth without the old 1e7 m search ceiling. Draw and sample counts are unchanged.
+depth without the old 1e7 m search ceiling. Coordinates are explicitly clamped
+to texture bounds: out-of-range integer fetches can otherwise supply zero depth and
+motion at viewport edges. Draw and sample counts are unchanged.
 
 This adds eight bytes per current-pass pixel: about 0.99 MiB at 1920×1080 High
 and 3.96 MiB at 3840×2160 High with 4× temporal upscaling on each axis. Lower
@@ -1145,6 +1147,7 @@ resolution presets use less memory. The GPU regression exercises the actual
 backend attachment and installed selector at all three qualities, after resize
 and history recreation, including near/far ordering, close distant depths,
 equal-depth ties, clear sky, and distances up to the giant profile's 5e8 m limit.
+It also covers all corners and edges, including a 1×1 current buffer.
 Whole-scene visual/FPS comparison requires the production assets; this fixture
 verifies stored depths and selected motion rather than an image-quality score.
 

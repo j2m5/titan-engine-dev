@@ -30,11 +30,13 @@ export function adaptSceneCloudTemporalResolve(source: string): string {
     `vec4 getClosestFragment(const ivec2 coord) {
   // Seed from the first sample, preserving tie order without a distance ceiling.
   // Giant cloud hits and clear-sky depths can exceed the old 1e7 metre sentinel.
-  vec4 result = texelFetchOffset(depthVelocityBuffer, coord, 0, neighborOffsets[0]);
+  // texelFetch ignores texture wrapping; clamp explicitly at viewport edges.
+  ivec2 maxCoord = textureSize(depthVelocityBuffer, 0) - ivec2(1);
+  vec4 result = texelFetch(depthVelocityBuffer, clamp(coord + neighborOffsets[0], ivec2(0), maxCoord), 0);
   vec4 neighbor;
   #pragma unroll_loop_start
   for (int i = 1; i < 9; i++) {
-    neighbor = texelFetchOffset(depthVelocityBuffer, coord, 0, neighborOffsets[i]);
+    neighbor = texelFetch(depthVelocityBuffer, clamp(coord + neighborOffsets[i], ivec2(0), maxCoord), 0);
     if (neighbor.r < result.r) {
       result = neighbor;
     }
