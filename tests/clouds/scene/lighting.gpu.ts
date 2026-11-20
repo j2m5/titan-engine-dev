@@ -42,6 +42,7 @@ import { checkSceneCloudSunShadow } from './sunShadow.gpu'
 import { checkSceneCloudSunShadowCulling } from './sunShadowCulling.gpu'
 import { checkSceneCloudReprojection } from './reprojection.gpu'
 import { checkSceneCloudCurrentOutput } from './currentOutput.gpu'
+import { checkSceneCloudDepthRange } from './depthRange.gpu'
 import { checkSceneCloudShadowOutput } from './shadowOutput.gpu'
 import { checkSceneCloudShadowNumerics } from './shadowNumerics.gpu'
 import { checkSceneCloudShadowEmptyRay } from './shadowEmptyRay.gpu'
@@ -327,7 +328,14 @@ void main() {
         (condition, label) => check(condition, `${quality}: ${label}`)
       )
       report.cases.push(`${quality}-shadow-ray-intervals`)
+      checkSceneCloudDepthRange(renderer, activeEffect(), (condition, label) =>
+        check(condition, `${quality}: ${label}`)
+      )
+      report.cases.push(`${quality}-depth-range`)
     }
+    backend!.resetHistory()
+    checkSceneCloudDepthRange(renderer, activeEffect(), check)
+    report.cases.push('reset-depth-range')
     checkSceneCloudShadowEmptyRay(
       activeEffect().shadowPass.currentMaterial.fragmentShader,
       activeEffect().shadowPass.resolveMaterial.fragmentShader,

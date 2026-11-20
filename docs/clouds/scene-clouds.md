@@ -1124,6 +1124,30 @@ WebGL warnings were confined to the existing intentional shader-failure windows;
 there were no unexpected WebGL errors. The final shadow implementation also
 passed independent code review. Testing on other hardware remains deferred.
 
+### Distant depth precision (2026-11-20)
+
+Scene clouds now keep the current depth/velocity attachment in RGBA32F. The
+packed raymarch already retains depth as float32; exporting it to RGBA16F lost
+ordering beyond 65,504 metres. Native AMD/ANGLE reproduced 100 km and 200 km
+hits both becoming 65,504 m, causing temporal resolve to select the farther
+neighbor's motion. Color and history remain half-float, and motion retains the
+existing half-float packing. Depth stays in metres, without encoding or scaling.
+
+The backend configures its final owned texture after quality/light-shaft setters
+have recreated targets. Nearest filtering avoids requiring float-linear support.
+The closest-depth selector starts with the first of its nine real samples,
+preserving tie order and handling giant-planet distances and the 1e30 clear-sky
+depth without the old 1e7 m search ceiling. Draw and sample counts are unchanged.
+
+This adds eight bytes per current-pass pixel: about 0.99 MiB at 1920×1080 High
+and 3.96 MiB at 3840×2160 High with 4× temporal upscaling on each axis. Lower
+resolution presets use less memory. The GPU regression exercises the actual
+backend attachment and installed selector at all three qualities, after resize
+and history recreation, including near/far ordering, close distant depths,
+equal-depth ties, clear sky, and distances up to the giant profile's 5e8 m limit.
+Whole-scene visual/FPS comparison requires the production assets; this fixture
+verifies stored depths and selected motion rather than an image-quality score.
+
 ### Paired shadow unpack (2026-10-24)
 
 The small shadow unpack pass now writes color and velocity together through two

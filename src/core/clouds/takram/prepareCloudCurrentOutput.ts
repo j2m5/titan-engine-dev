@@ -1,5 +1,6 @@
 import { ShaderPass } from 'postprocessing'
 import {
+  FloatType,
   GLSL3,
   HalfFloatType,
   NearestFilter,
@@ -22,7 +23,7 @@ function packedShader(source: string): string {
   ])
     source = replaceExactlyOnce(source, from, to, 'scene cloud packed output', from)
   // The wrapper also exports early returns (clear rays and diagnostic views).
-  // Keep depth as float32 until MRT export. Half packing can overflow large
+  // Keep depth as float32 through MRT export. Half packing can overflow large
   // depths on SwiftShader and contaminate the neighboring motion component.
   // Four half color channels + two half motion channels leave a full depth word.
   return `precision highp int;\n${source}
@@ -44,7 +45,8 @@ class CloudOutputUnpackPass extends ShaderPass {
 
 /** ANGLE/D3D11 specializes MRT output layouts on first draw, after parallel linking.
  * Export the expensive march to one integer attachment and leave MRT specialization
- * to a tiny unpack pass. Public half-float textures and temporal resolve stay intact.
+ * to a tiny unpack pass. Color stays half-float; depth/velocity uses float32 so
+ * distant depths remain ordered when temporal resolve selects their motion.
  */
 export function prepareCloudCurrentOutput(pass: ShaderPass, programCacheKey?: string) {
   if (installed.has(pass)) throw new Error('Scene cloud packed output already installed')
@@ -99,8 +101,13 @@ void main() {
   }
   material.needsUpdate = true
   pass.render = function (renderer, input, output, delta, stencil) {
-    if (!output || output.textures.length !== 2 || output.textures.some((texture) => texture.type !== HalfFloatType))
-      throw new Error('Scene cloud packed output requires two half-float attachments')
+    if (
+      !output ||
+      output.textures.length !== 2 ||
+      output.textures[0].type !== HalfFloatType ||
+      output.textures[1].type !== FloatType
+    )
+      throw new Error('Scene cloud packed output requires half-float color and float32 depth/velocity attachments')
     packed.setSize(output.width, output.height)
     originalRender.call(this, renderer, input, packed, delta, stencil)
     unpack.render(renderer, null, output)

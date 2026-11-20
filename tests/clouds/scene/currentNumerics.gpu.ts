@@ -1,8 +1,10 @@
 import { ShaderPass } from 'postprocessing'
 import {
   DataUtils,
+  FloatType,
   GLSL3,
   HalfFloatType,
+  NearestFilter,
   NoBlending,
   RawShaderMaterial,
   Vector2,
@@ -48,6 +50,8 @@ ${source.slice(start, end)}
   })
   const pass = new ShaderPass(material),
     target = new WebGLRenderTarget(1, 1, { count: 2, type: HalfFloatType, depthBuffer: false })
+  target.textures[1].type = FloatType
+  target.textures[1].minFilter = target.textures[1].magFilter = NearestFilter
   let binding: ReturnType<typeof prepareCloudCurrentOutput> | undefined
   const cases = [
     { interval: [2, 8], scene: 0, expected: [2, 8, 0, 0] },
@@ -66,9 +70,12 @@ ${source.slice(start, end)}
         pass.render(renderer, null, target)
         const invalid = interval.some(Number.isNaN)
         for (const attachment of [0, 1]) {
-          const data = new Uint16Array(4)
+          const data = attachment ? new Float32Array(4) : new Uint16Array(4)
           renderer.readRenderTargetPixels(target, 0, 0, 1, 1, data, undefined, attachment)
-          const actual = Array.from(data, DataUtils.fromHalfFloat).slice(0, attachment ? 3 : 4)
+          const actual = (data instanceof Float32Array ? [...data] : Array.from(data, DataUtils.fromHalfFloat)).slice(
+            0,
+            attachment ? 3 : 4
+          )
           const wanted = attachment ? (invalid ? [0, 0, 0] : [7, 8, 9]) : expected
           check(
             actual.every((value, i) => value === wanted[i]),

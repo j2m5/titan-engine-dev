@@ -1,7 +1,10 @@
 import { ShaderPass } from 'postprocessing'
 import {
+  DataUtils,
+  FloatType,
   GLSL3,
   HalfFloatType,
+  NearestFilter,
   NoBlending,
   RawShaderMaterial,
   Vector3,
@@ -11,10 +14,9 @@ import {
 } from 'three'
 import { prepareCloudCurrentOutput } from '@/core/clouds/takram/prepareCloudCurrentOutput'
 
-/** Compare the actual GPU export against the previous MRT half-float conversion.
- * Covers all seven channels, early returns, HDR, signed motion, half overflow and
- * odd viewport dimensions. Overflowing depth must not corrupt adjacent motion.
- * It does not duplicate the packing/unpacking formula.
+/** Preserve the previous half-float color/motion conversion while checking that
+ * depth survives as float32. Covers early returns, HDR, signed motion, depths
+ * beyond the half range and odd sizes, without copying the packing formula.
  */
 export function checkSceneCloudCurrentOutput(
   renderer: WebGLRenderer,
@@ -47,6 +49,9 @@ void main() {
   })
   const pass = new ShaderPass(material)
   const target = new WebGLRenderTarget(7, 5, { count: 2, type: HalfFloatType, depthBuffer: false })
+  const referenceTarget = target.clone()
+  target.textures[1].type = FloatType
+  target.textures[1].minFilter = target.textures[1].magFilter = NearestFilter
   const samples = [
     { color: [0.1, 0.5, 0.9, 0.3], depth: [1000, -0.25, 0.125] },
     { color: [12.5, -0.2, 65504, 1], depth: [1e30, 0.003, -0.0007] },
@@ -57,13 +62,14 @@ void main() {
     }))
   ]
   let binding: ReturnType<typeof prepareCloudCurrentOutput> | undefined
-  const render = (sample: (typeof samples)[number]): Uint16Array[] => {
+  const render = (sample: (typeof samples)[number], output: WebGLRenderTarget): Array<Uint16Array | Float32Array> => {
     material.uniforms.testColor.value.fromArray(sample.color)
     material.uniforms.testDepthVelocity.value.fromArray(sample.depth)
-    pass.render(renderer, null, target)
+    pass.render(renderer, null, output)
     return [0, 1].map((index) => {
-      const data = new Uint16Array(target.width * target.height * 4)
-      renderer.readRenderTargetPixels(target, 0, 0, target.width, target.height, data, undefined, index)
+      const size = output.width * output.height * 4
+      const data = output.textures[index].type === FloatType ? new Float32Array(size) : new Uint16Array(size)
+      renderer.readRenderTargetPixels(output, 0, 0, output.width, output.height, data, undefined, index)
       return data
     })
   }
@@ -73,20 +79,28 @@ void main() {
       [13, 9]
     ]) {
       target.setSize(width, height)
-      const ordinary = samples.map(render)
+      referenceTarget.setSize(width, height)
+      const ordinary = samples.map((sample) => render(sample, referenceTarget))
       binding = prepareCloudCurrentOutput(pass)
       samples.forEach((sample, sampleIndex) => {
-        const packed = render(sample)
+        const packed = render(sample, target)
         packed.forEach((data, attachment) => {
           const reference = ordinary[sampleIndex][attachment]
           // The second shader output is vec3 (depth + velocity.gb). Its fourth
           // attachment channel is not written or consumed by temporal resolve.
-          const mismatch = data.findIndex((value, index) =>
-            (attachment === 0 || index % 4 !== 3) && value !== reference[index])
+          const expected = (index: number): number =>
+            attachment === 0
+              ? reference[index]
+              : index % 4 === 0
+                ? Math.fround(sample.depth[0])
+                : DataUtils.fromHalfFloat(reference[index])
+          const mismatch = data.findIndex(
+            (value, index) => (attachment === 0 || index % 4 !== 3) && value !== expected(index)
+          )
           check(
             mismatch === -1,
-            `packed cloud half-float parity ${width}x${height}, sample ${sampleIndex}, attachment ${attachment}, ` +
-              `component ${mismatch}: ${data[mismatch]} != ${reference[mismatch]}`
+            `packed cloud color/motion parity and float32 depth ${width}x${height}, sample ${sampleIndex}, attachment ${attachment}, ` +
+              `component ${mismatch}: ${data[mismatch]} != ${mismatch < 0 ? 'none' : expected(mismatch)}`
           )
         })
       })
@@ -98,6 +112,7 @@ void main() {
     binding?.dispose()
     pass.dispose()
     target.dispose()
+    referenceTarget.dispose()
   }
   check(renderer.info.memory.textures === textureBaseline, 'packed cloud targets released after repeated setup')
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CloudsEffect } from '@takram/three-clouds'
 import {
+  FloatType,
   HalfFloatType,
   Mesh,
+  NearestFilter,
   PerspectiveCamera,
   RGBAIntegerFormat,
   Scene,
@@ -19,6 +21,8 @@ function fixture() {
   const pass = effect.cloudsPass.currentPass
   const material = effect.cloudsPass.currentMaterial
   const output = new WebGLRenderTarget(33, 17, { type: HalfFloatType, count: 2, depthBuffer: false })
+  output.textures[1].type = FloatType
+  output.textures[1].minFilter = output.textures[1].magFilter = NearestFilter
   const draws: Array<{ target: WebGLRenderTarget; material: ShaderMaterial; size: number[] }> = []
   let target: WebGLRenderTarget
   const renderer = {
@@ -34,7 +38,7 @@ function fixture() {
 }
 
 describe('cloud current output packing', () => {
-  it('runs the heavy kernel into one integer attachment and preserves the public half-float targets on resize', () => {
+  it('runs the heavy kernel into one integer attachment and preserves mixed target precision on resize', () => {
     const f = fixture()
     const binding = prepareCloudCurrentOutput(f.pass)
     try {
@@ -58,7 +62,21 @@ describe('cloud current output packing', () => {
         [65, 3],
         [65, 3]
       ])
-      expect(f.output.textures.every((texture) => texture.type === HalfFloatType)).toBe(true)
+      expect(f.output.textures.map((texture) => texture.type)).toEqual([HalfFloatType, FloatType])
+    } finally {
+      binding.dispose()
+      f.effect.dispose()
+      f.output.dispose()
+    }
+  })
+
+  it('rejects a depth attachment that would truncate distant hits before drawing', () => {
+    const f = fixture()
+    const binding = prepareCloudCurrentOutput(f.pass)
+    try {
+      f.output.textures[1].type = HalfFloatType
+      expect(() => f.pass.render(f.renderer, null, f.output)).toThrow(/float32 depth/)
+      expect(f.draws).toHaveLength(0)
     } finally {
       binding.dispose()
       f.effect.dispose()

@@ -4,8 +4,10 @@ import {
   BasicDepthPacking,
   Camera,
   Data3DTexture,
+  FloatType,
   HalfFloatType,
   Mesh,
+  NearestFilter,
   PlaneGeometry,
   PerspectiveCamera,
   Scene,
@@ -149,6 +151,12 @@ export class SceneCloudBackend {
       shadowResolve.needsUpdate = true
       effect.haze = false
       effect.lightShafts = false
+      // Quality/light-shaft setters recreate targets. Configure the final owned
+      // attachment before upload: metre depths exceed FP16's 65504 m range.
+      // Resolve uses texelFetch, so float-linear filtering is unnecessary.
+      const depthVelocity = effect.cloudsPass.resolveMaterial.uniforms.depthVelocityBuffer.value!
+      depthVelocity.type = FloatType
+      depthVelocity.minFilter = depthVelocity.magFilter = NearestFilter
       this.packedOutput = prepareCloudCurrentOutput(effect.cloudsPass.currentPass, this.programCacheSuffix())
       this.shadowOutput = prepareCloudShadowOutput(effect.shadowPass, this.programCacheSuffix())
       effect.skipRendering = true

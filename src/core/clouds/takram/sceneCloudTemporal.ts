@@ -26,6 +26,27 @@ export function adaptSceneCloudTemporalResolve(source: string): string {
   )
   shader = replaceExactlyOnce(
     shader,
+    /vec4 getClosestFragment\(const ivec2 coord\) \{[^]*?\n\}/g,
+    `vec4 getClosestFragment(const ivec2 coord) {
+  // Seed from the first sample, preserving tie order without a distance ceiling.
+  // Giant cloud hits and clear-sky depths can exceed the old 1e7 metre sentinel.
+  vec4 result = texelFetchOffset(depthVelocityBuffer, coord, 0, neighborOffsets[0]);
+  vec4 neighbor;
+  #pragma unroll_loop_start
+  for (int i = 1; i < 9; i++) {
+    neighbor = texelFetchOffset(depthVelocityBuffer, coord, 0, neighborOffsets[i]);
+    if (neighbor.r < result.r) {
+      result = neighbor;
+    }
+  }
+  #pragma unroll_loop_end
+  return result;
+}`,
+    'scene cloud resolve',
+    'unbounded closest depth'
+  )
+  shader = replaceExactlyOnce(
+    shader,
     'if (currentFrame) {',
     'if (currentFrame && frame <= 16) {',
     'scene cloud resolve',
