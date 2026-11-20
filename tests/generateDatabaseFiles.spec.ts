@@ -198,6 +198,18 @@ describe('generateDatabaseFiles — round-trip (обратимость)', () => 
 })
 
 describe('generateDatabaseFiles — защита валидатором', () => {
+  it('blocks a ring attached to a nebula and permits its original parent', async () => {
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, actors: snapshot.actors.map(actor => ({ ...actor })) }
+    const ring = db.actors.find(actor => actor.id === 92)!
+    const parentId = ring.parentId
+    ring.parentId = 100
+    expect(() => generateDatabaseFiles(db)).toThrow(/parent.*keplerian/)
+
+    ring.parentId = parentId
+    expect(generateDatabaseFiles(db)).toHaveLength(10)
+  })
+
   it('blocks generation after a scenario root becomes a star and permits restoration', async () => {
     const { Scenarios } = await import('@/config/scenarios')
     const snapshot = await shippedSnapshot()

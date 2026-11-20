@@ -141,6 +141,22 @@ function rulesFor(alias: string): CategoryRules {
  * где объект находится.
  */
 function checkPositioning(db: DatabaseSnapshot, aliasByActor: Map<number, string>, issues: ValidationIssue[]): void {
+  for (const actor of db.actors) {
+    const alias = aliasByActor.get(actor.id)
+    if (alias === undefined || rulesFor(alias).positioning !== 'attached') continue
+
+    const parentAlias = actor.parentId == null ? undefined : aliasByActor.get(actor.parentId)
+    // Factory keplerian nodes provide the equatorial frame used by visitComponent.
+    // A component nested in another component's LOD would disappear on LOD switches.
+    if (parentAlias === undefined || rulesFor(parentAlias).positioning !== 'keplerian') {
+      issues.push({
+        level: 'error', collection: 'actors', entity: actor.id,
+        message: `Actor ${actor.id} (${alias}) requires a parent with keplerian positioning; ` +
+          `parentId=${actor.parentId ?? 'null'} has category ${parentAlias ?? 'none'}`
+      })
+    }
+  }
+
   for (const placement of db.placements) {
     const alias = aliasByActor.get(placement.actorId)
     if (alias === undefined) continue

@@ -748,6 +748,37 @@ describe('validateDatabase — ссылки сценариев', () => {
 })
 
 describe('validateDatabase — режимы позиционирования', () => {
+  it.each([92, 47].flatMap(actorId =>
+    [null, 'nebula', 'asteroidBelt', 'ring', 'atmosphere'].map(parentCategory => ({ actorId, parentCategory }))
+  ))('rejects attached actor $actorId under $parentCategory and accepts restoration', async ({ actorId, parentCategory }) => {
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, actors: snapshot.actors.map(actor => ({ ...actor })) }
+    const actor = db.actors.find(row => row.id === actorId)!
+    const parentId = actor.parentId
+    const categoryId = db.categories.find(row => row.alias === parentCategory)?.id
+    actor.parentId = parentCategory === null ? null : db.actors.find(row => row.categoryId === categoryId && row.id !== actorId)!.id
+
+    expect(validateDatabase(db).errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: actorId, message: expect.stringMatching(/parent.*keplerian/)
+    }))
+
+    actor.parentId = parentId
+    expect(validateDatabase(db).ok).toBe(true)
+  })
+
+  it.each(['barycenter', 'star', 'planet', 'blackHole', 'brownDwarf', 'whiteDwarf', 'giantStar', 'pulsar'])(
+    'permits components under a %s parent', async alias => {
+      const snapshot = await shippedSnapshot()
+      const db = { ...snapshot, actors: snapshot.actors.map(actor => ({ ...actor })) }
+      const categoryId = db.categories.find(row => row.alias === alias)!.id
+      // Keep the physical radius consistent with the existing atmosphere config.
+      const parent = db.actors.find(row => row.id === 7)!
+      parent.categoryId = categoryId
+      for (const actorId of [92, 47]) db.actors.find(row => row.id === actorId)!.parentId = parent.id
+      expect(validateDatabase(db).errors).toEqual([])
+    }
+  )
+
   /** Снимок с полным набором категорий, включая статическую туманность */
   function positioningSnapshot(): DatabaseSnapshot {
     const db = baseSnapshot()

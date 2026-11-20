@@ -90,6 +90,36 @@ describe('Редактор данных: сохранение', () => {
     expect(editor.saveStatus).toContain('Saved')
   })
 
+  it('blocks same-tick saving of a ring attached to a nebula and saves restoration', async () => {
+    const database = new Map<string, unknown[]>(Object.entries(await shippedSnapshot()))
+    function ComponentEditor(): null {
+      editor = useEditorDraft(database, [])
+      return null
+    }
+    act(() => root.render(<ComponentEditor />))
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    const actor = editor.draft.actors.find(row => row.id === 92)!
+    const save = editor.save
+
+    await act(async () => {
+      editor.upsert('actors', { ...actor, parentId: 100 })
+      await save()
+    })
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.validation.errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: 92, message: expect.stringMatching(/parent.*keplerian/)
+    }))
+    expect(editor.saveStatus).toContain('Cannot save:')
+
+    await act(async () => {
+      editor.upsert('actors', actor)
+      await save()
+    })
+    expect(editor.validation.ok).toBe(true)
+    expect(saveSpy).toHaveBeenCalledOnce()
+    expect(editor.saveStatus).toContain('Saved')
+  })
+
   it('blocks same-tick saving after a scenario root becomes a star and saves its restoration', async () => {
     const { Scenarios } = await import('@/config/scenarios')
     const database = new Map<string, unknown[]>(Object.entries(await shippedSnapshot()))
@@ -535,8 +565,11 @@ it.each(['{ invalid', '1', 'true', '"x"', '0', 'false', '""', '[]', 'null'])(
 it('blocks saving an atmosphere without irradiance, then exports a config usable by the renderer', async () => {
   const initial = renderingDataTemplates.find((template) => template.value === 'atmosphere')!.data as Record<string, unknown>
   const database = new Map<string, unknown[]>([
-    ['categories', [{ id: 5, alias: 'atmosphere', name: 'Atmosphere' }]],
-    ['actors', [{ id: 1, categoryId: 5, parentId: null, name: 'Sky', color: '#ffffff', description: '' }]],
+    ['categories', [{ id: 1, alias: 'barycenter', name: 'Barycenter' }, { id: 5, alias: 'atmosphere', name: 'Atmosphere' }]],
+    ['actors', [
+      { id: 2, categoryId: 1, parentId: null, name: 'Root', color: '#ffffff', description: '' },
+      { id: 1, categoryId: 5, parentId: 2, name: 'Sky', color: '#ffffff', description: '' }
+    ]],
     ['renderingObjects', [{ id: 1, actorId: 1, data: initial }]]
   ])
   function AtmosphereEditor() {
