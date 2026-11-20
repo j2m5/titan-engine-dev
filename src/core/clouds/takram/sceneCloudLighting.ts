@@ -9,7 +9,7 @@ import type { AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import { adaptSceneCloudAerial, sceneCloudAerialUniformsGlsl } from './sceneCloudAerial'
 import { sceneCloudLightGLSL } from '@/core/clouds/receivers/sceneCloudLight'
 import { sunTransmittanceFunctions } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
-import { adaptSceneCloudTemporalResolve } from './sceneCloudTemporal'
+import { adaptSceneCloudTemporalResolve, bindSceneCloudCapture } from './sceneCloudTemporal'
 import { adaptSceneCloudSunShadow } from './sceneCloudSunShadow'
 import { bindSceneCloudReprojection } from './sceneCloudReprojection'
 
@@ -238,6 +238,7 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
     sceneCloudSourceSunAngularRadius: { value: 0 }
   }
   const reprojection = bindSceneCloudReprojection(clouds)
+  const capture = bindSceneCloudCapture(clouds.cloudsPass)
   const uniforms = {
     sceneCloudViewReprojectionMatrix: reprojection.viewReprojection,
     sceneCloudLogFarFactor: { value: 1 },
@@ -267,6 +268,7 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
   return {
     update(frame, depth, atmosphere) {
       if (disposed) throw new Error('Scene cloud patch binding is disposed')
+      capture.enabled.value = frame.sampling === 'complete'
       reprojection.setPlanetRotation(frame.planetRotation)
       uniforms.sceneCloudLogFarFactor.value = depth.sceneLogFarFactor
       uniforms.sceneCloudUnitsToMeters.value = depth.sceneUnitsToMeters
@@ -301,6 +303,7 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
     dispose() {
       if (disposed) return
       disposed = true
+      capture.dispose()
       reprojection.dispose()
       material.fragmentShader = originalShader
       resolveMaterial.fragmentShader = originalResolveShader

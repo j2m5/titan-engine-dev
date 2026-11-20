@@ -71,12 +71,16 @@ export async function run(): Promise<SceneCloudProbeReport> {
     setTarget.call(this, target, ...rest)
   }
   const actualDraw = renderer.render
+  let capturePhases: number[] | null = null
   renderer.render = function (drawScene, drawCamera) {
     drawScene.traverse((object) => {
       const owner = (object as Mesh).material
-      for (const material of Array.isArray(owner) ? owner : owner ? [owner] : [])
+      for (const material of Array.isArray(owner) ? owner : owner ? [owner] : []) {
+        if (capturePhases && material.name === 'CloudsResolveMaterial')
+          capturePhases.push((material as ShaderMaterial).uniforms.frame.value % 16)
         for (const [key, uniform] of Object.entries((material as ShaderMaterial).uniforms ?? {}))
           observe(uniform.value, key)
+      }
     })
     actualDraw.call(this, drawScene, drawCamera)
   }
@@ -594,22 +598,54 @@ export async function run(): Promise<SceneCloudProbeReport> {
     camera.updateProjectionMatrix()
     await draw()
     check(renderer.getDrawingBufferSize(new Vector2()).equals(new Vector2(64, 36)), 'physical DPR size')
-    const beforeCapture = runtime.diagnostics.cloudUpdates
+    const beforeCapture = runtime.diagnostics
     const captureStart = performance.now()
     phase('3840x2160 capture begin')
-    const blob = await post.captureScreenshot()
+    capturePhases = []
+    // This probe normally renders offscreen. Present to the canvas for the PNG
+    // exactly as the application's last main-composer pass does.
+    const finalPass = post.composer!.passes.at(-1)!
+    const wasOnScreen = finalPass.renderToScreen
+    let encoded: Promise<Blob | null>
+    try {
+      finalPass.renderToScreen = true
+      encoded = post.captureScreenshot()
+      check(
+        capturePhases.length === 16 && new Set(capturePhases).size === 16,
+        '4K capture resolves all 16 Bayer positions'
+      )
+    } finally {
+      capturePhases = null
+      finalPass.renderToScreen = wasOnScreen
+    }
+    const blob = await encoded
     const bitmap = blob ? await createImageBitmap(blob) : null
-    check(bitmap?.width === 3840 && bitmap.height === 2160, 'actual screenshot pixels are 3840x2160')
-    measurements.push({
-      captureMs: performance.now() - captureStart,
-      bytes: blob?.size,
-      width: bitmap?.width,
-      height: bitmap?.height
-    })
-    bitmap?.close()
+    try {
+      check(bitmap?.width === 3840 && bitmap.height === 2160, 'actual screenshot pixels are 3840x2160')
+      const preview = new OffscreenCanvas(16, 9).getContext('2d')!
+      preview.drawImage(bitmap!, 0, 0, 16, 9)
+      const { data } = preview.getImageData(0, 0, 16, 9)
+      check(
+        data.some((value, index) => index % 4 !== 3 && value > 0),
+        'encoded PNG contains the rendered scene'
+      )
+      measurements.push({
+        captureMs: performance.now() - captureStart,
+        bytes: blob?.size,
+        width: bitmap!.width,
+        height: bitmap!.height
+      })
+    } finally {
+      bitmap?.close()
+    }
     check(
-      !!blob && blob.size > 0 && runtime.diagnostics.cloudUpdates === beforeCapture + 1,
-      '4K one presentation without simulation update'
+      !!blob &&
+        blob.size > 0 &&
+        runtime.diagnostics.cloudUpdates === beforeCapture.cloudUpdates + 1 &&
+        runtime.diagnostics.shadowUpdates === beforeCapture.shadowUpdates + 1 &&
+        runtime.diagnostics.depthPasses === beforeCapture.depthPasses + 1 &&
+        runtime.diagnostics.finalRenders === beforeCapture.finalRenders + 1,
+      '4K capture renders one depth frame, one cloud effect update, one shadow update and one presentation'
     )
     check(
       renderer.getPixelRatio() === 2 && renderer.getDrawingBufferSize(new Vector2()).equals(new Vector2(64, 36)),

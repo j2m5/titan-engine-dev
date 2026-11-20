@@ -3,9 +3,13 @@ import { SpaceScale } from '@/core/constants'
 import type { CloudBodyEntry } from '@/core/services/CloudRegistry'
 import type { SceneCloudLightSettings } from '@/core/clouds/receivers/sceneCloudLight'
 
+export type CloudSampling = 'temporal' | 'complete'
+
 export interface CloudFrame {
   serial: number
   deltaSeconds: number
+  /** Complete sampling fills a still image in one presentation. Live frames can also have zero delta. */
+  sampling?: CloudSampling
   actorId: number
   camera: PerspectiveCamera
   sceneCamera: PerspectiveCamera
@@ -24,7 +28,8 @@ export function captureCloudFrame(
   viewport: Vector2,
   serial: number,
   deltaSeconds: number,
-  sceneLight?: SceneCloudLightSettings
+  sceneLight?: SceneCloudLightSettings,
+  sampling: CloudSampling = 'temporal'
 ): CloudFrame | null {
   const surface = body.getSurface()
   if (!surface || !(body.datumRadiusMeters > 0) || viewport.x <= 0 || viewport.y <= 0) return null
@@ -47,6 +52,7 @@ export function captureCloudFrame(
   return {
     serial,
     deltaSeconds,
+    sampling,
     actorId: body.actorId,
     camera: local,
     sceneCamera: camera,

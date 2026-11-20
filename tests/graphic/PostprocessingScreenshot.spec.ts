@@ -64,7 +64,7 @@ describe('Postprocessing.captureScreenshot — 4K «как на экране»',
     const invalidate = vi.spyOn(pp, 'invalidateCloudHistory')
     const draw = vi.spyOn(pp, 'render')
     await pp.captureScreenshot()
-    expect(draw).toHaveBeenCalledWith(0)
+    expect(draw.mock.calls).toEqual([[0, 'complete']])
     expect(invalidate).toHaveBeenCalledTimes(2)
     render.mockImplementation(() => {
       throw Error('capture render failure')

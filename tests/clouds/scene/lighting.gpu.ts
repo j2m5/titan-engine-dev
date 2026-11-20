@@ -42,6 +42,7 @@ import { checkSceneCloudSunShadow } from './sunShadow.gpu'
 import { checkSceneCloudSunShadowCulling } from './sunShadowCulling.gpu'
 import { checkSceneCloudReprojection } from './reprojection.gpu'
 import { checkSceneCloudPlanetRotation } from './planetRotation.gpu'
+import { checkSceneCloudScreenshotSampling } from './screenshotSampling.gpu'
 import { checkSceneCloudCurrentOutput } from './currentOutput.gpu'
 import { checkSceneCloudDepthRange } from './depthRange.gpu'
 import { checkSceneCloudShadowOutput } from './shadowOutput.gpu'
@@ -322,21 +323,17 @@ void main() {
     const origin = new Vector3(0, 0, RADIUS + 50000),
       endpoint = new Vector3(0, 0, RADIUS + 6000)
 
-    const rotationFrame = frame(origin, endpoint)
-    checkSceneCloudPlanetRotation(
-      renderer,
-      rotationFrame,
-      {
-        texture: depth,
-        serial: rotationFrame.serial,
-        viewport: rotationFrame.viewport,
-        sceneLogFarFactor: Math.log2(camera.far + 1),
-        sceneUnitsToMeters: 1 / UNIT
-      },
-      entry,
-      draw,
-      check
-    )
+    const probeFrame = frame(origin, endpoint)
+    const probeDepth = {
+      texture: depth,
+      serial: probeFrame.serial,
+      viewport: probeFrame.viewport,
+      sceneLogFarFactor: Math.log2(camera.far + 1),
+      sceneUnitsToMeters: 1 / UNIT
+    }
+    checkSceneCloudScreenshotSampling(renderer, probeFrame, probeDepth, entry, check)
+    report.cases.push('screenshot-complete-coverage')
+    checkSceneCloudPlanetRotation(renderer, probeFrame, probeDepth, entry, draw, check)
     report.cases.push('planet-rotation-reprojection')
 
     for (const quality of ['low', 'medium', 'high'] as const) {

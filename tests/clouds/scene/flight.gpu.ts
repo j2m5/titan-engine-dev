@@ -151,9 +151,9 @@ export async function run(): Promise<SceneCloudProbeReport> {
     lastTickDelta = delta
     return originalAdvance.call(this, delta)
   }
-  e.postprocessing.render = function (delta) {
-    captureDeltas?.push(delta ?? NaN)
-    return originalRender.call(this, delta)
+  e.postprocessing.render = function (...args) {
+    captureDeltas?.push(args[0] ?? NaN)
+    return originalRender.apply(this, args)
   }
   e.renderer.render = function (scene, camera) {
     const composition = privateField<object | null>(e.postprocessing, 'composition')

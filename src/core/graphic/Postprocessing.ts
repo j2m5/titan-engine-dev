@@ -16,6 +16,7 @@ import { atmosphereSkyVisibility, skyAtmosphereUniforms } from '@/core/sky/atmos
 import { createSceneEndpointPasses } from './sceneEndpointPasses'
 import type { LensFrontSorter } from './passes/LensFrontSorter'
 import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
+import type { CloudSampling } from '@/core/clouds/scene/CloudFrame'
 import { CloudBlendPass } from './clouds/CloudBlendPass'
 import { SceneCloudComposition, CloudEndpointCapturePass } from './clouds/SceneCloudComposition'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
@@ -303,7 +304,7 @@ class Postprocessing {
       })
   }
 
-  public render(delta?: number): void {
+  public render(delta?: number, cloudSampling: CloudSampling = 'temporal'): void {
     if (!this.composer || this.contextLost) return
     if (this.settings) this.cloudRuntime?.setOptions(this.settings.showClouds, this.settings.cloudQuality)
     this.scene.updateMatrixWorld(true)
@@ -329,7 +330,8 @@ class Postprocessing {
         delta ?? 0,
         snapshot,
         lensActive,
-        readAtmosphereDebugView()
+        readAtmosphereDebugView(),
+        cloudSampling
       )
       const blendReady = plan ? this.blend.prepare(this.renderer, this.composer.inputBuffer) : false
       if (!plan) this.composition?.cancelPreparation()
@@ -399,7 +401,7 @@ class Postprocessing {
       this.renderer.setPixelRatio(1)
       this.composer?.setSize(size.width, size.height, false)
       this.composition?.setSize(size.width, size.height)
-      this.render(0)
+      this.render(0, 'complete')
       blob = new Promise((resolve: (value: Blob | null) => void): void => canvas.toBlob(resolve, 'image/png'))
     } finally {
       this.renderer.setSize(cssSize.width, cssSize.height, false)

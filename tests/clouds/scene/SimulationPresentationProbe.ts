@@ -83,9 +83,9 @@ export async function verifySimulationPresentations(
     oldDraw.call(renderer, drawScene, drawCamera)
     current.draws.push({ before, after: snapshot(), scene: drawScene === scene })
   }
-  post.render = (delta) => {
+  post.render = (...args) => {
     if (current) current.entry = snapshot()
-    oldPost.call(post, delta)
+    oldPost.apply(post, args)
     if (current) current.exit = snapshot()
   }
   // The Earth fixture is already built/initialized; normal production update/render methods remain real.

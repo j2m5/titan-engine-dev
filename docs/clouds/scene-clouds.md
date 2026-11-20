@@ -158,8 +158,12 @@ The main scene retains `SpaceScale = 10^-3.3` units per kilometre. Body-local
 metres are `(worldPosition - bodyCenter) * (1000 / SpaceScale)`. Cloud layer
 altitude accounts separately for model datum and atmosphere bottom; body rotation
 comes from the current surface transform. Engine updates simulation, controls,
-follow and collision before rendering. Capturing a screenshot renders with delta
-zero and does not advance simulation.
+follow and collision before rendering. A screenshot renders one presentation at
+zero simulation delta. For an active volume it samples all 16 positions of the
+4×4 cloud pattern at the selected quality before encoding the PNG. Each position
+keeps its own color and opacity. Only the cloud march and resolve repeat, using
+the same scene depth, shadow map and existing render targets. An ordinary paused
+frame still samples one position per tile.
 
 Composition mixes two linear HDR endpoints: `(1 - w) * C_far + w * C_near`.
 At zero weight only the far endpoint executes; at full weight only the near

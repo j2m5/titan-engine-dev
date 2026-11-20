@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { cloudLightScale } from '@/core/clouds/takram/sceneCloudLighting'
 import { installSceneCloudPatches } from '@/core/clouds/takram/sceneCloudLighting'
 import { CloudsEffect } from '@takram/three-clouds'
-import { PerspectiveCamera } from 'three'
+import { PerspectiveCamera, Uniform } from 'three'
 
 describe('main scene cloud light units', () => {
   it('validates shadow rotation anchors before installing any shader or history hook', () => {
@@ -71,13 +71,25 @@ describe('main scene cloud light units', () => {
     const original = resolve.fragmentShader
     const current = clouds.cloudsPass.currentMaterial
     const originalCurrent = current.fragmentShader
+    const originalUpdate = clouds.cloudsPass.update
+    const priorUniform = new Uniform(false)
+    resolve.uniforms.sceneCloudCapture = priorUniform
     try {
-      for (const anchor of ['vec4 clipAABB(', 'if (currentFrame) {', 'outputColor = clippedColor;']) {
+      for (const anchor of [
+        'vec4 clipAABB(',
+        'if (currentFrame) {',
+        'outputColor = clippedColor;',
+        'uniform int frame;',
+        'temporalUpscale(coord, lowResCoord, currentFrame, outputColor, outputShadowLength);',
+        'temporalAntialiasing(coord, outputColor, outputShadowLength);'
+      ]) {
         const invalid = original.replace(anchor, '')
         resolve.fragmentShader = invalid
         expect(() => installSceneCloudPatches(clouds)).toThrow(/expected one replacement/)
         expect(resolve.fragmentShader).toBe(invalid)
         expect(current.fragmentShader).toBe(originalCurrent)
+        expect(clouds.cloudsPass.update).toBe(originalUpdate)
+        expect(resolve.uniforms.sceneCloudCapture).toBe(priorUniform)
       }
       resolve.fragmentShader = original
       const binding = installSceneCloudPatches(clouds)
@@ -86,6 +98,8 @@ describe('main scene cloud light units', () => {
       binding.dispose()
       expect(resolve.fragmentShader).toBe(original)
       expect(current.fragmentShader).toBe(originalCurrent)
+      expect(clouds.cloudsPass.update).toBe(originalUpdate)
+      expect(resolve.uniforms.sceneCloudCapture).toBe(priorUniform)
     } finally {
       clouds.dispose()
     }

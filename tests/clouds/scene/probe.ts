@@ -193,6 +193,7 @@ export const sceneCloudProbeRegistry: Partial<
       'temporal-fresh-pixel-accumulation',
       'cloud-hit-reprojection-precision',
       'planet-rotation-reprojection',
+      'screenshot-complete-coverage',
       'eclipse-direct',
       'reset-recreation',
       'single-public-update',

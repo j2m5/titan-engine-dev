@@ -6,7 +6,7 @@ import type { SceneCloudDepthFrame } from '@/core/graphic/clouds/SceneCloudDepth
 import { SceneCloudBackend, type SceneCloudOutput } from './takram/SceneCloudBackend'
 import type { EnabledCloudConfig } from './CloudConfig'
 import type { CloudQuality, CloudQualityProfile } from './SceneCloudConfig'
-import { captureCloudFrame, type CloudFrame } from './scene/CloudFrame'
+import { captureCloudFrame, type CloudFrame, type CloudSampling } from './scene/CloudFrame'
 import { cloudBodyCandidate, selectCloudBody } from './scene/cloudSelection'
 import { cloudVolumeOpacity } from './cloudLod'
 import { CloudSources } from './CloudSources'
@@ -249,7 +249,8 @@ export class SceneCloudRuntime {
     deltaSeconds: number,
     atmosphere: AtmosphereFrameSnapshot,
     lensActive: boolean,
-    atmosphereDebugView: number
+    atmosphereDebugView: number,
+    sampling: CloudSampling = 'temporal'
   ): CloudFramePlan | null {
     if (this.disposed) return null
     if (this.contextLost) {
@@ -287,7 +288,7 @@ export class SceneCloudRuntime {
         .receivers(body.actorId)
         .find((receiver) => receiver.getLightSettings)
         ?.getLightSettings?.()
-      const frame = captureCloudFrame(body, camera, viewport, serial, deltaSeconds, sceneLight)
+      const frame = captureCloudFrame(body, camera, viewport, serial, deltaSeconds, sceneLight, sampling)
       this.frames.set(body.actorId, frame)
       const map = this.enabled ? body.descriptor.far : null
       const source = map ? (owner.sources.read(map.pattern.map.resourceId)?.texture ?? null) : null
