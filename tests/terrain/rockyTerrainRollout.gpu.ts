@@ -28,6 +28,7 @@ import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereC
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveSceneClouds } from '@/core/clouds/resolveSceneClouds'
+import { withSceneCloudMaterials } from '@/core/graphic/clouds/sceneCloudMaterialScope'
 
 /** Compile actual catalog materials after texture arrival, including procedural worlds and water-adjacent land. */
 export function checkRockyTerrainRollout() {
@@ -132,11 +133,18 @@ export function checkRockyTerrainRollout() {
               }
               material.updateMaterial()
               for (const endpoint of clouds.volume ? (['far', 'near'] as const) : (['far'] as const)) {
-                terrain.material = material.sceneCloudReceiver.getEndpointMaterial(endpoint)
-                context = `${body.getAttribute('name')} ${endpoint} ${residency}, log=${logarithmicDepthBuffer}, defines=${JSON.stringify(terrain.material.defines)}`
-                boulder.sync(terrain.material)
+                const receivers = [material.sceneCloudReceiver, boulder.sceneCloudReceiver!]
+                const bindings = new Map(receivers.map(receiver => [
+                  receiver.getEndpointMaterial('far'), receiver.getEndpointMaterial(endpoint)
+                ]))
+                context = `${body.getAttribute('name')} ${endpoint} ${residency}, log=${logarithmicDepthBuffer}`
                 scene.add(terrain, caster)
-                renderer.render(scene, camera)
+                withSceneCloudMaterials(scene, bindings, () => {
+                  const boulderDraw = caster.material as ShaderMaterial
+                  if (endpoint === 'near' && boulderDraw.defines.SCENE_CLOUD_NEAR !== 1)
+                    throw new Error(`Boulders bypassed near cloud routing: ${context}`)
+                  renderer.render(scene, camera)
+                })
                 scene.remove(terrain, caster)
                 const gl = renderer.getContext() as WebGL2RenderingContext,
                   samplerTypes = new Set<number>([

@@ -99,6 +99,8 @@ export class TerrainBoulders {
     )
     this.prepare(this.contacts)
     this.group.name = 'Talus boulders'
+    // RenderableFactory discovers one receiver for all four instance materials.
+    Object.assign(this.group, { sceneCloudReceiver: this.material.sceneCloudReceiver })
     this.host.add(this.group)
     this.obstacles = new TerrainBoulderObstacles(host)
     this.unregister = registerBoulderObstacles(actor, this.obstacles)

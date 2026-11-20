@@ -70,7 +70,7 @@ describe('stable body cloud registration', () => {
     expect(clear).toHaveBeenCalledWith(null, null)
     expect(registry.entries()[0]).toBe(entry)
     expect(entry.getSurface()).toBe(node.renderable)
-    expect(registry.receivers(7)).toHaveLength(2)
+    expect(registry.receivers(7)).toHaveLength(3) // terrain, boulders, water
     expect(registry.receivers(7)).not.toContain(previous)
     node.dispose()
     expect(registry.entries()).toEqual([])

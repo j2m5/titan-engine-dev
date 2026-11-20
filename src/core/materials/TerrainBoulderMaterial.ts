@@ -5,6 +5,8 @@ import {
   planetSurfaceVertexPars
 } from './shaders/lib/chunks/PlanetSurfaceCommon'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import type { SceneCloudReceiver } from '@/core/clouds/receivers/SceneCloudReceiver'
+import { sceneCloudProgramSignature, syncSceneCloudNearMaterial } from '@/core/clouds/receivers/sceneCloudEndpointMaterial'
 
 export const BOULDER_TEXTURE_METERS = 8
 const excluded = new Set([
@@ -20,6 +22,7 @@ const excluded = new Set([
 
 /** Uses the live terrain texture/light uniforms; owns only the local texture domain and shape inputs. */
 export class TerrainBoulderMaterial extends ShaderMaterial {
+  public readonly sceneCloudReceiver?: SceneCloudReceiver
   public readonly origin = new Vector3()
   public readonly detailOrigin = new Vector3()
   public readonly detailOrigin2 = new Vector3()
@@ -67,6 +70,8 @@ export class TerrainBoulderMaterial extends ShaderMaterial {
     this.name = 'Terrain boulders'
     this.localUniforms.uDetailScale.value = 1 / toThreeJSUnits((BOULDER_TEXTURE_METERS * sizeScale) / 1000)
     this.sync(parent)
+    const receiver = (parent as ShaderMaterial & { sceneCloudReceiver?: SceneCloudReceiver }).sceneCloudReceiver
+    if (receiver) this.sceneCloudReceiver = this.borrowCloudReceiver(receiver)
   }
 
   public sync(parent: ShaderMaterial): void {
@@ -83,6 +88,56 @@ export class TerrainBoulderMaterial extends ShaderMaterial {
       this.defines = defines
       this.needsUpdate = true
     }
+  }
+
+  /** Share the terrain's cloud state, but register our own draw slots and near program. */
+  private borrowCloudReceiver(parent: SceneCloudReceiver): SceneCloudReceiver {
+    let near: ShaderMaterial | null = null, signature = '', retry = 0, disposed = false
+    const releaseNear = (): void => {
+      near?.dispose()
+      near = null
+      signature = ''
+    }
+    return {
+      getLightSettings: parent.getLightSettings?.bind(parent),
+      getEndpointMaterial: (endpoint, cascadeCount) => {
+        if (disposed) throw new Error('Boulder cloud receiver is disposed')
+        const source = parent.getEndpointMaterial(endpoint, cascadeCount)
+        this.sync(endpoint === 'far' ? source : parent.getEndpointMaterial('far'))
+        if (endpoint === 'far') return this
+        const cascades = source.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT
+        const nextSignature = `${sceneCloudProgramSignature(this)};cascades:${cascades}`
+        near ??= new ShaderMaterial()
+        syncSceneCloudNearMaterial(this, near)
+        near.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT = cascades
+        const key = near.customProgramCacheKey()
+        near.customProgramCacheKey = () => `${key};boulder-cloud-retry-${retry}`
+        if (nextSignature !== signature) {
+          signature = nextSignature
+          near.needsUpdate = true
+        }
+        return near
+      },
+      retryEndpointMaterial: () => {
+        if (disposed) return
+        releaseNear()
+        retry++
+      },
+      // The terrain receiver is registered alongside this one and owns these
+      // shared uniforms. Do not reset or reinject its state for a derived draw.
+      setFarMap: () => {},
+      setEndpoint: () => {},
+      dispose: () => {
+        if (disposed) return
+        disposed = true
+        releaseNear()
+      }
+    }
+  }
+
+  public override dispose(): void {
+    this.sceneCloudReceiver?.dispose()
+    super.dispose()
   }
 }
 
