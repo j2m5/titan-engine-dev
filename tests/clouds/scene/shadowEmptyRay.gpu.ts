@@ -100,9 +100,9 @@ void exportShadow(out vec4 outputColor, out vec3 outputDepthVelocity) {
   vec4 color = fixtureColor;
   vec3 rayOrigin = vec3(0.0), rayDirection = vec3(0.0,0.0,1.0), altitudeCorrection = vec3(0.0);
   mat4 ecefToWorldMatrix = mat4(1.0);
-  mat4 reprojectionMatrices[1];
-  reprojectionMatrices[0] = mat4(0.0);
-  reprojectionMatrices[0][3] = vec4(fixturePreviousUv * 2.0 - 1.0, 0.0, 1.0);
+  mat4 sceneCloudShadowReprojectionMatrices[1];
+  sceneCloudShadowReprojectionMatrices[0] = mat4(0.0);
+  sceneCloudShadowReprojectionMatrices[0][3] = vec4(fixturePreviousUv * 2.0 - 1.0, 0.0, 1.0);
   int cascadeIndex = 0;
   vec2 vUv = vec2(0.5);
 ${source.slice(exportStart, exportEnd + '  #endif // TEMPORAL_PASS'.length)}

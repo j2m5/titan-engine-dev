@@ -17,7 +17,7 @@ export function checkSceneCloudReprojection(
   const toWorld = source.match(/vec3 ecefToWorld\([^]*?\n\}/)?.[0]
   if (!kernel || !toWorld) throw new Error('Missing installed cloud-hit reprojection')
   const fragment = `
-uniform mat4 reprojectionMatrix, viewReprojectionMatrix, ecefToWorldMatrix;
+uniform mat4 reprojectionMatrix, viewReprojectionMatrix, sceneCloudViewReprojectionMatrix, ecefToWorldMatrix;
 uniform vec3 altitudeCorrection, fixtureOrigin, fixtureDirection, fixtureViewDirection;
 uniform vec2 fixtureUv;
 uniform float fixtureDistance;
@@ -71,6 +71,7 @@ void main() {
               const actual = draw(fragment, {
                 reprojectionMatrix: uniforms.reprojectionMatrix,
                 viewReprojectionMatrix: uniforms.viewReprojectionMatrix,
+                sceneCloudViewReprojectionMatrix: uniforms.sceneCloudViewReprojectionMatrix,
                 ecefToWorldMatrix: { value: fromECEF },
                 altitudeCorrection: { value: correction },
                 fixtureOrigin: { value: camera.position.clone().applyMatrix4(toECEF).add(correction) },

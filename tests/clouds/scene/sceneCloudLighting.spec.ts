@@ -5,6 +5,41 @@ import { CloudsEffect } from '@takram/three-clouds'
 import { PerspectiveCamera } from 'three'
 
 describe('main scene cloud light units', () => {
+  it('validates shadow rotation anchors before installing any shader or history hook', () => {
+    const clouds = new CloudsEffect(new PerspectiveCamera())
+    const current = clouds.cloudsPass.currentMaterial
+    const shadow = clouds.shadowPass.currentMaterial
+    const source = shadow.fragmentShader
+    const currentSource = current.fragmentShader
+    const copyCamera = current.copyCameraSettings
+    const copyHistory = current.copyReprojectionMatrix
+    const updateShadow = clouds.shadowPass.update
+    try {
+      for (const anchor of [
+        'uniform mat4 reprojectionMatrices[CASCADE_COUNT];',
+        'vec4 prevClip = reprojectionMatrices[cascadeIndex] * vec4(frontPositionWorld, 1.0);'
+      ]) {
+        shadow.fragmentShader = source.replace(anchor, '')
+        expect(() => installSceneCloudPatches(clouds)).toThrow(/expected one replacement/)
+        expect(current.fragmentShader).toBe(currentSource)
+        expect(current.copyCameraSettings).toBe(copyCamera)
+        expect(current.copyReprojectionMatrix).toBe(copyHistory)
+        expect(clouds.shadowPass.update).toBe(updateShadow)
+      }
+      shadow.fragmentShader = source
+      const binding = installSceneCloudPatches(clouds)
+      binding.dispose()
+      expect(shadow.fragmentShader).toBe(source)
+      expect(shadow.uniforms.sceneCloudShadowReprojectionMatrices).toBeUndefined()
+      expect(current.uniforms.sceneCloudViewReprojectionMatrix).toBeUndefined()
+      expect(current.copyCameraSettings).toBe(copyCamera)
+      expect(current.copyReprojectionMatrix).toBe(copyHistory)
+      expect(clouds.shadowPass.update).toBe(updateShadow)
+    } finally {
+      clouds.dispose()
+    }
+  })
+
   it('validates the sun-march call before publishing any scene-reference patch', () => {
     const clouds = new CloudsEffect(new PerspectiveCamera())
     const current = clouds.cloudsPass.currentMaterial

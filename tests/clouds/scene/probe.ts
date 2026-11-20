@@ -192,6 +192,7 @@ export const sceneCloudProbeRegistry: Partial<
       'temporal-opacity-independent-of-light',
       'temporal-fresh-pixel-accumulation',
       'cloud-hit-reprojection-precision',
+      'planet-rotation-reprojection',
       'eclipse-direct',
       'reset-recreation',
       'single-public-update',

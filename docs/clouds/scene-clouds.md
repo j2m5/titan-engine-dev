@@ -1124,6 +1124,33 @@ WebGL warnings were confined to the existing intentional shader-failure windows;
 there were no unexpected WebGL errors. The final shadow implementation also
 passed independent code review. Testing on other hardware remains deferred.
 
+### Planet rotation in temporal history (2026-11-20)
+
+Cloud-hit and shadow-hit motion now follows the planet-fixed feature through
+`R_previous * inverse(R_current)`. Previously density and appearance rotated
+with the planet while temporal history used only camera/light motion. A native
+GPU fixture at a stationary camera measured missing cloud motion of about
+0.50 pixels/frame at 1× simulation speed and 496 pixels at 1000×; its accelerated
+shadow control missed about 3.78 pixels. These are synthetic correspondence
+checks, not full-scene image-quality or FPS measurements.
+
+The scene binding composes the previous projection, rotation delta and current
+view transform on the CPU in double precision. Cloud hits keep the existing
+camera-relative shader calculation, including near-surface precision. Clear
+rays retain the camera-only matrix. Shadow cascades use separate composed
+projection matrices; no additional draws, raymarch samples or targets are added.
+The private scene effect retains its identity world/ECEF transform and disabled
+altitude correction.
+
+Cloud and shadow orientations commit on their respective successful history
+updates, independently. Repeated camera copies during shader warmup do not
+advance the snapshot. Resize and temporal-shadow reactivation bootstrap the
+affected history, and effect disposal restores the borrowed methods/uniforms.
+GPU coverage includes stationary/accelerated/reverse spin, tilted rotation,
+combined camera motion, Earth/giant radii, near-surface precision, and temporal
+upscaling on/off. Ordinary planet rotation does not recreate the effect or reset
+its accumulated history.
+
 ### Distant depth precision (2026-11-20)
 
 Scene clouds now keep the current depth/velocity attachment in RGBA32F. The

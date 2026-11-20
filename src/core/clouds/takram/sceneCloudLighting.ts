@@ -11,6 +11,7 @@ import { sceneCloudLightGLSL } from '@/core/clouds/receivers/sceneCloudLight'
 import { sunTransmittanceFunctions } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { adaptSceneCloudTemporalResolve } from './sceneCloudTemporal'
 import { adaptSceneCloudSunShadow } from './sceneCloudSunShadow'
+import { bindSceneCloudReprojection } from './sceneCloudReprojection'
 
 export function cloudLightScale(
   irradiance: readonly [number, number, number],
@@ -55,6 +56,23 @@ export function installSceneCloudPatches(clouds: CloudsEffect, sceneReferenceLig
   const resolveMaterial = clouds.cloudsPass.resolveMaterial
   const originalResolveShader = resolveMaterial.fragmentShader
   const resolveShader = adaptSceneCloudTemporalResolve(originalResolveShader)
+  const shadowMaterial = clouds.shadowPass.currentMaterial
+  const originalShadowShader = shadowMaterial.fragmentShader
+  const originalShadowUniforms = { ...shadowMaterial.uniforms }
+  let shadowShader = replaceExactlyOnce(
+    originalShadowShader,
+    'uniform mat4 reprojectionMatrices[CASCADE_COUNT];',
+    'uniform mat4 sceneCloudShadowReprojectionMatrices[CASCADE_COUNT];',
+    'scene cloud shadow rotation',
+    'projection declaration'
+  )
+  shadowShader = replaceExactlyOnce(
+    shadowShader,
+    'vec4 prevClip = reprojectionMatrices[cascadeIndex] * vec4(frontPositionWorld, 1.0);',
+    'vec4 prevClip = sceneCloudShadowReprojectionMatrices[cascadeIndex] * vec4(frontPositionWorld, 1.0);',
+    'scene cloud shadow rotation',
+    'hit projection'
+  )
   let shader = replaceExactlyOnce(
     originalShader,
     /float getRayDistanceToScene\([^]*?\n\}/g,
@@ -70,11 +88,11 @@ float getRayDistanceToScene(const vec3 rayDirection, out float viewZ) {
     'getRayDistanceToScene'
   )
   // Planet-sized float32 positions lose subpixel motion near the camera. The existing
-  // view reprojection matrix cancels the camera translation on the CPU in double precision.
+  // rotation-aware view matrix cancels the camera translation on the CPU in double precision.
   shader = replaceExactlyOnce(
     shader,
     'vec3 frontPositionWorld = ecefToWorld(frontPosition);\n      vec4 prevClip = reprojectionMatrix * vec4(frontPositionWorld, 1.0);',
-    'vec3 frontView = normalize(vViewPosition) * frontDepth;\n      vec4 prevClip = viewReprojectionMatrix * vec4(frontView, 1.0);',
+    'vec3 frontView = normalize(vViewPosition) * frontDepth;\n      vec4 prevClip = sceneCloudViewReprojectionMatrix * vec4(frontView, 1.0);',
     'scene cloud',
     'cloud-hit reprojection'
   )
@@ -185,6 +203,7 @@ uniform float sceneCloudSourceBottomKm, sceneCloudSourceTopKm, sceneCloudSourceD
     sourceTintFunctions = sourceTintFunctions.replace(new RegExp(`\\b${from}\\b`, 'g'), to)
   sourceTintFunctions = sourceTintFunctions.replace(/\btexture2D\b/g, 'texture')
   const header = `
+uniform mat4 sceneCloudViewReprojectionMatrix;
 uniform float sceneCloudLogFarFactor;
 uniform float sceneCloudUnitsToMeters;
 uniform float sceneCloudDatumKm;
@@ -218,7 +237,9 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
     sceneCloudSourceDatumKm: { value: 1 },
     sceneCloudSourceSunAngularRadius: { value: 0 }
   }
+  const reprojection = bindSceneCloudReprojection(clouds)
   const uniforms = {
+    sceneCloudViewReprojectionMatrix: reprojection.viewReprojection,
     sceneCloudLogFarFactor: { value: 1 },
     sceneCloudUnitsToMeters: { value: 1 },
     sceneCloudDatumKm: { value: 1 },
@@ -238,11 +259,15 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
   material.needsUpdate = true
   resolveMaterial.fragmentShader = resolveShader
   resolveMaterial.needsUpdate = true
+  shadowMaterial.fragmentShader = shadowShader
+  shadowMaterial.uniforms.sceneCloudShadowReprojectionMatrices = reprojection.shadowReprojection
+  shadowMaterial.needsUpdate = true
   installed.add(clouds)
   let disposed = false
   return {
     update(frame, depth, atmosphere) {
       if (disposed) throw new Error('Scene cloud patch binding is disposed')
+      reprojection.setPlanetRotation(frame.planetRotation)
       uniforms.sceneCloudLogFarFactor.value = depth.sceneLogFarFactor
       uniforms.sceneCloudUnitsToMeters.value = depth.sceneUnitsToMeters
       uniforms.sceneCloudDatumKm.value = frame.datumRadiusMeters * 0.001
@@ -276,9 +301,16 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
     dispose() {
       if (disposed) return
       disposed = true
+      reprojection.dispose()
       material.fragmentShader = originalShader
       resolveMaterial.fragmentShader = originalResolveShader
       resolveMaterial.needsUpdate = true
+      shadowMaterial.fragmentShader = originalShadowShader
+      if ('sceneCloudShadowReprojectionMatrices' in originalShadowUniforms)
+        shadowMaterial.uniforms.sceneCloudShadowReprojectionMatrices =
+          originalShadowUniforms.sceneCloudShadowReprojectionMatrices
+      else delete shadowMaterial.uniforms.sceneCloudShadowReprojectionMatrices
+      shadowMaterial.needsUpdate = true
       for (const name of Object.keys(uniforms)) {
         if (name in originalUniforms) material.uniforms[name] = originalUniforms[name]
         else delete material.uniforms[name]
