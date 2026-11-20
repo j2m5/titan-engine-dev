@@ -65,6 +65,8 @@ class BlackHoleImpostor extends Group {
 
   __setup(): void {
     this.name = this.model.getAttribute('name', '') + 'BlackHoleImpostor'
+    // Child hits resolve through this owner to the persistent LOD crosshair anchor.
+    this.userData.clickable = true
 
     // ── Тень: чёрная сфера читается как чёрный круг с любого ракурса,
     // без билбординга; перекрывает фон и пишет глубину штатным пайплайном ──
