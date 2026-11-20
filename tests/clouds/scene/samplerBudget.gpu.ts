@@ -183,7 +183,12 @@ export function checkSamplerBudget(renderer: WebGLRenderer): unknown {
       !scalarFar.linked ||
       scalarFar.count !== 16 ||
       !nearResult.linked ||
-      nearResult.count !== 16
+      // Terrain computes cascade jitter analytically and only samples the cloud shadow array.
+      nearResult.count !== 15 ||
+      !nearResult.samplers.some(
+        ({ name, type }) => name === 'sceneCloudShadowShadowBuffer' && type === gl.SAMPLER_2D_ARRAY
+      ) ||
+      nearResult.samplers.some(({ name }) => name === 'sceneCloudShadowStbnTexture')
     )
       throw Error('TASK6_SAMPLER_BUDGET ' + JSON.stringify(evidence))
     return evidence
