@@ -90,6 +90,37 @@ describe('Редактор данных: сохранение', () => {
     expect(editor.saveStatus).toContain('Saved')
   })
 
+  it('blocks same-tick saving after a scenario root becomes a star and saves its restoration', async () => {
+    const { Scenarios } = await import('@/config/scenarios')
+    const database = new Map<string, unknown[]>(Object.entries(await shippedSnapshot()))
+    function ScenarioEditor(): null {
+      editor = useEditorDraft(database, Scenarios)
+      return null
+    }
+    act(() => root.render(<ScenarioEditor />))
+    saveSpy.mockResolvedValue({ ok: true, written: [] })
+    const actor = editor.draft.actors.find(row => row.id === 55)!
+    const save = editor.save
+
+    await act(async () => {
+      editor.upsert('actors', { ...actor, categoryId: 3 })
+      await save()
+    })
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(editor.validation.errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: 55, message: expect.stringMatching(/scenario.*root.*barycenter/)
+    }))
+    expect(editor.saveStatus).toContain('Cannot save:')
+
+    await act(async () => {
+      editor.upsert('actors', actor)
+      await save()
+    })
+    expect(editor.validation.ok).toBe(true)
+    expect(saveSpy).toHaveBeenCalledOnce()
+    expect(editor.saveStatus).toContain('Saved')
+  })
+
   it('blocks same-tick saving of a reparented scenario root and saves its restoration', async () => {
     const { Scenarios } = await import('@/config/scenarios')
     const database = new Map<string, unknown[]>(Object.entries(await shippedSnapshot()))

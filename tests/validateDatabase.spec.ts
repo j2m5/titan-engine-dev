@@ -693,6 +693,22 @@ describe('validateDatabase — полнота данных', () => {
 })
 
 describe('validateDatabase — ссылки сценариев', () => {
+  it('rejects a star as the shipped TOI-519 scenario root and accepts its restoration', async () => {
+    const { Scenarios } = await import('@/config/scenarios')
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, actors: snapshot.actors.map(actor => ({ ...actor })) }
+    const root = db.actors.find(actor => actor.id === 55)!
+    const categoryId = root.categoryId
+    root.categoryId = 3
+
+    expect(validateDatabase(db, Scenarios).errors).toContainEqual(expect.objectContaining({
+      collection: 'actors', entity: 55, message: expect.stringMatching(/scenario.*root.*barycenter/)
+    }))
+
+    root.categoryId = categoryId
+    expect(validateDatabase(db, Scenarios).ok).toBe(true)
+  })
+
   it('rejects a parent on the shipped Solar scenario root and accepts its restoration', async () => {
     const { Scenarios } = await import('@/config/scenarios')
     const snapshot = await shippedSnapshot()

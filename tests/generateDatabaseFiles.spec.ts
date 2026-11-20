@@ -198,6 +198,19 @@ describe('generateDatabaseFiles — round-trip (обратимость)', () => 
 })
 
 describe('generateDatabaseFiles — защита валидатором', () => {
+  it('blocks generation after a scenario root becomes a star and permits restoration', async () => {
+    const { Scenarios } = await import('@/config/scenarios')
+    const snapshot = await shippedSnapshot()
+    const db = { ...snapshot, actors: snapshot.actors.map(actor => ({ ...actor })) }
+    const root = db.actors.find(actor => actor.id === 55)!
+    const categoryId = root.categoryId
+    root.categoryId = 3
+    expect(() => generateDatabaseFiles(db, Scenarios)).toThrow(/scenario.*root.*barycenter/)
+
+    root.categoryId = categoryId
+    expect(generateDatabaseFiles(db, Scenarios)).toHaveLength(10)
+  })
+
   it('blocks a negative automatic-orbit parent mass and generates after its restoration', async () => {
     const snapshot = await shippedSnapshot()
     const db = { ...snapshot, physicalObjects: snapshot.physicalObjects.map(row => ({ ...row })) }

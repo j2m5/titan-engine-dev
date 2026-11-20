@@ -1207,6 +1207,13 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
         message: `Actor ${root.id} is scenario ${sc.id} root and must not have parentId=${root.parentId}`
       })
     }
+    // Only Barycenter.accept dispatches visitRoot; other categories stay detached.
+    if (root && aliasByActor.get(root.id) !== 'barycenter') {
+      issues.push({
+        level: 'error', collection: 'actors', entity: root.id,
+        message: `Actor ${root.id} is scenario ${sc.id} root and must have category barycenter`
+      })
+    }
     for (const lightId of sc.lightSources) {
       checkForeignKey(
         lightId,
